@@ -1,0 +1,77 @@
+package com.serviceplus.form.validation.service;
+
+import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.server.ServerResponse;
+
+import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
+import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.UserSessionObject;
+
+import reactor.core.publisher.Mono;
+
+@Service
+@SanitizeRequest
+public class PreProcessingService {
+
+    @Autowired
+    private PreProcessingFacade preProcessingFacade;
+
+    public Mono<ServerResponse> serviceList(ServerHttpRequest request) {
+		try {
+			UserSessionObject user = getUserSessionDetails(request);
+
+			Mono<ServerResponse> map = preProcessingFacade.getServiceList(user)
+														.flatMap(response -> ServerResponse.ok().bodyValue(response));
+
+			return map;
+
+		} catch (Exception e) {
+			e.printStackTrace();
+            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
+        }
+    }
+
+    public Mono<ServerResponse> apply(ServerHttpRequest request, String applyKey) {
+        try {
+            UserSessionObject user = getUserSessionDetails(request);
+            
+            Services service = preProcessingFacade.decryptApplyKey(applyKey);
+
+            Mono<ServerResponse> map = preProcessingFacade.getFormDataAndSaveTxn(service, user)
+            									.flatMap(response -> ServerResponse.ok().bodyValue(response))
+            									.onErrorResume(error -> {
+            	                                    error.printStackTrace();
+            	                                    return Mono.error(new SPRuntimeError(
+            	                                        "Issue while processing the request ", HttpStatus.INTERNAL_SERVER_ERROR));
+            	                                });
+            
+            return map;
+
+        } catch (Exception e) {
+        	e.printStackTrace();
+        	return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
+        }
+    }
+
+    public Mono<ServerResponse> applicationSubmission(ServerHttpRequest request, String txnId, String appData,
+			String applyKey) {
+        try {
+            UserSessionObject user = getUserSessionDetails(request);
+
+            Services service = preProcessingFacade.decryptApplyKey(applyKey);
+            return preProcessingFacade.saveFormData(txnId, user,appData,service);
+
+        } catch (Exception e) {
+        	e.printStackTrace();
+        	return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
+        }
+    }
+}
+
+
