@@ -1,0 +1,174 @@
+package com.serviceplus.form.validation.utility;
+
+
+import java.lang.reflect.Type;
+import java.security.MessageDigest;
+import java.util.List;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Component;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.UserSessionObject;
+
+import jakarta.annotation.PostConstruct;
+import static com.serviceplus.form.validation.utility.KeyGenerator.generatePassKey;
+
+@Component
+public class Utility {
+
+	@Value("${aesAuthKey}")
+	private String aesAuthKey;
+	
+	private static String AES_AUTH_KEY;
+	
+	@PostConstruct
+	public void initalize() {
+		AES_AUTH_KEY = this.aesAuthKey;
+	}
+	
+	/**
+	 * Fetch logged in user details
+	 * @param request
+	 * @return UserSessionObject
+	 */
+	public static UserSessionObject getUserSessionDetails(ServerHttpRequest request) {
+		HttpHeaders headers = request.getHeaders();
+		List<String> header = headers.get("USER-DETAILS");
+		if(header == null || header.isEmpty())
+			return null;
+			
+		return (UserSessionObject) stringToEntity(header.get(0),UserSessionObject.class);
+	}
+	
+	public static Object stringToEntity(String data,Class<?> classs) {
+		return new Gson().fromJson(data, classs);
+	}
+	
+	public static String entityToString(Object data) {
+		return new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").create().toJson(data);
+	}
+	
+	public static Object stringToEntityUsingType(String data, Type typeOfT) {
+	    return new Gson().fromJson(data, typeOfT);
+	}
+	
+	public static boolean isEmpty(String s) {
+		return s == null || "".equals(s.trim());
+	}
+	
+	public static String extractServiceName(String url) {
+        if (url != null && url.startsWith("lb://")) {
+            int firstSlash = url.indexOf('/', 5);
+            if (firstSlash != -1) {
+                return url.substring(5, firstSlash);
+            }
+            return url.substring(5);
+        }
+        return "unknown-service";
+    }
+	
+	public static String SHA256(String plaintext) {
+		MessageDigest md = null;
+		try {
+			md = MessageDigest.getInstance("SHA-256");
+			md.update(plaintext.getBytes("UTF-8"));
+		} catch (Exception e) {
+			md = null;
+		}
+
+		StringBuffer ls_sb = new StringBuffer();
+
+		if (md != null) {
+			byte raw[] = md.digest();
+			for (int i = 0; i < raw.length; i++)
+				ls_sb.append(char2hex(raw[i]));
+		}
+
+		return ls_sb.toString();
+	}
+
+	public static String char2hex(byte x)
+
+	{
+		char arr[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+
+		char c[] = { arr[(x & 0xF0) >> 4], arr[x & 0x0F] };
+		return (new String(c));
+	}
+	
+	public static String AESEncrypt(String content,String key) {
+		try {
+			
+			key = key == null ? AES_AUTH_KEY : key;
+			
+			SecretKeySpec skeySpec = new SecretKeySpec(key.getBytes("UTF-8"), "AES");
+			Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+			cipher.init(Cipher.ENCRYPT_MODE, skeySpec,new IvParameterSpec(new byte[16]));
+			byte[] encrypted = cipher.doFinal(content.getBytes("UTF-8"));
+			String finalString = org.apache.commons.codec.binary.Base64.encodeBase64String(encrypted);
+			
+			return finalString;
+		} catch(Exception e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+	
+	public static String AESDecrypt(String content,String key) {
+		try {
+			
+			key = key == null ? AES_AUTH_KEY : key;
+			
+			SecretKeySpec skeySpec = new SecretKeySpec(key.getBytes("UTF-8"), "AES");
+			Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+			cipher.init(Cipher.DECRYPT_MODE, skeySpec,new IvParameterSpec(new byte[16]));
+			byte[] original = cipher.doFinal(org.apache.commons.codec.binary.Base64.decodeBase64(content));
+
+			return new String(original);
+			
+		} catch(Exception e) {
+			e.printStackTrace();
+		}
+		return null;
+	}
+	
+	public static String encryptServiceKeys(Services service) {
+		String encKey = generatePassKey(6);		
+		String finalKey = encKey.concat("1111111111");		
+		String aesEncrypt = AESEncrypt(service.getServiceId() + "~" + service.getFormId() + "~" + service.getTaskId(),finalKey);
+		return aesEncrypt + encKey;
+	}
+	
+	public static Services descryptServiceKeys(String serviceKey) {
+		
+		if (serviceKey.contains("%2B")) {
+			serviceKey = serviceKey.replace("%2B", "+");
+		}
+		if (serviceKey.contains(" ")) {
+			serviceKey = serviceKey.replaceAll(" ", "+");
+		}
+		
+		String key = serviceKey.substring(serviceKey.length() - 6).concat("1111111111");
+		String content = serviceKey.substring(0,serviceKey.length() - 6);
+		
+		String decrypt = AESDecrypt(content,key);
+		String[] applyData = decrypt.split("~");
+		
+		Services service = new Services();
+		service.setServiceId(Integer.parseInt(applyData[0]));
+		service.setFormId(applyData[1]);
+		service.setTaskId(applyData[2]);
+		
+		return service;
+	}
+	
+}
