@@ -37,6 +37,9 @@ public class ReactiveApiClient {
 
     @Value("${formmgmt.service}")
     private String FORM_MANAGEMENT_SERVICE;
+    
+    @Autowired
+    private ObjectMapper mapper;
 
     @SuppressWarnings("unchecked")
 	public Mono<List<Services>> fetchServiceList(UserSessionObject user) {
@@ -62,7 +65,8 @@ public class ReactiveApiClient {
 				                List<Services> servicesList = (List<Services>) stringToEntityUsingType(body, listType);
 				
 				                return Mono.just(servicesList);
-				            });
+				            })
+			        		;
     }
 
     @SuppressWarnings("unchecked")
@@ -115,15 +119,15 @@ public class ReactiveApiClient {
         
        return callExternalEndpoint;
 	}
-    
+    //CHECK CIRCUIT BREAKER AND ADD LOGS
     @SuppressWarnings("unchecked")
-	public Mono<String> fetchReferenceAbbrviation(Integer serviceId) {
-        String url = METADATA_SERVICE.concat("applicationRefAbbr");
+	public Mono<String> fetchReferenceAbbrviation(Integer serviceId, UserSessionObject user) {
+        String url = METADATA_SERVICE.concat("serviceAbbreviation");
 
         Mono<ResponseEntity<String>> callExternalEndpoint = (Mono<ResponseEntity<String>>) AsynchronousApiExecutor.callExternalEndpoint(
 											                String.class,
 											                HttpMethod.GET,
-											                Collections.emptyMap(),
+											                Map.of("USER-DETAILS", entityToString(user)),
 											                Map.of("serviceId", serviceId),
 											                url,
 											                null,
@@ -131,8 +135,31 @@ public class ReactiveApiClient {
         
        return callExternalEndpoint.flatMap(apiResponse -> {
                 String body = apiResponse.getBody();
+                
+                Map<String, String> responseJson;
+                try {
+                    responseJson = mapper.readValue(body, new TypeReference<Map<String, String>>() {});
+                } catch (JsonProcessingException e) {
+                    e.printStackTrace();
+                    return Mono.error(new SPRuntimeError(
+                        "Issue while processing the request [SUB - 004]", HttpStatus.FAILED_DEPENDENCY));
+                }
+
+                String message = responseJson.getOrDefault("errorMessage", "");
+                
+                if(apiResponse.getStatusCode().is4xxClientError()) {
+                	return Mono.error(new SPRuntimeError(
+                			message + " - issue while processing [SUB - 005]",
+                       HttpStatus.BAD_REQUEST));
+                }
+                else if(!apiResponse.getStatusCode().is2xxSuccessful()){
+                    return Mono.error(new SPRuntimeError(
+                    		message + " - issue while processing [SUB - 006]",
+                        HttpStatus.UNPROCESSABLE_ENTITY));
+                }
+                
                 if (body == null) {
-                    return Mono.error(new SPRuntimeError("Unable to process your request", HttpStatus.FAILED_DEPENDENCY));
+                    return Mono.error(new SPRuntimeError("Unable to process your request [SUB - 007]", HttpStatus.FAILED_DEPENDENCY));
                 }
                 
                 return Mono.just(body);

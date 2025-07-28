@@ -32,7 +32,7 @@ public class PostPorcessingFacade {
     
     public Mono<Map<String, String>> executeApplicationProcessing(String applicationId, Services service, UserSessionObject user, ProcessingTxnEntity txnLog) {
 
-        return reactiveApiClient.fetchReferenceAbbrviation(service.getServiceId())
+        return reactiveApiClient.fetchReferenceAbbrviation(service.getServiceId(),user)
             .flatMap(data -> {
                 try {
                     JSONObject json = new JSONObject(data);
@@ -42,6 +42,7 @@ public class PostPorcessingFacade {
 
                     txnLog.setFormEndTime(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
                     txnLog.setActualApplicationId(applicationId);
+                    txnLog.setApplicationReferenceNo(referenceNo);
 
                     return txnRepository.save(txnLog)
                             .map(savedTxn -> {
@@ -52,7 +53,7 @@ public class PostPorcessingFacade {
 
                 } catch (Exception e) {
                     return Mono.error(new SPRuntimeError(
-                        "Issue while processing the request [ERR - 005]",
+                        "Issue while processing the request [SUB - 008]",
                         HttpStatus.INTERNAL_SERVER_ERROR
                     ));
                 }

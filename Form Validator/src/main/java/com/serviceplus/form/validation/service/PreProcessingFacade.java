@@ -3,6 +3,7 @@ package com.serviceplus.form.validation.service;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 import static com.serviceplus.form.validation.utility.Utility.descryptServiceKeys;
 import static com.serviceplus.form.validation.utility.Utility.encryptServiceKeys;
+import static com.serviceplus.form.validation.utility.Utility.getClientIpAddr;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -13,6 +14,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
@@ -49,7 +51,7 @@ public class PreProcessingFacade {
             });
     }
 
-    public Mono<Map<String,Object>> getFormDataAndSaveTxn(Services service, UserSessionObject user) {
+    public Mono<Map<String,Object>> getFormDataAndSaveTxn(Services service, UserSessionObject user, ServerHttpRequest request) {
         String txnId = createUniqueId();
 
         ProcessingTxnEntity txnEntity = new ProcessingTxnEntity(
@@ -60,7 +62,8 @@ public class PreProcessingFacade {
             LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()),
             null,
             user.getUserID(),
-            user.getTenantId()
+            user.getTenantId(),
+            getClientIpAddr(request)
         );
 
         txnEntity.setNewEntity(true);
@@ -83,14 +86,14 @@ public class PreProcessingFacade {
 
         return txnRepository.findById(txnId)
             .switchIfEmpty(Mono.error(new SPRuntimeError(
-                "Kindly reapply invalid transaction [ERR - 001]", HttpStatus.BAD_REQUEST)))
+                "Kindly reapply invalid transaction [SUB - 001]", HttpStatus.BAD_REQUEST)))
             .flatMap(txnLog -> {
                 
                 if (txnLog.getFormEndTime() != null
                         || !service.getServiceId().equals(txnLog.getServiceId())
                         || !service.getFormId().equals(txnLog.getFormId())) {
                     return Mono.error(new SPRuntimeError(
-                        "Kindly reapply invalid transaction [ERR - 002]", HttpStatus.BAD_REQUEST));
+                        "Kindly reapply invalid transaction [SUB - 002]", HttpStatus.BAD_REQUEST));
                 }
 
               
@@ -105,23 +108,29 @@ public class PreProcessingFacade {
                         } catch (JsonProcessingException e) {
                             e.printStackTrace();
                             return Mono.error(new SPRuntimeError(
-                                "Issue while processing the request [ERR - 003]", HttpStatus.FAILED_DEPENDENCY));
+                                "Issue while processing the request [SUB - 003]", HttpStatus.FAILED_DEPENDENCY));
                         }
 
                         String message = responseJson.getOrDefault("message", "");
                         String applicationId = responseJson.getOrDefault("applicationId", "");
 
                         if (apiResponse.getStatusCode().is2xxSuccessful()) {
-                            return postPorcessingFacade.executeApplicationProcessing(applicationId, service, user, txnLog)
-                                .onErrorResume(error -> {
-                                    error.printStackTrace();
-                                    return Mono.error(new SPRuntimeError(
-                                        "Issue while processing the request [ERR - 004]", HttpStatus.INTERNAL_SERVER_ERROR));
-                                });
-                        } else {
+                            return postPorcessingFacade.executeApplicationProcessing(applicationId, service, user, txnLog);
+//                                .onErrorResume(error -> {
+//                                    error.printStackTrace();
+//                                    return Mono.error(new SPRuntimeError(
+//                                        "Issue while processing the request [ERR - 004]", HttpStatus.INTERNAL_SERVER_ERROR));
+//                                });
+                        }
+                        else if(apiResponse.getStatusCode().is4xxClientError()) {
+                        	return Mono.error(new SPRuntimeError(
+                           		 message + " - issue while processing [SUB - 009]",
+                               HttpStatus.BAD_REQUEST));
+                        }
+                        else {
                             return Mono.error(new SPRuntimeError(
-                                "Issue while processing the request [ERR - 006] - " + message,
-                                HttpStatus.FAILED_DEPENDENCY));
+                            		 message + " - issue while processing [SUB - 010]",
+                                HttpStatus.UNPROCESSABLE_ENTITY));
                         }
                     });
             })

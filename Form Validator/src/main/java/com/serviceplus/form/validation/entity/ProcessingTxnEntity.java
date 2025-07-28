@@ -31,6 +31,10 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 	
 	private String actualApplicationId;
 	
+	private String applicationReferenceNo;
+	
+	private String userIp;
+	
 	@Transient
     private boolean newEntity = false;
 	
@@ -50,7 +54,7 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 	}
 
 	public ProcessingTxnEntity(String txnId, String formId, Integer serviceId, String taskId, LocalDateTime pageStartTime,
-			LocalDateTime formEndTime,Integer userId,String tenantId) {
+			LocalDateTime formEndTime,Integer userId,String tenantId,String userIp) {
 		super();
 		this.txnId = txnId;
 		this.formId = formId;
@@ -60,6 +64,7 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 		this.formEndTime = formEndTime;
 		this.userId = userId;
 		this.tenantId = tenantId;
+		this.userIp = userIp;
 	}
 
 	public String getTxnId() {
@@ -140,6 +145,22 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 
 	public void setActualApplicationId(String actualApplicationId) {
 		this.actualApplicationId = actualApplicationId;
+	}
+
+	public String getUserIp() {
+		return userIp;
+	}
+
+	public void setUserIp(String userIp) {
+		this.userIp = userIp;
+	}
+
+	public String getApplicationReferenceNo() {
+		return applicationReferenceNo;
+	}
+
+	public void setApplicationReferenceNo(String applicationReferenceNo) {
+		this.applicationReferenceNo = applicationReferenceNo;
 	}
 
 }

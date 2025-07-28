@@ -24,8 +24,13 @@ public class PreProcessingController {
     }
 
     public Mono<ServerResponse> apply(ServerRequest request) {
-    	String applyKey = request.queryParam("applyKey").orElse("");
-        return preProcessingService.apply(request.exchange().getRequest(), applyKey);
+    	Optional<String> applyKeyOpt = request.queryParam("applyKey");
+    	
+    	if (!applyKeyOpt.isPresent()) {
+            return Mono.error(new SPRuntimeError("applyKey is required", HttpStatus.BAD_REQUEST));
+        }
+    	
+        return preProcessingService.apply(request.exchange().getRequest(), applyKeyOpt.get());
     }
 
     public Mono<ServerResponse> submitApplication(ServerRequest request) {
