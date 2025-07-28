@@ -2,6 +2,8 @@ package com.serviceplus.form.validation.utility;
 
 
 import java.lang.reflect.Type;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.security.MessageDigest;
 import java.util.List;
 
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -20,6 +23,7 @@ import com.serviceplus.form.validation.dto.Services;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 
 import jakarta.annotation.PostConstruct;
+
 import static com.serviceplus.form.validation.utility.KeyGenerator.generatePassKey;
 
 @Component
@@ -169,6 +173,40 @@ public class Utility {
 		service.setTaskId(applyData[2]);
 		
 		return service;
+	}
+	
+	public static String getClientIpAddr(ServerHttpRequest request) {
+		String ip = "";
+		if (request != null) {
+			ip = getHeaderValue("X-Forwarded-For",request);
+			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+				ip = getHeaderValue("Proxy-Client-IP",request);
+			}
+			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+				ip = getHeaderValue("WL-Proxy-Client-IP",request);
+			}
+			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+				ip = getHeaderValue("HTTP_CLIENT_IP",request);
+			}
+			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+				ip = getHeaderValue("HTTP_X_FORWARDED_FOR",request);
+			}
+			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+				InetSocketAddress remoteAddress = request.getRemoteAddress();
+				ip = remoteAddress.getAddress().getHostAddress();
+			}
+			
+		}
+		return ip;
+	}
+	
+	public static String getHeaderValue(String key,ServerHttpRequest exchange) {
+		HttpHeaders headers = exchange.getHeaders();
+		List<String> value = headers.get(key);
+    	if(value!=null && !value.isEmpty()) {
+    		return value.get(0);
+    	}
+    	return "";
 	}
 	
 }
