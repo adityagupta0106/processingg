@@ -14,14 +14,14 @@ public class ServiceWorkFlow {
         private List<MappedTask> mappedTasks;
 
         public static class MappedTask{
-            private Nodes nodes;
+            private Nodes node;
 
-            public Nodes getNodes() {
-                return nodes;
+            public Nodes getNode() {
+                return node;
             }
 
-            public void setNodes(Nodes nodes) {
-                this.nodes = nodes;
+            public void setNode(Nodes node) {
+                this.node = node;
             }
         }
 
@@ -67,21 +67,14 @@ public class ServiceWorkFlow {
             @Override
             public String toString() {
                 return "Nodes{"
-                        .concat("id='").concat(id).concat("'")
-                        .concat(", type='").concat(type).concat("'")
-                        .concat(", name='").concat(name).concat("'")
-                        .concat(", behaviour='").concat(behaviour).concat("'")
+                        .concat("id='").concat(id != null ? id : "null").concat("'")
+                        .concat(", type='").concat(type != null ? type : "null").concat("'")
+                        .concat(", name='").concat(name != null ? name : "null").concat("'")
+                        .concat(", behaviour='").concat(behaviour != null ? behaviour : "null").concat("'")
                         .concat("}");
             }
 
-        }
 
-        public Nodes getNodes() {
-            return node;
-        }
-
-        public void setNodes(Nodes nodes) {
-            this.node = nodes;
         }
 
         public List<MappedTask> getMappedTasks() {
