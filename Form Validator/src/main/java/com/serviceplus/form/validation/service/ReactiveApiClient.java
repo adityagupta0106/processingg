@@ -5,16 +5,15 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import com.serviceplus.form.validation.dto.TaskActivity;
+import com.serviceplus.form.validation.utility.Utility;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import static com.serviceplus.form.validation.utility.Utility.stringToEntityUsingType;
-import static com.serviceplus.form.validation.utility.Utility.entityToString;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -24,7 +23,12 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.Services;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 
+import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
+
+import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_ACTIVITY_REDIS_KEY_APPENDER;
+import static com.serviceplus.form.validation.utility.Utility.*;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 @Service
 public class ReactiveApiClient {
@@ -40,6 +44,9 @@ public class ReactiveApiClient {
     
     @Autowired
     private ObjectMapper mapper;
+
+    @Autowired
+    private RedisService redis;
 
     @SuppressWarnings("unchecked")
 	public Mono<List<Services>> fetchServiceList(UserSessionObject user) {
@@ -164,6 +171,67 @@ public class ReactiveApiClient {
                 
                 return Mono.just(body);
             });
+    }
+
+    @SuppressWarnings("unchecked")
+    public Mono<ServerResponse> fetchServiceKey(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId) {
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+        String url = METADATA_SERVICE.concat("apply/resolveForm?");
+        //CACHE AT THIS LEVEL !!!!!
+
+        Mono<ResponseEntity<String>> callExternalEndpoint = (Mono<ResponseEntity<String>>) AsynchronousApiExecutor.callExternalEndpoint(
+                                                                                String.class,
+                                                                                HttpMethod.POST,
+                                                                                headers,
+                                                                                Map.of("baseServiceId",baseServiceId,"taskId",taskId,"serviceId",serviceId),
+                                                                                url,
+                                                                                null,
+                                                                                MediaType.APPLICATION_JSON);
+
+
+        return callExternalEndpoint.flatMap(apiResponse -> {
+            String body = apiResponse.getBody();
+
+            Type listType = new TypeToken<Services>() {}.getType();
+            Services service = (Services) stringToEntityUsingType(body, listType);
+            service.setServiceKey(encryptServiceKeys(service));
+            TaskActivity taskActivity = service.getActivityMap();
+            String key = SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()));
+            redis.add(taskActivity,key,false).subscribe();
+            return ServerResponse.ok().bodyValue(service);
+            })
+            .onErrorResume(WebClientResponseException.class, Utility::handleWebClientError)
+                ;
+    }
+
+    @SuppressWarnings("unchecked")
+    public Mono<ServerResponse> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId) {
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+        String url = METADATA_SERVICE.concat("apply/processFlow?");
+
+        Mono<ResponseEntity<String>> callExternalEndpoint = (Mono<ResponseEntity<String>>) AsynchronousApiExecutor.callExternalEndpoint(
+                                                                String.class,
+                                                                HttpMethod.POST,
+                                                                headers,
+                                                                Map.of("baseServiceId",baseServiceId,"taskId",taskId,"serviceId",serviceId),
+                                                                url,
+                                                                null,
+                                                                MediaType.APPLICATION_JSON);
+
+
+        return callExternalEndpoint.flatMap(apiResponse -> {
+                    String body = apiResponse.getBody();
+
+                    Type listType = new TypeToken<Services>() {}.getType();
+                    Services service = (Services) stringToEntityUsingType(body, listType);
+                    service.setServiceKey(encryptServiceKeys(service));
+                    TaskActivity taskActivity = service.getActivityMap();
+                    String key = SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()));
+                    redis.add(taskActivity,key,false).subscribe();
+                    return ServerResponse.ok().bodyValue(service);
+                })
+                .onErrorResume(WebClientResponseException.class, Utility::handleWebClientError)
+                ;
     }
 }
 

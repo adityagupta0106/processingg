@@ -36,9 +36,8 @@ public class CircuitBreakerResponseAspect {
 
 	    if (result instanceof Mono) {
 	        return ((Mono<?>) result).flatMap(response -> {
-	            if (response instanceof ResponseEntity) {
-	                ResponseEntity<?> responseEntity = (ResponseEntity<?>) response;
-	                System.out.println("===============TEST====================");
+	            if (response instanceof ResponseEntity<?> responseEntity) {
+                    System.out.println("===============TEST====================");
 	                System.out.println(response);
 
 	                if (CRITICAL_SERVICES.contains(serviceName) &&

@@ -26,33 +26,24 @@ public class PreProcessingController {
     public Mono<ServerResponse> apply(ServerRequest request) {
     	Optional<String> applyKeyOpt = request.queryParam("applyKey");
     	
-    	if (!applyKeyOpt.isPresent()) {
+    	if (applyKeyOpt.isEmpty()) {
             return Mono.error(new SPRuntimeError("applyKey is required", HttpStatus.BAD_REQUEST));
         }
     	
         return preProcessingService.apply(request.exchange().getRequest(), applyKeyOpt.get());
     }
 
-    public Mono<ServerResponse> submitApplication(ServerRequest request) {
-    	Optional<String> txnIdOpt = request.queryParam("txnId");
-        Optional<String> applyKeyOpt = request.queryParam("applyKey");
+    public Mono<ServerResponse> fetchServiceKey(ServerRequest request){
+        Optional<String> baseServiceIdOpt = request.queryParam("baseServiceId");
+        Optional<String> applicationIdOpt = request.queryParam("applicationId");
+        Optional<String> taskIdOpt = request.queryParam("taskId");
+        Optional<String> serviceIdOpt = request.queryParam("serviceId");
+        String serviceId = serviceIdOpt.orElse("-1");
 
-        if (!txnIdOpt.isPresent()) {
-            return Mono.error(new SPRuntimeError("txnId is required", HttpStatus.BAD_REQUEST));
+        if (serviceIdOpt.isEmpty()) {
+            return Mono.error(new SPRuntimeError("serviceId is required", HttpStatus.BAD_REQUEST));
         }
 
-        if (!applyKeyOpt.isPresent()) {
-            return Mono.error(new SPRuntimeError("applyKey is required", HttpStatus.BAD_REQUEST));
-        }
-
-        String txnId = txnIdOpt.get();
-        String applyKey = applyKeyOpt.get();
-        
-    	return request.bodyToMono(String.class)
-    	        .flatMap(appData -> 
-    	            preProcessingService.applicationSubmission(
-    	                request.exchange().getRequest(), txnId, appData, applyKey
-    	            )
-    	        );
+        return preProcessingService.fetchServiceKey(request.exchange().getRequest(),serviceIdOpt.get(),applicationIdOpt.orElse(""),taskIdOpt.orElse(""),serviceId);
     }
 }

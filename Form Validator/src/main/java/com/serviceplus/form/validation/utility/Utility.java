@@ -2,7 +2,6 @@ package com.serviceplus.form.validation.utility;
 
 
 import java.lang.reflect.Type;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.security.MessageDigest;
 import java.util.List;
@@ -11,11 +10,15 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
-import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -23,6 +26,7 @@ import com.serviceplus.form.validation.dto.Services;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 
 import jakarta.annotation.PostConstruct;
+import reactor.core.publisher.Mono;
 
 import static com.serviceplus.form.validation.utility.KeyGenerator.generatePassKey;
 
@@ -66,7 +70,7 @@ public class Utility {
 	}
 	
 	public static boolean isEmpty(String s) {
-		return s == null || "".equals(s.trim());
+		return s == null || s.trim().isEmpty();
 	}
 	
 	public static String extractServiceName(String url) {
@@ -148,7 +152,7 @@ public class Utility {
 	public static String encryptServiceKeys(Services service) {
 		String encKey = generatePassKey(6);		
 		String finalKey = encKey.concat("1111111111");		
-		String aesEncrypt = AESEncrypt(service.getServiceId() + "~" + service.getFormId() + "~" + service.getTaskId(),finalKey);
+		String aesEncrypt = AESEncrypt(service.getServiceId() + "~" + service.getFormId() + "~" + service.getTaskId() + "~" + service.getTaskType(),finalKey);
 		return aesEncrypt + encKey;
 	}
 	
@@ -171,7 +175,8 @@ public class Utility {
 		service.setServiceId(Integer.parseInt(applyData[0]));
 		service.setFormId(applyData[1]);
 		service.setTaskId(applyData[2]);
-		
+		service.setTaskType(applyData[3]);
+
 		return service;
 	}
 	
@@ -179,19 +184,19 @@ public class Utility {
 		String ip = "";
 		if (request != null) {
 			ip = getHeaderValue("X-Forwarded-For",request);
-			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+			if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
 				ip = getHeaderValue("Proxy-Client-IP",request);
 			}
-			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+			if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
 				ip = getHeaderValue("WL-Proxy-Client-IP",request);
 			}
-			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+			if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
 				ip = getHeaderValue("HTTP_CLIENT_IP",request);
 			}
-			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+			if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
 				ip = getHeaderValue("HTTP_X_FORWARDED_FOR",request);
 			}
-			if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+			if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
 				InetSocketAddress remoteAddress = request.getRemoteAddress();
 				ip = remoteAddress.getAddress().getHostAddress();
 			}
@@ -208,5 +213,24 @@ public class Utility {
     	}
     	return "";
 	}
+
+    public static <T> Mono<T> handleWebClientError(WebClientResponseException ex) {
+
+        HttpStatusCode status = ex.getStatusCode();
+
+        if (status.is4xxClientError()) {
+            return Mono.error(new SPRuntimeError(
+                    "Client error from downstream: ".concat(ex.getResponseBodyAsString()).concat(" [ERR-H-001]"),
+                    HttpStatus.BAD_REQUEST));
+        } else if (status.is5xxServerError()) {
+            return Mono.error(new SPRuntimeError(
+                    "Server error from downstream: ".concat(ex.getResponseBodyAsString()).concat(" [ERR-H-002]"),
+                    HttpStatus.BAD_GATEWAY));
+        } else {
+            return Mono.error(new SPRuntimeError(
+                    "Unexpected downstream response: ".concat(ex.getResponseBodyAsString()).concat(" [ERR-H-003]"),
+                    HttpStatus.BAD_GATEWAY));
+        }
+    }
 	
 }
