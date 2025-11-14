@@ -10,7 +10,7 @@ import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
 
 @Table(name = "processing_transactions" , schema = SP_SCHEMA_NAME)
-public class ProcessingTxnEntity  implements Persistable<String>{
+public class ProcessingTxn implements Persistable<String>{
 
 	@Id
 	private String txnId;
@@ -20,7 +20,7 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 	private Integer serviceId;
 	
 	private String taskId;
-	
+
 	private Integer userId;
 	
 	private LocalDateTime formStartTime;
@@ -29,15 +29,13 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 	
 	private String tenantId;
 	
-	private String actualApplicationId;
-	
-	private String applicationReferenceNo;
-	
 	private String userIp;
+
+    private String applicationId;
 	
 	@Transient
     private boolean newEntity = false;
-	
+
 	@Override
     @Transient
     public boolean isNew() {
@@ -49,22 +47,22 @@ public class ProcessingTxnEntity  implements Persistable<String>{
         return txnId;
     }
 	
-	public ProcessingTxnEntity() {
+	public ProcessingTxn() {
 		super();
 	}
 
-	public ProcessingTxnEntity(String txnId, String formId, Integer serviceId, String taskId, LocalDateTime pageStartTime,
-			LocalDateTime formEndTime,Integer userId,String tenantId,String userIp) {
+	public ProcessingTxn(String txnId, String formId, Integer serviceId, String taskId, LocalDateTime pageStartTime,
+                         LocalDateTime formEndTime, Integer userId, String tenantId, String userIp, String applicationId) {
 		super();
 		this.txnId = txnId;
 		this.formId = formId;
 		this.serviceId = serviceId;
 		this.taskId = taskId;
-		this.formStartTime = pageStartTime;
 		this.formEndTime = formEndTime;
 		this.userId = userId;
 		this.tenantId = tenantId;
 		this.userIp = userIp;
+        this.applicationId = applicationId;
 	}
 
 	public String getTxnId() {
@@ -139,15 +137,7 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 		this.newEntity = newEntity;
 	}
 
-	public String getActualApplicationId() {
-		return actualApplicationId;
-	}
-
-	public void setActualApplicationId(String actualApplicationId) {
-		this.actualApplicationId = actualApplicationId;
-	}
-
-	public String getUserIp() {
+    public String getUserIp() {
 		return userIp;
 	}
 
@@ -155,12 +145,11 @@ public class ProcessingTxnEntity  implements Persistable<String>{
 		this.userIp = userIp;
 	}
 
-	public String getApplicationReferenceNo() {
-		return applicationReferenceNo;
-	}
+    public String getApplicationId() {
+        return applicationId;
+    }
 
-	public void setApplicationReferenceNo(String applicationReferenceNo) {
-		this.applicationReferenceNo = applicationReferenceNo;
-	}
-
+    public void setApplicationId(String applicationId) {
+        this.applicationId = applicationId;
+    }
 }

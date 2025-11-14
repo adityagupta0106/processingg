@@ -2,12 +2,16 @@ package com.serviceplus.form.validation.CustomAnnotation;
 
 
 import org.aspectj.lang.JoinPoint;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Field;
 import java.util.Collection;
@@ -18,15 +22,22 @@ import static com.serviceplus.form.validation.utility.GeneralValidation.isXss;
 @Component
 public class SanitizeRequestAspect {
 
-	@Before("within(@com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest *)")
-    public void validateInput(JoinPoint joinPoint) throws Throwable {
-    	
-        for (Object arg : joinPoint.getArgs()) {
-            if (arg == null)
-            	continue;
+    @Around("within(@com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest *)")
+    public Object validateInput(ProceedingJoinPoint joinPoint) throws Throwable {
+        try {
+            for (Object arg : joinPoint.getArgs()) {
+                if (arg == null) continue;
+                inspect(arg);
+            }
 
-            inspect(arg);
-            
+            return joinPoint.proceed();
+
+        } catch (SPRuntimeError ex) {
+            MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+            if (Mono.class.isAssignableFrom(signature.getReturnType())) {
+                return Mono.error(ex);
+            }
+            throw ex;
         }
     }
 
@@ -64,19 +75,20 @@ public class SanitizeRequestAspect {
     private void checkString(String value, String fieldName) {
         
         if (isXss(value)) {
-            throw new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY);
+           // Mono.error(new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY)).subscribe();
+           throw new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY);
         }
 
         String lower = value.toLowerCase();
         String[] sqliPatterns = {
-            "select", "insert", "update", "delete", "drop", "--", ";--",
+            "insert", "update", "delete", "drop", "--", ";--",
             "' or '1'='1", "\" or \"1\"=\"1", " or 1=1", "union", "exec", "truncate",
-            "char(", "cast(", "convert(","add"
+            "char(", "cast(", "convert("
         };
 
         for (String pattern : sqliPatterns) {
             if (lower.contains(pattern)) {
-            	throw new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY);
+            	//throw new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY);
             }
         }
     }

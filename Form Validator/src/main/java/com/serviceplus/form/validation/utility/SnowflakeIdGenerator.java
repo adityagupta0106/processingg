@@ -7,16 +7,16 @@ import jakarta.annotation.PostConstruct;
 
 @Component
 public class SnowflakeIdGenerator {
-	
+
 	@Value("${id.generator.worker.id}")
     private Long workerIdConfigured;
-	
+
 	@Value("${id.generator.datacenter.id}")
     private Long datacenterIdConfigured;
-	
+
     private static Long workerId;
     private static Long datacenterId;
-	
+
     private long sequence = 0L;
 
     private final long twepoch = 1288834974657L;
@@ -30,19 +30,20 @@ public class SnowflakeIdGenerator {
     private final long datacenterIdShift = sequenceBits + workerIdBits;
     private final long timestampLeftShift = sequenceBits + workerIdBits + datacenterIdBits;
     private final long sequenceMask = -1L ^ (-1L << sequenceBits);
-
+    private static SnowflakeIdGenerator INSTANCE;
     private long lastTimestamp = -1L;
-	
+
     @PostConstruct
 	private void init() {
     	SnowflakeIdGenerator.workerId = workerIdConfigured;
         SnowflakeIdGenerator.datacenterId = datacenterIdConfigured;
+        INSTANCE = this;
 	}
-    
+
     public SnowflakeIdGenerator() {
-    	
+
     }
-    
+
     public SnowflakeIdGenerator(Long workerId, Long datacenterId) {
         if (workerId > maxWorkerId || workerId < 0) {
             throw new IllegalArgumentException("workerId out of range");
@@ -91,7 +92,9 @@ public class SnowflakeIdGenerator {
     }
 
     public static String createUniqueId() {
-        SnowflakeIdGenerator idGen = new SnowflakeIdGenerator(1L,1L);
-        return idGen.nextId().toString();
-   }
+        if (INSTANCE == null) {
+            throw new IllegalStateException("SnowflakeIdGenerator not initialized yet.");
+        }
+        return INSTANCE.nextId().toString();
+    }
 }

@@ -40,18 +40,16 @@ public class PreProcessingService {
     public Mono<ServerResponse> apply(ServerHttpRequest request, String applyKey) {
         try {
             UserSessionObject user = getUserSessionDetails(request);
-            
+            //APPID,TASKID
             Services service = preProcessingFacade.decryptApplyKey(applyKey);
 
-            Mono<ServerResponse> map = preProcessingFacade.getFormDataAndSaveTxn(service, user,request)
+            return preProcessingFacade.getFormDataAndSaveTempTxn(service, user,request)
             									.flatMap(response -> ServerResponse.ok().bodyValue(response))
             									.onErrorResume(error -> {
             	                                    error.printStackTrace();
             	                                    return Mono.error(new SPRuntimeError(
             	                                        "Issue while processing the request ", HttpStatus.INTERNAL_SERVER_ERROR));
             	                                });
-            
-            return map;
 
         } catch (Exception e) {
         	e.printStackTrace();
@@ -59,19 +57,18 @@ public class PreProcessingService {
         }
     }
 
-    public Mono<ServerResponse> applicationSubmission(ServerHttpRequest request, String txnId, String appData,
-			String applyKey) {
+    public Mono<ServerResponse> fetchServiceKey(ServerHttpRequest request, String baseServiceId, String appId, String taskId, String serviceId) {
         try {
             UserSessionObject user = getUserSessionDetails(request);
 
-            Services service = preProcessingFacade.decryptApplyKey(applyKey);
-            return preProcessingFacade.saveFormData(txnId, user,appData,service);
+            return preProcessingFacade.fetchServiceKey(Integer.parseInt(baseServiceId), user,request,appId,taskId,Integer.parseInt(serviceId));
 
         } catch (Exception e) {
-        	e.printStackTrace();
-        	return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
+            e.printStackTrace();
+            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
         }
     }
+
 }
 
 

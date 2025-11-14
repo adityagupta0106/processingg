@@ -11,12 +11,16 @@ import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.controller.PreProcessingController;
+import com.serviceplus.form.validation.controller.HandlerController;
 
 @Configuration
 public class PathRouter {
 
 	@Autowired
     private PreProcessingController preProcessingController;
+
+    @Autowired
+    private HandlerController handlerController;
 
 	@Value("${service.context.path}")
 	private String contextPath;
@@ -29,7 +33,9 @@ public class PathRouter {
         return RouterFunctions
                 .route(GET(contextPath + "/a/serviceList"), preProcessingController::getServiceList)
         		.andRoute(POST(contextPath + "/a/apply"), preProcessingController::apply)
-        		.andRoute(POST(contextPath + "/a/form/submission"), preProcessingController::submitApplication);
+        		//.andRoute(POST(contextPath + "/a/form/submission"), preProcessingController::submitApplication)
+                .andRoute(POST(contextPath + "/a/handler/action"), handlerController::processHandler)
+                .andRoute(POST(contextPath + "/a/apply/serviceKey"), preProcessingController::fetchServiceKey);
     }
     
     
