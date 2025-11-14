@@ -7,6 +7,8 @@ import java.util.Map;
 
 import com.serviceplus.form.validation.dto.TaskActivity;
 import com.serviceplus.form.validation.utility.Utility;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
@@ -47,6 +49,8 @@ public class ReactiveApiClient {
 
     @Autowired
     private RedisService redis;
+
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
     @SuppressWarnings("unchecked")
 	public Mono<List<Services>> fetchServiceList(UserSessionObject user) {
@@ -114,8 +118,10 @@ public class ReactiveApiClient {
     @SuppressWarnings("unchecked")
 	public Mono<ResponseEntity<String>> saveFormData(String txnId, String formId, String appData) {
     	String url = FORM_MANAGEMENT_SERVICE.concat("addApplicationData");
+        applicationFlowLogs.info("calling save form for txnId {} formId {} data {} ",txnId,formId,appData);
 
-        Mono<ResponseEntity<String>> callExternalEndpoint = (Mono<ResponseEntity<String>>) AsynchronousApiExecutor.callExternalEndpoint(
+
+        return (Mono<ResponseEntity<String>>) AsynchronousApiExecutor.callExternalEndpoint(
 											                String.class,
 											                HttpMethod.POST,
 											                Collections.emptyMap(),
@@ -123,8 +129,6 @@ public class ReactiveApiClient {
 											                url,
 											                appData,
 											                MediaType.APPLICATION_JSON);
-        
-       return callExternalEndpoint;
 	}
     //CHECK CIRCUIT BREAKER AND ADD LOGS
     @SuppressWarnings("unchecked")
@@ -200,12 +204,12 @@ public class ReactiveApiClient {
             redis.add(taskActivity,key,false).subscribe();
             return ServerResponse.ok().bodyValue(service);
             })
-            .onErrorResume(WebClientResponseException.class, Utility::handleWebClientError)
-                ;
+            .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,"FROM FETCH SERVICE LIST"));
+
     }
 
     @SuppressWarnings("unchecked")
-    public Mono<ServerResponse> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId) {
+    public Mono<ServerResponse> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId,String txnId) {
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
         String url = METADATA_SERVICE.concat("apply/processFlow?");
 
@@ -213,7 +217,7 @@ public class ReactiveApiClient {
                                                                 String.class,
                                                                 HttpMethod.POST,
                                                                 headers,
-                                                                Map.of("baseServiceId",baseServiceId,"taskId",taskId,"serviceId",serviceId),
+                                                                Map.of("taskId",taskId,"serviceId",serviceId),
                                                                 url,
                                                                 null,
                                                                 MediaType.APPLICATION_JSON);
@@ -230,7 +234,7 @@ public class ReactiveApiClient {
                     redis.add(taskActivity,key,false).subscribe();
                     return ServerResponse.ok().bodyValue(service);
                 })
-                .onErrorResume(WebClientResponseException.class, Utility::handleWebClientError)
+                .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnId))
                 ;
     }
 }

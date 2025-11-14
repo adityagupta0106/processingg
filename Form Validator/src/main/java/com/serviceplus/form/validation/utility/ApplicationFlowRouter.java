@@ -7,6 +7,8 @@ import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.handlers.ApplicationFlowHandler;
 import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepository;
 import com.serviceplus.form.validation.service.TempTransactionLogService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,8 @@ import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 @SanitizeRequest
 public class ApplicationFlowRouter {
 
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
+
     @Autowired
     private ApplicationFlowRouterRepository applicationFlowRouterRepository;
 
@@ -30,6 +34,8 @@ public class ApplicationFlowRouter {
     public Mono<ServerResponse> route(String statusKey, String applicationId, ServerRequest request, String txnId) {
 
         Mono<ApplicationFlowStatusEntity> flow = Mono.empty();
+
+        applicationFlowLogs.info("Checking route for applicationId {} txnId {} ,statusKey{}",applicationId,txnId,statusKey);
 
         if(isEmpty(statusKey)){
             flow = applicationFlowRouterRepository.findByApplicationIdAndProcessIdAndCompleted(
@@ -61,7 +67,9 @@ public class ApplicationFlowRouter {
     public Mono<ServerResponse> generate(String statusKey, String applicationId, ServerRequest request, String txnId, Mono<TempTransactionLogs> fetch,
                                          ApplicationFlowStatusEntity flow){
         ApplicationFlowHandler handler = HANDLERS.get(statusKey);
+
         if (handler != null) {
+            applicationFlowLogs.info("handler processed for applicationId {} txnId {} ,statusKey{},class {}",applicationId,txnId,statusKey,handler.getClass());
             return handler.process(applicationId,request,statusKey,txnId,fetch,flow);
         } else {
             throw new IllegalArgumentException("No handler found for status: ".concat(statusKey));

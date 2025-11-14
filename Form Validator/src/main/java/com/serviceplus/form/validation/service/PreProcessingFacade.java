@@ -14,6 +14,8 @@ import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Service;
@@ -53,6 +55,8 @@ public class PreProcessingFacade {
 
     @Autowired
     private RedisService redis;
+
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
     public Mono<List<Services>> getServiceList(UserSessionObject user) {
         return reactiveApiClient.fetchServiceList(user)
@@ -99,6 +103,8 @@ public class PreProcessingFacade {
             service = tempLog.getService();
         }
 
+
+        applicationFlowLogs.info("Saving txn log for txnId {} applicationId {} dataId {} ",txnId,applicationId,dataId);
 
         ProcessingTxn txnEntity = new ProcessingTxn(
             txnId,

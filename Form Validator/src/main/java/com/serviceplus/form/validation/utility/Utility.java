@@ -3,14 +3,21 @@ package com.serviceplus.form.validation.utility;
 
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Map;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -37,6 +44,8 @@ public class Utility {
 	private String aesAuthKey;
 	
 	private static String AES_AUTH_KEY;
+
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 	
 	@PostConstruct
 	public void initalize() {
@@ -88,7 +97,7 @@ public class Utility {
 		MessageDigest md = null;
 		try {
 			md = MessageDigest.getInstance("SHA-256");
-			md.update(plaintext.getBytes("UTF-8"));
+			md.update(plaintext.getBytes(StandardCharsets.UTF_8));
 		} catch (Exception e) {
 			md = null;
 		}
@@ -214,21 +223,25 @@ public class Utility {
     	return "";
 	}
 
-    public static <T> Mono<T> handleWebClientError(WebClientResponseException ex) {
+    @SuppressWarnings("unchecked")
+    public static <T> Mono<T> handleWebClientError(WebClientResponseException ex,String txnId) {
 
         HttpStatusCode status = ex.getStatusCode();
+        applicationFlowLogs.error("Client error for txnId {} from downstream: {}",txnId,ex.getResponseBodyAsString());
+        Map<String,Object> res = (Map<String, Object>) stringToEntity(ex.getResponseBodyAsString(), Map.class);
 
         if (status.is4xxClientError()) {
+
             return Mono.error(new SPRuntimeError(
-                    "Client error from downstream: ".concat(ex.getResponseBodyAsString()).concat(" [ERR-H-001]"),
+                    ((String)res.get("message")).concat(" [DOWN-ERROR-001]"),
                     HttpStatus.BAD_REQUEST));
         } else if (status.is5xxServerError()) {
             return Mono.error(new SPRuntimeError(
-                    "Server error from downstream: ".concat(ex.getResponseBodyAsString()).concat(" [ERR-H-002]"),
+                    ((String)res.get("message")).concat(ex.getResponseBodyAsString()).concat(" [DOWN-ERROR-002]"),
                     HttpStatus.BAD_GATEWAY));
         } else {
             return Mono.error(new SPRuntimeError(
-                    "Unexpected downstream response: ".concat(ex.getResponseBodyAsString()).concat(" [ERR-H-003]"),
+                    ((String)res.get("message")).concat(ex.getResponseBodyAsString()).concat(" [DOWN-ERROR-003]"),
                     HttpStatus.BAD_GATEWAY));
         }
     }

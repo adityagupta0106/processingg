@@ -10,6 +10,8 @@ import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepositor
 import com.serviceplus.form.validation.repository.CustomQueryRepository;
 import com.serviceplus.form.validation.service.ApplicationGenerationService;
 import com.serviceplus.form.validation.service.RedisService;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,8 @@ public class ApplicationFlowDecider {
     @Autowired
     private CustomQueryRepository customQueryRepository;
 
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
+
     public Mono<?> proceedToNext(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
                                      , String actionCode, String from, ServerRequest reactiveRequestObject){
 
@@ -49,6 +53,9 @@ public class ApplicationFlowDecider {
         }
 
         //FIRST ENTER ENTRY IN FLOW TABLE with completed == true  (from value)
+
+        applicationFlowLogs.info("Next action for txnId {} applicationId {} ,from {} ,actionCode {} ,isNew {}"
+                                                    ,txnLog.getTxnId(),appId,from,actionCode,txnLog.isNewEntity());
 
         if(from.equals("FS") && txnLog.isNewEntity()){
             ApplicationFlowStatusEntity flowEntity = new ApplicationFlowStatusEntity();
@@ -80,10 +87,14 @@ public class ApplicationFlowDecider {
                             .flatMap(activityMap -> {
                         TaskActivity activity = (TaskActivity) activityMap;
                         TaskActivity.ActivityData nextActivity= findNext(from, service.getTaskId(), activity);
+
                         if(isNull(nextActivity)){
                             return Mono.error(new SPRuntimeError("Execution error [EX - 03]",HttpStatus.INTERNAL_SERVER_ERROR));
                         }
                         else{
+
+                            applicationFlowLogs.info("Next activity for txnId {} applicationId {} is {}",txnLog.getTxnId(),appId,nextActivity.toString());
+
                             if(nextActivity.getActivityType().equals("NA")){
                                 return applicationGenerationService.executeApplicationProcessing(dataId, service, user, txnLog, appId,actionCode);
                             }
@@ -117,6 +128,7 @@ public class ApplicationFlowDecider {
                     applicationFlowRouterRepository.updateCompletionNative(appId,txnLog.getTxnId(),from,false).subscribe();
                     //DELETE ALL THE BELOW ENTRIES OTHER THAN from but check if from FS or other need to evaluate????
                     Throwable actual = Exceptions.unwrap(ex);
+                    applicationFlowLogs.error("Error occurred for txnId {} applicationId {} is {}",txnLog.getTxnId(),appId,ex.getMessage());
                     if (actual instanceof SPRuntimeError spr) {
                         return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode()));
                     }

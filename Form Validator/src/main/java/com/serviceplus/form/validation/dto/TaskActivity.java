@@ -54,6 +54,19 @@ public class TaskActivity {
         public void setLast(Boolean last) {
             isLast = last;
         }
+
+        @Override
+        public String toString() {
+            return "ActivityData{"
+                    + "index=" + index
+                    + ", activityName='" + (activityName != null ? activityName : "null") + "'"
+                    + ", activityType='" + (activityType != null ? activityType : "null") + "'"
+                    + ", isLast=" + isLast
+                    + "}";
+        }
+
+
+
     }
 
     public String getTaskId() {
