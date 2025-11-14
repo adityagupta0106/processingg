@@ -55,7 +55,7 @@ public class WorkflowService {
                                 .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY)))
                                 .flatMap(response -> {
                                         redis.add(response,REDIS_KEY,false).subscribe();
-                                        return generate((ServiceWorkFlow) response, ad, savedLog, service, user);
+                                        return generate(response, ad, savedLog, service, user);
                                 })
                 )
                 .flatMap(response -> generate((ServiceWorkFlow) response, ad, savedLog, service, user))
@@ -78,7 +78,7 @@ public class WorkflowService {
             applicationFlowLogs.info("Generating workflow for txnId {} currentTask {} nextNode {}"
                     ,savedLog.getTxnId(),currentTask,data.toString());
 
-            calculateNextWorkflow(data.getNodes(), data, service, ad, savedLog, user, wf);
+            calculateNextWorkflow(data.getNode(), data, service, ad, savedLog, user, wf);
         }
 
         return Mono.empty();
@@ -93,7 +93,7 @@ public class WorkflowService {
         List<CurrentProcess> nextCurrentProcess = new ArrayList<>();
 
         mappedTasks.forEach(task -> {
-            ServiceWorkFlow.Data.Nodes next = task.getNodes();
+            ServiceWorkFlow.Data.Nodes next = task.getNode();
 
             applicationFlowLogs.info("Creating current process for txnId {}  task {}",txn.getTxnId(),next);
 
@@ -110,7 +110,7 @@ public class WorkflowService {
                     List<ServiceWorkFlow.Data.MappedTask> nextToGateway = nextToGatewayData.getMappedTasks();
                     nextToGateway.forEach(nextToGatewayTask -> {
 
-                        ServiceWorkFlow.Data.Nodes nodes = nextToGatewayTask.getNodes();
+                        ServiceWorkFlow.Data.Nodes nodes = nextToGatewayTask.getNode();
 
                         applicationFlowLogs.info("Creating current process next to gateway for txnId {}  task {}",txn.getTxnId(),next);
 
@@ -136,7 +136,7 @@ public class WorkflowService {
                 else if(behaviour.equals(GATEWAY_BEHAVIOUR_EXCLUSIVE_CONVERGENT)
                         || behaviour.equals(GATEWAY_BEHAVIOUR_INCLUSIVE_CONVERGENT) || behaviour.equals(GATEWAY_BEHAVIOUR_PARALLEL_CONVERGENT)){
 
-                        ServiceWorkFlow.Data.Nodes nodes = nextToGatewayData.getNodes();
+                        ServiceWorkFlow.Data.Nodes nodes = nextToGatewayData.getNode();
                         CurrentProcess currentProcess = new CurrentProcess();
                         currentProcess.setPreviousProcessId(txn.getTxnId());
                         currentProcess.setCurrentTask(nodes.getId());
@@ -174,13 +174,13 @@ public class WorkflowService {
         });
 
         if(!nextCurrentProcess.isEmpty()) {
-            currentProcessRepository.saveAll(nextCurrentProcess);
+            currentProcessRepository.saveAll(nextCurrentProcess).subscribe();
         }
     }
 
     private ServiceWorkFlow.Data fetchNode(List<ServiceWorkFlow.Data> wf , String task){
         for(ServiceWorkFlow.Data data : wf){
-            ServiceWorkFlow.Data.Nodes nodes = data.getNodes();
+            ServiceWorkFlow.Data.Nodes nodes = data.getNode();
             if(task.equals(nodes.getId())){
                 return data;
             }

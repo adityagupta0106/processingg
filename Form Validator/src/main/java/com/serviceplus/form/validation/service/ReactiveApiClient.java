@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import com.serviceplus.form.validation.dto.ServiceWorkFlow;
 import com.serviceplus.form.validation.dto.TaskActivity;
 import com.serviceplus.form.validation.utility.Utility;
 import org.apache.logging.log4j.LogManager;
@@ -209,7 +210,7 @@ public class ReactiveApiClient {
     }
 
     @SuppressWarnings("unchecked")
-    public Mono<ServerResponse> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId,String txnId) {
+    public Mono<ServiceWorkFlow> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId,String txnId) {
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
         String url = METADATA_SERVICE.concat("apply/processFlow?");
 
@@ -217,7 +218,7 @@ public class ReactiveApiClient {
                                                                 String.class,
                                                                 HttpMethod.POST,
                                                                 headers,
-                                                                Map.of("taskId",taskId,"serviceId",serviceId),
+                                                                Map.of("serviceId",serviceId),
                                                                 url,
                                                                 null,
                                                                 MediaType.APPLICATION_JSON);
@@ -226,13 +227,9 @@ public class ReactiveApiClient {
         return callExternalEndpoint.flatMap(apiResponse -> {
                     String body = apiResponse.getBody();
 
-                    Type listType = new TypeToken<Services>() {}.getType();
-                    Services service = (Services) stringToEntityUsingType(body, listType);
-                    service.setServiceKey(encryptServiceKeys(service));
-                    TaskActivity taskActivity = service.getActivityMap();
-                    String key = SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()));
-                    redis.add(taskActivity,key,false).subscribe();
-                    return ServerResponse.ok().bodyValue(service);
+                    Type listType = new TypeToken<ServiceWorkFlow>() {}.getType();
+                    ServiceWorkFlow workflow = (ServiceWorkFlow) stringToEntityUsingType(body, listType);
+                    return Mono.just(workflow);
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnId))
                 ;
