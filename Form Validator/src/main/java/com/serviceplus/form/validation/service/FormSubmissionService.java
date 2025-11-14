@@ -29,6 +29,7 @@ import java.util.Map;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
+import static com.serviceplus.form.validation.utility.Utility.handleWebClientError;
 
 @Service
 @SanitizeRequest
@@ -55,7 +56,7 @@ public class FormSubmissionService {
     @Autowired
     private ApplicationFlowDecider applicationFlowDecider;
 
-    private static final Logger log = LogManager.getLogger("FormSubmissionLogger");
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
     public Mono<ServerResponse> applicationSubmission(ServerHttpRequest request, String txnId, String appData,
                                                       String applyKey, String appId, boolean draft, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus) {
@@ -63,6 +64,7 @@ public class FormSubmissionService {
             UserSessionObject user = getUserSessionDetails(request);
 
             Services service = preProcessingFacade.decryptApplyKey(applyKey);
+            applicationFlowLogs.info("Submitting application for txnId {} applicationId {} user {} service {} ",txnId,appId,user.getUserID(),service.toString());
 
             if(appId.isEmpty() && service.getTaskType().equals(OFFICIAL_TASK_FLAG)){
                 return Mono.error(new SPRuntimeError(
@@ -104,10 +106,10 @@ public class FormSubmissionService {
                 .onErrorResume(Exception.class, ex -> {
                     Throwable actual = Exceptions.unwrap(ex);
                     if (actual instanceof SPRuntimeError spr) {
-                        log.warn("Error while saving form data: {}", spr.getMessage());
+                        applicationFlowLogs.warn("Error while saving form data: {}", spr.getMessage());
                         return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode()));
                     }
-                    log.error("Unexpected error while saving form data", ex);
+                    applicationFlowLogs.error("Unexpected error while saving form data", ex);
                     return Mono.error(new SPRuntimeError("Internal server error [SUB-500]", HttpStatus.INTERNAL_SERVER_ERROR));
                 });
     }
@@ -147,7 +149,7 @@ public class FormSubmissionService {
                         reactiveApiClient.saveFormData(txnId, service.getFormId(), appData)
                                 .flatMap(body -> handleSuccessfulResponse(body.getBody(), service, user, request, txnLog, appId,reactiveRequestObject))
                 )
-                .onErrorResume(WebClientResponseException.class, Utility::handleWebClientError);
+                .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnLog.getTxnId()));
     }
 
     private Mono<?> handleSuccessfulResponse(
@@ -159,10 +161,12 @@ public class FormSubmissionService {
             String appId, ServerRequest reactiveRequestObject) {
 
         Map<String, String> responseJson;
+        applicationFlowLogs.info("Response from form management for txnId {} applicationId {} response {}",txnLog.getTxnId(),appId,responseBody);
+
         try {
             responseJson = objectMapper.readValue(responseBody, new TypeReference<>() {});
         } catch (JsonProcessingException e) {
-            log.error("Error parsing downstream response", e);
+            applicationFlowLogs.error("Error parsing downstream response", e);
             return Mono.error(new SPRuntimeError("Invalid downstream response [SUB-003]", HttpStatus.BAD_GATEWAY));
         }
 
@@ -175,10 +179,10 @@ public class FormSubmissionService {
                 .onErrorResume(Exception.class, ex -> {
                     Throwable actual = Exceptions.unwrap(ex);
                     if (actual instanceof SPRuntimeError spr) {
-                        log.warn("Error while saving form data: {}", spr.getMessage());
+                        applicationFlowLogs.warn("Error while saving form data: {}", spr.getMessage());
                         return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode()));
                     }
-                    log.error("Unexpected error while saving form data", ex);
+                    applicationFlowLogs.error("Unexpected error while saving form data", ex);
                     return Mono.error(new SPRuntimeError("Internal server error [SUB-500]", HttpStatus.INTERNAL_SERVER_ERROR));
                 });
                        // applicationGenerationService.executeApplicationProcessing(dataId, service, user, txn, appId,actionCode));

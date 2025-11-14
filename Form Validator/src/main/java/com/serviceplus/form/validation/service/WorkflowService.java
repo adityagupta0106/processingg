@@ -8,6 +8,8 @@ import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,21 +35,23 @@ public class WorkflowService {
     @Autowired
     private RedisService redis;
 
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
+
     public void saveAndFlush(CurrentProcess c){
         currentProcessRepository.save(c);
     }
 
-    public void generateNextWorkflow(ApplicationDetails ad, ProcessingTxn savedLog, Services service, UserSessionObject user) {
+    public Mono<?> generateNextWorkflow(ApplicationDetails ad, ProcessingTxn savedLog, Services service, UserSessionObject user) {
         final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString());
 
         Mono<Object> redisData = redis.fetch(
                 REDIS_KEY, ServiceWorkFlow.class
         );
 
-        redisData
+        return redisData
                 .switchIfEmpty(
                         apiClient.fetchProcessFlow(service.getBaseServiceId(), user,
-                                        savedLog.getApplicationId(), service.getTaskId(), service.getServiceId())
+                                        savedLog.getApplicationId(), service.getTaskId(), service.getServiceId(),savedLog.getTxnId())
                                 .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY)))
                                 .flatMap(response -> {
                                         redis.add(response,REDIS_KEY,false).subscribe();
@@ -57,10 +61,8 @@ public class WorkflowService {
                 .flatMap(response -> generate((ServiceWorkFlow) response, ad, savedLog, service, user))
                 .onErrorResume(ex -> {
                     ex.printStackTrace();
-                    //return
-                    return null;
+                    return Mono.error(new SPRuntimeError("Workflow Error [ERR -01]",HttpStatus.INTERNAL_SERVER_ERROR));
                 });
-
     }
 
     private Mono<?> generate(ServiceWorkFlow response, ApplicationDetails ad, ProcessingTxn savedLog,
@@ -68,10 +70,16 @@ public class WorkflowService {
         List<ServiceWorkFlow.Data> wf =  response.getData();
         String currentTask = service.getTaskId();
 
+        applicationFlowLogs.info("Generating workflow for txnId {} currentTask {}",savedLog.getTxnId(),currentTask);
+
         ServiceWorkFlow.Data data = fetchNode(wf, currentTask);
 
-        if(data != null)
-                calculateNextWorkflow(data.getNodes(),data,service,ad,savedLog,user,wf);
+        if(data != null) {
+            applicationFlowLogs.info("Generating workflow for txnId {} currentTask {} nextNode {}"
+                    ,savedLog.getTxnId(),currentTask,data.toString());
+
+            calculateNextWorkflow(data.getNodes(), data, service, ad, savedLog, user, wf);
+        }
 
         return Mono.empty();
     }
@@ -87,6 +95,8 @@ public class WorkflowService {
         mappedTasks.forEach(task -> {
             ServiceWorkFlow.Data.Nodes next = task.getNodes();
 
+            applicationFlowLogs.info("Creating current process for txnId {}  task {}",txn.getTxnId(),next);
+
             if(TYPE_GATEWAY.equals(next.getType())){
 
                 String behaviour = next.getBehaviour();
@@ -101,6 +111,8 @@ public class WorkflowService {
                     nextToGateway.forEach(nextToGatewayTask -> {
 
                         ServiceWorkFlow.Data.Nodes nodes = nextToGatewayTask.getNodes();
+
+                        applicationFlowLogs.info("Creating current process next to gateway for txnId {}  task {}",txn.getTxnId(),next);
 
                         CurrentProcess currentProcess = new CurrentProcess();
                         currentProcess.setPreviousProcessId(txn.getTxnId());

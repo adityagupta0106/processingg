@@ -73,4 +73,14 @@ public class Services {
     public void setActivityMap(TaskActivity activityMap) {
         this.activityMap = activityMap;
     }
+
+    @Override
+    public String toString() {
+        return "Services{"
+                .concat("serviceId=").concat(String.valueOf(serviceId))
+                .concat(", formId='").concat(formId).concat("'")
+                .concat(", taskId='").concat(taskId).concat("'")
+                .concat(", taskType='").concat(taskType).concat("'");
+    }
+
 }

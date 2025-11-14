@@ -10,6 +10,8 @@ import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.utility.Utility;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,8 +28,10 @@ import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
+import static com.serviceplus.form.validation.utility.Utility.handleWebClientError;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 
 @Service
@@ -56,9 +60,14 @@ public class ApplicationGenerationService {
 
     @Autowired
     private CurrentProcessRepository currentProcessRepository;
+
+    private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
     
     public Mono<Map<String, Object>> executeApplicationProcessing(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
                                                                     , String appStatus) {
+
+            applicationFlowLogs.info("Finalizing application for txnId {} applicationId {} status {} taskType {}",
+                                        txnLog.getTxnId(),appId,appStatus,service.getTaskType());
 
             if(service.getTaskType().equals(OFFICIAL_TASK_FLAG)){
                 return saveTxn(txnLog,dataId,service,user,"",appId,txnLog.getTxnId(),"","",appStatus);
@@ -69,6 +78,8 @@ public class ApplicationGenerationService {
                             try {
                                 JSONObject json = new JSONObject(data);
                                 String abbr = json.getString("abbr");
+
+                                applicationFlowLogs.info("Abbreviation for txnId {} is {} ",txnLog.getTxnId(),abbr);
 
                                 String referenceNo = abbr.concat("/").concat(String.valueOf(Year.now().getValue())).concat("/").concat(txnLog.getTxnId());
 
@@ -81,7 +92,7 @@ public class ApplicationGenerationService {
                                 ));
                             }
                         })
-                        .onErrorResume(WebClientResponseException.class, Utility::handleWebClientError);
+                        .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnLog.getTxnId()));
             }
 
 
@@ -132,10 +143,8 @@ public class ApplicationGenerationService {
                     //FIRST ENTER ENTRY IN FLOW TABLE with completed == false
                     //entry  in application flow ?? I DON'T THINK REQUIRED since empty will fall back to FS
                     return currentProcessRepository.save(cp)
-//                            .doOnSuccess( c -> workflowService
-//                                                                            .generateNextWorkflow(ad,savedLog,service,user).subscribe()
-//                                                                        )
-                            ;
+                            .flatMap( c -> workflowService.generateNextWorkflow(ad,savedLog,service,user)
+                            );
                 });
     }
 }

@@ -63,6 +63,17 @@ public class ServiceWorkFlow {
             public void setBehaviour(String behaviour) {
                 this.behaviour = behaviour;
             }
+
+            @Override
+            public String toString() {
+                return "Nodes{"
+                        .concat("id='").concat(id).concat("'")
+                        .concat(", type='").concat(type).concat("'")
+                        .concat(", name='").concat(name).concat("'")
+                        .concat(", behaviour='").concat(behaviour).concat("'")
+                        .concat("}");
+            }
+
         }
 
         public Nodes getNodes() {
@@ -80,6 +91,23 @@ public class ServiceWorkFlow {
         public void setMappedTasks(List<MappedTask> mappedTasks) {
             this.mappedTasks = mappedTasks;
         }
+
+        public Nodes getNode() {
+            return node;
+        }
+
+        public void setNode(Nodes node) {
+            this.node = node;
+        }
+
+        @Override
+        public String toString() {
+            return "Data{"
+                    .concat("node=").concat(String.valueOf(node))
+                    .concat(", mappedTasks=").concat(String.valueOf(mappedTasks))
+                    .concat("}");
+        }
+
     }
 
     public Integer getServiceId() {
