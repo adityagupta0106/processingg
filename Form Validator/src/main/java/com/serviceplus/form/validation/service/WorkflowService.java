@@ -125,6 +125,7 @@ public class WorkflowService {
                         currentProcess.setActionCode(FALLBACK_ACTION_NO);
                         currentProcess.setApplicationId(ad.getApplicationId());
                         currentProcess.setTenantId(user.getTenantId());
+                        currentProcess.setActionTaken("Y");
 
                         currentProcess.setNewEntity(true);
 
@@ -148,6 +149,7 @@ public class WorkflowService {
                         currentProcess.setActionCode(FALLBACK_ACTION_NO);
                         currentProcess.setApplicationId(ad.getApplicationId());
                         currentProcess.setTenantId(user.getTenantId());
+                        currentProcess.setActionTaken("Y");
 
                         currentProcess.setNewEntity(true);
 
