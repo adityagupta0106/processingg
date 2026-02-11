@@ -12,6 +12,7 @@ public class ServiceWorkFlow {
 
         private Nodes node;
         private List<MappedTask> mappedTasks;
+        private List <Services.AvailableApplyLocations> allowedOffices;
 
         public static class MappedTask{
             private Nodes node;
@@ -31,6 +32,15 @@ public class ServiceWorkFlow {
             private String type;
             private String name;
             private String behaviour;
+            private String formId;
+
+            public String getFormId() {
+                return formId;
+            }
+
+            public void setFormId(String formId) {
+                this.formId = formId;
+            }
 
             public String getId() {
                 return id;
@@ -101,6 +111,13 @@ public class ServiceWorkFlow {
                     .concat("}");
         }
 
+        public List<Services.AvailableApplyLocations> getAllowedOffices() {
+            return allowedOffices;
+        }
+
+        public void setAllowedOffices(List<Services.AvailableApplyLocations> allowedOffices) {
+            this.allowedOffices = allowedOffices;
+        }
     }
 
     public Integer getServiceId() {

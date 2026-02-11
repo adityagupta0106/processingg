@@ -21,17 +21,19 @@ public class ProcessingTxn implements Persistable<String>{
 	
 	private String taskId;
 
+    private String applicationId;
+
 	private Integer userId;
+
+    private String userIp;
 	
-	private LocalDateTime formStartTime;
+	private LocalDateTime startTime;
 	
-	private LocalDateTime formEndTime;
+	private LocalDateTime endTime;
 	
 	private String tenantId;
-	
-	private String userIp;
 
-    private String applicationId;
+    private String activityType;
 	
 	@Transient
     private boolean newEntity = false;
@@ -58,7 +60,7 @@ public class ProcessingTxn implements Persistable<String>{
 		this.formId = formId;
 		this.serviceId = serviceId;
 		this.taskId = taskId;
-		this.formEndTime = formEndTime;
+		this.endTime = formEndTime;
 		this.userId = userId;
 		this.tenantId = tenantId;
 		this.userIp = userIp;
@@ -97,23 +99,23 @@ public class ProcessingTxn implements Persistable<String>{
 		this.taskId = taskId;
 	}
 
-	public LocalDateTime getFormStartTime() {
-		return formStartTime;
-	}
+    public LocalDateTime getStartTime() {
+        return startTime;
+    }
 
-	public void setFormStartTime(LocalDateTime formStartTime) {
-		this.formStartTime = formStartTime;
-	}
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
 
-	public LocalDateTime getFormEndTime() {
-		return formEndTime;
-	}
+    public LocalDateTime getEndTime() {
+        return endTime;
+    }
 
-	public void setFormEndTime(LocalDateTime formEndTime) {
-		this.formEndTime = formEndTime;
-	}
+    public void setEndTime(LocalDateTime endTime) {
+        this.endTime = endTime;
+    }
 
-	public Integer getUserId() {
+    public Integer getUserId() {
 		return userId;
 	}
 
@@ -151,5 +153,13 @@ public class ProcessingTxn implements Persistable<String>{
 
     public void setApplicationId(String applicationId) {
         this.applicationId = applicationId;
+    }
+
+    public String getActivityType() {
+        return activityType;
+    }
+
+    public void setActivityType(String activityType) {
+        this.activityType = activityType;
     }
 }

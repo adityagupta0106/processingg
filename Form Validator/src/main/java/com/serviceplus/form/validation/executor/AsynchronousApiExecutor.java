@@ -1,8 +1,10 @@
-package com.serviceplus.form.validation.service;
+package com.serviceplus.form.validation.executor;
 
 import static com.serviceplus.form.validation.utility.Utility.extractServiceName;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
@@ -70,8 +72,10 @@ public class AsynchronousApiExecutor  implements ApiExecutor{
 									                             .toEntity(String.class);
 
         return responseMono
+                .timeout(Duration.ofSeconds(5))
                 .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
-                .onErrorResume(CallNotPermittedException.class, t -> callExternalEndpointFallback(url));
+                .onErrorResume(CallNotPermittedException.class, t -> callExternalEndpointFallback(url))
+                .onErrorResume(TimeoutException.class, t -> callExternalEndpointFallback(url));
 
     }
 

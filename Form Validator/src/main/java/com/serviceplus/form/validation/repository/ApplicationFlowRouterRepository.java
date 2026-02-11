@@ -13,24 +13,7 @@ import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SC
 @Repository
 public interface ApplicationFlowRouterRepository  extends ReactiveCrudRepository<ApplicationFlowStatusEntity, String> {
 
-    Mono<ApplicationFlowStatusEntity> findByApplicationIdAndProcessIdAndCompleted(String applicationId,String processId,boolean completed);
+    Mono<ApplicationFlowStatusEntity> findByApplicationIdAndCompletedAndTaskIdAndServiceIdAndTenantId(String applicationId,Integer completed,String taskId,Integer serviceId,String tenantId);
 
-    Mono<ApplicationFlowStatusEntity> findByApplicationIdAndProcessIdAndStatusAndCompleted(String applicationId, String processId, String status,boolean completed);
-
-    @Modifying
-    @Query("""
-    UPDATE schm_sp.application_flow_status 
-    SET completed = :completion 
-    WHERE application_id = :applicationId 
-      AND process_id = :processId 
-      AND status = :status
-    """)
-    Mono<Long> updateCompletionNative(
-            @Param("applicationId") String applicationId,
-            @Param("processId") String processId,
-            @Param("status") String status,
-            @Param("completion") boolean completion
-    );
-
-    //Mono<ApplicationFlowStatusEntity> updateCompletionByApplicationIdAndProcessIdAndStatus(String applicationId, String processId, String status);
+    Mono<ApplicationFlowStatusEntity> findByApplicationIdAndTxnIdAndCompletedAndTaskIdAndServiceIdAndTenantId(String applicationId,String txnId,Integer completed,String taskId,Integer serviceId,String tenantId);
 }

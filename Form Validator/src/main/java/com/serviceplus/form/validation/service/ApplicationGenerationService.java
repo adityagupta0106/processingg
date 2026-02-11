@@ -5,11 +5,14 @@ import java.time.LocalDateTime;
 import java.time.Year;
 import java.time.ZoneId;
 import java.util.Map;
+import java.util.UUID;
 
+import com.serviceplus.form.validation.dto.HandlerResponse;
+import com.serviceplus.form.validation.dto.InboxKafka;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
+import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
-import com.serviceplus.form.validation.utility.Utility;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -27,27 +30,21 @@ import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 
 import org.springframework.transaction.reactive.TransactionalOperator;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
-import static com.serviceplus.form.validation.utility.Utility.handleWebClientError;
-import static com.serviceplus.form.validation.utility.Utility.isEmpty;
+import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+import static com.serviceplus.form.validation.utility.Utility.*;
 
 @Service
 public class ApplicationGenerationService {
 	
 	@Autowired
     private ReactiveApiClient reactiveApiClient;
-
-    @Autowired
-    private ProcessingTxnRepository txnRepository;
     
     @Autowired
     private KafkaProducer kafka;
-    
-    @Value("${push.form.submission.data.topic}")
-    private String push_form_submission_data_topic;
 
     @Autowired
     private WorkflowService workflowService;
@@ -61,9 +58,18 @@ public class ApplicationGenerationService {
     @Autowired
     private CurrentProcessRepository currentProcessRepository;
 
+    @Autowired
+    private TransactionalDBExecutor transactionalDBExecutor;
+
+    @Autowired
+    private KafkaProducer kafkaProducer;
+
+    @Value("${push.form.submission.data.inbox.topic}")
+    private String PUSH_FORM_SUBMISSION_DATA_INBOX_TOPIC;
+
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
     
-    public Mono<Map<String, Object>> executeApplicationProcessing(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
+    public Mono<ServerResponse> executeApplicationProcessing(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
                                                                     , String appStatus) {
 
             applicationFlowLogs.info("Finalizing application for txnId {} applicationId {} status {} taskType {}",
@@ -98,53 +104,89 @@ public class ApplicationGenerationService {
 
     }
 
-    private Mono<Map<String, Object>> saveTxn(ProcessingTxn txnLog, String dataId, Services service, UserSessionObject user, String referenceNo, String applicationId,
+    private Mono<ServerResponse> saveTxn(ProcessingTxn txnLog, String dataId, Services service, UserSessionObject user, String referenceNo, String applicationId,
                                               String currentTxnId, String previousTxnId, String previousTaskId, String appStatus) {
-        txnLog.setFormEndTime(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
+        txnLog.setEndTime(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
         txnLog.setNewEntity(false);
+        HandlerResponse hr = new HandlerResponse();
+        hr.setData(Map.of("referenceNo", referenceNo));
+        hr.setApplicationId(applicationId);
         //return transactionalOperator.execute(status ->
-        return  txnRepository.save(txnLog)
-                                .flatMap(savedLog ->
-                                        saveApplicationAndCurrentProcess(savedLog,service,user,referenceNo,applicationId,appStatus)
-
-                )
-                .then(Mono.just(Map.of("referenceNo", referenceNo)));
+        return saveApplicationAndCurrentProcess(
+                txnLog, service, user, referenceNo, applicationId, appStatus,dataId
+        ).then(ServerResponse.ok().bodyValue(hr));
     }
 
-    private Mono<?> saveApplicationAndCurrentProcess(ProcessingTxn savedLog, Services service, UserSessionObject user, String referenceNo, String appId, String appStatus) {
+    private Mono<?> saveApplicationAndCurrentProcess(ProcessingTxn savedLog, Services service, UserSessionObject user, String referenceNo, String appId, String appStatus, String dataId) {
 
-        return applicationDetailsRepository.findById(appId).flatMap(ad ->{
+        return applicationDetailsRepository.findByApplicationIdAndTenantId(appId,user.getTenantId()).flatMap(ad ->{
             final Integer status = isEmpty(appStatus) ? FALLBACK_ACTION_NO : Integer.parseInt(appStatus);
 
             if(service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)){
                     ad.setReferenceNo(referenceNo);
                     ad.setStatus("I");
+                    ad.setAppliedLocationId(service.getSelectedLocationByUser().intValue());
+                    ad.setAppliedLocationName(service.getSelectedLocationNameByUser());
             } else if (service.getTaskType().equals(OFFICIAL_TASK_FLAG)) {
                     ad.setStatus(ACTION_CODE_MAPPING.get(status));
             }
 
             ad.setNewEntity(false);
 
-            return applicationDetailsRepository.save(ad).flatMap(
-                    add -> saveCurrentProcess(add,savedLog,service,user,status)
-            );
+            return saveCurrentProcess(ad,savedLog,service,user,status,dataId);
         });
 
     }
 
     private Mono<?> saveCurrentProcess(ApplicationDetails ad, ProcessingTxn savedLog,
-                                       Services service, UserSessionObject user, Integer appStatus) {
-        return currentProcessRepository.findById(savedLog.getTxnId())
+                                       Services service, UserSessionObject user, Integer appStatus, String dataId) {
+        return currentProcessRepository.findByServiceIdAndApplicationIdAndCurrentTaskAndActionTakenAndTenantId(
+                        service.getServiceId(),ad.getApplicationId(),service.getTaskId(),"N", user.getTenantId()
+                )
+                .switchIfEmpty(
+                        createCurrentProcess(ad,service,user)
+                )
                 .flatMap(cp -> {
-                    cp.setNewEntity(false);
                     cp.setActionCode(appStatus);
                     cp.setActionTaken("Y");
-                    // callForNextCurrentProcess();
-                    //FIRST ENTER ENTRY IN FLOW TABLE with completed == false
-                    //entry  in application flow ?? I DON'T THINK REQUIRED since empty will fall back to FS
-                    return currentProcessRepository.save(cp)
-                            .flatMap( c -> workflowService.generateNextWorkflow(ad,savedLog,service,user)
-                            );
+                    cp.setActionOn(LocalDateTime.now());
+                    cp.setDataId(dataId);
+                    return workflowService.generateNextWorkflow(ad,savedLog,service,user,cp).
+                            flatMap(inboxKafka -> persistWorkflow(ad, (InboxKafka) inboxKafka, savedLog)
+                                    .doOnSuccess(_ -> sendToInboxService((InboxKafka) inboxKafka,ad,service)));
                 });
+    }
+
+    private Mono<? extends CurrentProcess> createCurrentProcess(ApplicationDetails ad, Services service, UserSessionObject user) {
+        CurrentProcess currentProcess = new CurrentProcess();
+        currentProcess.setProcessId(createUniqueId());
+        currentProcess.setPreviousProcessId("");
+        currentProcess.setCurrentTask(service.getTaskId());
+        currentProcess.setPreviousTask("");
+        currentProcess.setServiceId(service.getServiceId());
+        currentProcess.setApplicationId(ad.getApplicationId());
+        currentProcess.setCurrentTaskName("");
+        currentProcess.setPreviousTaskName("");
+        currentProcess.setTenantId(user.getTenantId());
+        currentProcess.setBaseServiceId(service.getBaseServiceId());
+        currentProcess.setInitiatedOn(LocalDateTime.now());
+
+        return Mono.just(currentProcess);
+    }
+
+    private Mono<Void> persistWorkflow(
+            ApplicationDetails ad,
+            InboxKafka inboxKafka,
+            ProcessingTxn txn) {
+
+        return transactionalDBExecutor.execute(inboxKafka.getProcessList(), ad, txn);
+    }
+
+
+    private Mono<Object> sendToInboxService(InboxKafka inboxKafka, ApplicationDetails appDetails,Services service) {
+        String key = appDetails.getApplicationId().concat("_").concat(UUID.randomUUID().toString());
+        inboxKafka.setApplicationRefNo(appDetails.getReferenceNo());
+        kafkaProducer.sendMessage(PUSH_FORM_SUBMISSION_DATA_INBOX_TOPIC,key,entityToString(inboxKafka));
+        return Mono.just(true);
     }
 }

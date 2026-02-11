@@ -17,7 +17,7 @@ public class GlobalExceptionHandler {
                 ex.getErrorCode(),
                 ex.getErrorCode().value()
         );
-
+        err.setData(ex.getData());
         return Mono.just(ResponseEntity
                 .status(ex.getErrorCode())
                 .body(err));

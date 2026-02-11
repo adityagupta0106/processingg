@@ -1,13 +1,18 @@
 package com.serviceplus.form.validation.ExceptionHandler;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.http.HttpStatus;
 
+import java.util.Map;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ErrorDetails {
 
 	private String message;
 	private HttpStatus status;
 	private Integer errorCode;
-	
+	private Map<String,Object> data;
+
 	public ErrorDetails() {
 	}
 	
@@ -42,7 +47,11 @@ public class ErrorDetails {
 		this.errorCode = errorCode;
 	}
 
-    
-	
-	
+    public Map<String, Object> getData() {
+        return data;
+    }
+
+    public void setData(Map<String, Object> data) {
+        this.data = data;
+    }
 }

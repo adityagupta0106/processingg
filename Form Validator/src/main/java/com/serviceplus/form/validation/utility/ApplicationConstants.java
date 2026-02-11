@@ -21,6 +21,7 @@ public class ApplicationConstants {
     public static final String GATEWAY_BEHAVIOUR_INCLUSIVE_CONVERGENT = "IC";
     public static final String GATEWAY_BEHAVIOUR_PARALLEL_DIVERGENT = "PD";
     public static final String GATEWAY_BEHAVIOUR_PARALLEL_CONVERGENT = "PC";
+    final public static String HOST_HEADER = "SP-Client-Domain";
 
     public static final Map<Integer, String> ACTION_CODE_MAPPING = Map.of(
             24, "I",
@@ -32,5 +33,7 @@ public class ApplicationConstants {
             10,"R",
             11,"D"
     );
+
+    public static final String APPLY_METADATA_ENC_KEY_PART = "1qdkCB8zWr";
 
 }

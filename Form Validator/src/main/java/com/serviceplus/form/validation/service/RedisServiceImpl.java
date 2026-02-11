@@ -10,10 +10,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.lang.reflect.Type;
 import java.time.Duration;
 
-import static com.serviceplus.form.validation.utility.Utility.entityToString;
-import static com.serviceplus.form.validation.utility.Utility.stringToEntity;
+import static com.serviceplus.form.validation.utility.Utility.*;
+import static java.util.Objects.nonNull;
 
 @Service
 @Primary
@@ -24,6 +25,9 @@ public class RedisServiceImpl implements  RedisService{
 
     @Value("${new.application.form.transaction.redis.timeout.minutes}")
     private Long NEW_APPLICATION_FORM_TRANSACTION_REDIS_TIMEOUT;
+
+    @Value("${disable.cache}")
+    private String DISABLE_CACHE;
 
     @Override
     public Mono<Object> fetch(String value,Class<?> obj) {
@@ -45,18 +49,36 @@ public class RedisServiceImpl implements  RedisService{
 
         } catch (Exception e) {
             e.printStackTrace();
-            return Mono.error(new SPRuntimeError("REDIS _ERR", HttpStatus.INTERNAL_SERVER_ERROR));
+            //return Mono.error(new SPRuntimeError("REDIS _ERR", HttpStatus.INTERNAL_SERVER_ERROR));
         }
 
+        return Mono.empty();
     }
 
     @Override
-    public Mono<Boolean> add(Object ent, String key,boolean durationRequired) {
+    @SuppressWarnings("unchecked")
+    public <T> Mono<T> fetch(String key, Type type) {
+        return (Mono<T>) template.opsForValue()
+                .get(key)
+                .map(data -> stringToEntityUsingType(data, type))
+                .doOnError(Throwable::printStackTrace
+                );
+    }
+
+
+    @Override
+    public Mono<Boolean> add(Object ent, String key,boolean durationRequired,final Integer minutes) {
         String finalJson;
         try {
+
+            if("Y".equals(DISABLE_CACHE)){
+                return Mono.just(true);
+            }
+
             finalJson = entityToString(ent);
             if(durationRequired){
-                return template.opsForValue().set(key, finalJson, Duration.ofMinutes(NEW_APPLICATION_FORM_TRANSACTION_REDIS_TIMEOUT));
+                return template.opsForValue().set(key, finalJson, (nonNull(minutes) ?
+                                    Duration.ofMinutes(minutes) : Duration.ofMinutes(NEW_APPLICATION_FORM_TRANSACTION_REDIS_TIMEOUT) ));
             }
             else{
                 return template.opsForValue().set(key, finalJson);

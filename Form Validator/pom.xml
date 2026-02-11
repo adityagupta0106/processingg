@@ -12,7 +12,7 @@
     <artifactId>FormValidator</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>validation</name>
-    <description>FormValidation</description>
+    <description>ApplicationProcessing</description>
     <url/>
     <licenses>
         <license/>
@@ -47,12 +47,6 @@
 
         <dependency>
             <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
-        </dependency>
-
-
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
 
@@ -62,11 +56,16 @@
             <artifactId>spring-boot-starter-data-r2dbc</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>r2dbc-postgresql</artifactId>
+            <version>1.0.7.RELEASE</version>
+        </dependency>
 
         <dependency>
             <groupId>io.r2dbc</groupId>
-            <artifactId>r2dbc-postgresql</artifactId>
-            <version>0.8.13.RELEASE</version>
+            <artifactId>r2dbc-pool</artifactId>
+            <version>1.0.2.RELEASE</version>
         </dependency>
 
 
@@ -78,25 +77,12 @@
         </dependency>
 
         <dependency>
-            <groupId>io.r2dbc</groupId>
-            <artifactId>r2dbc-postgresql</artifactId>
-            <version>0.8.13.RELEASE</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.r2dbc</groupId>
-            <artifactId>r2dbc-pool</artifactId>
-        </dependency>
-
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
-
-
         <dependency>
-            <groupId>io.github.resilience4j</groupId>
-            <artifactId>resilience4j-reactor</artifactId>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

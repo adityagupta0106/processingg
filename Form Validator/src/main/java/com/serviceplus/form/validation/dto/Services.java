@@ -1,10 +1,13 @@
 package com.serviceplus.form.validation.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.util.List;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class Services {
 
-	@JsonIgnore
 	private Integer serviceId;
 	private String serviceName;
 	@JsonIgnore
@@ -14,11 +17,53 @@ public class Services {
     @JsonIgnore
     private String taskType;
 	private String serviceKey;
+    @JsonIgnore
     private Integer baseServiceId;
+    @JsonIgnore
+    private String currentProcessId;
+    @JsonIgnore
+    private List<AvailableApplyLocations> locations;
+    private List<AvailableApplyLocations> nextLocations;
+    //TODO nexTaskList from here
+
+    @JsonIgnore
+    private Long selectedLocationByUser;
+
+    @JsonIgnore
+    private String selectedLocationNameByUser;
 
     @JsonIgnore
     private TaskActivity activityMap;
-	
+
+    public static class AvailableApplyLocations{
+        private Long orgUnitCode;
+        private String orgUnitName;
+
+        public Long getLocationId() {
+            return orgUnitCode;
+        }
+
+        public void setLocationId(Long locationId) {
+            this.orgUnitCode = locationId;
+        }
+
+        public String getLocationName() {
+            return orgUnitName;
+        }
+
+        public void setLocationName(String locationName) {
+            this.orgUnitName = locationName;
+        }
+
+        @Override
+        public String toString() {
+            return "AvailableApplyLocations{" +
+                    "orgUnitCode=" + orgUnitCode +
+                    ", orgUnitName='" + orgUnitName + '\'' +
+                    '}';
+        }
+    }
+
 	public Integer getServiceId() {
 		return serviceId;
 	}
@@ -74,6 +119,38 @@ public class Services {
         this.activityMap = activityMap;
     }
 
+    public List<AvailableApplyLocations> getLocations() {
+        return locations;
+    }
+
+    public void setLocations(List<AvailableApplyLocations> locations) {
+        this.locations = locations;
+    }
+
+    public Long getSelectedLocationByUser() {
+        return selectedLocationByUser;
+    }
+
+    public void setSelectedLocationByUser(Long selectedLocationByUser) {
+        this.selectedLocationByUser = selectedLocationByUser;
+    }
+
+    public String getSelectedLocationNameByUser() {
+        return selectedLocationNameByUser;
+    }
+
+    public void setSelectedLocationNameByUser(String selectedLocationNameByUser) {
+        this.selectedLocationNameByUser = selectedLocationNameByUser;
+    }
+
+    public List<AvailableApplyLocations> getNextLocations() {
+        return nextLocations;
+    }
+
+    public void setNextLocations(List<AvailableApplyLocations> nextLocations) {
+        this.nextLocations = nextLocations;
+    }
+
     @Override
     public String toString() {
         return "Services{"
@@ -83,4 +160,11 @@ public class Services {
                 .concat(", taskType='").concat(taskType).concat("'");
     }
 
+    public String getCurrentProcessId() {
+        return currentProcessId;
+    }
+
+    public void setCurrentProcessId(String currentProcessId) {
+        this.currentProcessId = currentProcessId;
+    }
 }
