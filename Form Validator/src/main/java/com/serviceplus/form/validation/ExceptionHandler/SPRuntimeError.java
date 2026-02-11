@@ -2,6 +2,8 @@ package com.serviceplus.form.validation.ExceptionHandler;
 
 import org.springframework.http.HttpStatus;
 
+import java.util.Map;
+
 public class SPRuntimeError extends RuntimeException{
 
 	/**
@@ -11,6 +13,7 @@ public class SPRuntimeError extends RuntimeException{
 	
 	private String message;
 	private HttpStatus errorCode;
+    private Map<String,Object> data;
 	
 	public SPRuntimeError() {
 		super();
@@ -34,4 +37,12 @@ public class SPRuntimeError extends RuntimeException{
 	public void setErrorCode(HttpStatus errorCode) {
 		this.errorCode = errorCode;
 	}
+
+    public Map<String, Object> getData() {
+        return data;
+    }
+
+    public void setData(Map<String, Object> data) {
+        this.data = data;
+    }
 }

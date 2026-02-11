@@ -13,7 +13,10 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.Services;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 @Service
 @SanitizeRequest
@@ -37,19 +40,29 @@ public class PreProcessingService {
         }
     }
 
-    public Mono<ServerResponse> apply(ServerHttpRequest request, String applyKey) {
+    public Mono<ServerResponse> apply(ServerHttpRequest request, String applyKey, String serviceId) {
         try {
             UserSessionObject user = getUserSessionDetails(request);
             //APPID,TASKID
             Services service = preProcessingFacade.decryptApplyKey(applyKey);
 
+            if(!service.getServiceId().toString().equals(serviceId)){
+                return Mono.error(new SPRuntimeError("Key mismatch", HttpStatus.NOT_ACCEPTABLE));
+            }
+
             return preProcessingFacade.getFormDataAndSaveTempTxn(service, user,request)
-            									.flatMap(response -> ServerResponse.ok().bodyValue(response))
-            									.onErrorResume(error -> {
-            	                                    error.printStackTrace();
-            	                                    return Mono.error(new SPRuntimeError(
-            	                                        "Issue while processing the request ", HttpStatus.INTERNAL_SERVER_ERROR));
-            	                                });
+            									.flatMap(response -> {
+                                                    //FEResponse re
+                                                    return ServerResponse.ok().bodyValue(response);
+
+                                                })
+                                                .onErrorResume(Exception.class, ex -> {
+                                                    Throwable actual = Exceptions.unwrap(ex);
+                                                    if (actual instanceof SPRuntimeError spr) {
+                                                        return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode()));
+                                                    }
+                                                    return Mono.error(new SPRuntimeError("Internal server error [REN - 01]", HttpStatus.INTERNAL_SERVER_ERROR));
+                                            });
 
         } catch (Exception e) {
         	e.printStackTrace();

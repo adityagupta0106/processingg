@@ -31,10 +31,11 @@ public class PathRouter {
     @Bean
     RouterFunction<ServerResponse> httpRoutes() {
         return RouterFunctions
-                .route(GET(contextPath + "/a/serviceList"), preProcessingController::getServiceList)
-        		.andRoute(POST(contextPath + "/a/apply"), preProcessingController::apply)
+                .route(POST(contextPath + "/a/serviceList"), preProcessingController::getServiceList)
+        		.andRoute(POST(contextPath + "/a/form/render"), preProcessingController::render)
         		//.andRoute(POST(contextPath + "/a/form/submission"), preProcessingController::submitApplication)
-                .andRoute(POST(contextPath + "/a/handler/action"), handlerController::processHandler)
+                .andRoute(POST(contextPath + "/a/form/handler/action"), handlerController::processAction)
+                .andRoute(POST(contextPath + "/a/form/handler/draft"), handlerController::draft)
                 .andRoute(POST(contextPath + "/a/apply/serviceKey"), preProcessingController::fetchServiceKey);
     }
     

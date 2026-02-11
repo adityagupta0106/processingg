@@ -2,6 +2,7 @@ package com.serviceplus.form.validation.controller;
 
 import java.util.Optional;
 
+import com.serviceplus.form.validation.dto.Services;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,8 @@ import com.serviceplus.form.validation.service.PreProcessingService;
 
 import reactor.core.publisher.Mono;
 
+import static com.serviceplus.form.validation.utility.Utility.isEmpty;
+
 @Component
 public class PreProcessingController {
 
@@ -23,14 +26,21 @@ public class PreProcessingController {
         return preProcessingService.serviceList(request.exchange().getRequest());
     }
 
-    public Mono<ServerResponse> apply(ServerRequest request) {
-    	Optional<String> applyKeyOpt = request.queryParam("applyKey");
-    	
-    	if (applyKeyOpt.isEmpty()) {
-            return Mono.error(new SPRuntimeError("applyKey is required", HttpStatus.BAD_REQUEST));
-        }
-    	
-        return preProcessingService.apply(request.exchange().getRequest(), applyKeyOpt.get());
+    public Mono<ServerResponse> render(ServerRequest request) {
+
+      // return fetchServiceKey(request).flatMap(res -> {
+            //String sKey = res.getServiceKey();
+            Optional<String> applyKeyOpt = request.queryParam("serviceKey");
+            Optional<String> serviceIdOpt = request.queryParam("serviceId");
+
+            if (applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
+                return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST));
+            }
+
+            return preProcessingService.apply(request.exchange().getRequest(), applyKeyOpt.get(),serviceIdOpt.get());
+       // });
+
+
     }
 
     public Mono<ServerResponse> fetchServiceKey(ServerRequest request){

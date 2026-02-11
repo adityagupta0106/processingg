@@ -1,5 +1,6 @@
 package com.serviceplus.form.validation.handlers;
 
+import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 
 @Service
+@SanitizeRequest
 public class FormSubmissionHandler implements ApplicationFlowHandler {
 
     @Autowired
@@ -27,19 +29,16 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
 
     @Override
     public Mono<ServerResponse> process(String applicationId, ServerRequest request, String statusKey, String txnId, Mono<TempTransactionLogs> tempLog
-                                                                , ApplicationFlowStatusEntity flowStatus) {
+                                                                , ApplicationFlowStatusEntity flowStatus, boolean fromDraft) {
 
         //CHECK IF REQUEST IS COMING FROM DRAFT
         boolean draft = false;
-        Optional<String> applyKeyOpt = request.queryParam("applyKey");
+        Optional<String> applyKeyOpt = request.queryParam("serviceKey");
         Optional<String> appIdOpt = request.queryParam("appId");
+        Optional<String> serviceIdOpt = request.queryParam("serviceId");
 
-        if (isEmpty(txnId)) {
-            return Mono.error(new SPRuntimeError("txnId is required", HttpStatus.BAD_REQUEST));
-        }
-
-        if (applyKeyOpt.isEmpty()) {
-            return Mono.error(new SPRuntimeError("applyKey is required", HttpStatus.BAD_REQUEST));
+        if (isEmpty(txnId) || applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
+            return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST));
         }
 
         String applyKey = applyKeyOpt.get();
@@ -51,7 +50,7 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
                 )
                 .flatMap(appData ->
                         formSubmissionService.applicationSubmission(
-                                request.exchange().getRequest(), txnId, appData, applyKey,applId,draft,request,flowStatus
+                                request.exchange().getRequest(), txnId, appData, applyKey,applId,draft,request,flowStatus,serviceIdOpt.get()
                         )
                 );
     }

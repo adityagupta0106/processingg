@@ -8,6 +8,9 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
+import java.util.Date;
+import java.util.List;
+
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 import static com.serviceplus.form.validation.utility.Utility.getClientIpAddr;
 
@@ -22,8 +25,9 @@ public class TempTransactionLogService {
         logs.setService(services);
         logs.setTxnId(createUniqueId());
         logs.setUserIp(getClientIpAddr(request));
+        logs.setStartTime(new Date());
 
-        return redisService.add(logs,logs.getTxnId(),true).flatMap(flag -> {
+        return redisService.add(logs,logs.getTxnId(),true,120).flatMap(flag -> {
             if(flag){
                 return Mono.just(logs);
             }

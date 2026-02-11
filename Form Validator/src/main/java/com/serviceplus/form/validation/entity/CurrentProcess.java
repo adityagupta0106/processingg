@@ -47,6 +47,11 @@ public class CurrentProcess implements Persistable<String> {
 
     private String dataId;
 
+    private Integer baseServiceId;
+
+    @Transient
+    private String formId;
+
     @Transient
     private boolean newEntity = false;
 
@@ -203,6 +208,22 @@ public class CurrentProcess implements Persistable<String> {
 
     public void setDataId(String dataId) {
         this.dataId = dataId;
+    }
+
+    public Integer getBaseServiceId() {
+        return baseServiceId;
+    }
+
+    public void setBaseServiceId(Integer baseServiceId) {
+        this.baseServiceId = baseServiceId;
+    }
+
+    public String getFormId() {
+        return formId;
+    }
+
+    public void setFormId(String formId) {
+        this.formId = formId;
     }
 }
 

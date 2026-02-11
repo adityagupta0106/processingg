@@ -34,11 +34,19 @@ public class SnowflakeIdGenerator {
     private long lastTimestamp = -1L;
 
     @PostConstruct
-	private void init() {
-    	SnowflakeIdGenerator.workerId = workerIdConfigured;
+    private void init() {
+        if (workerIdConfigured < 0 || workerIdConfigured > maxWorkerId) {
+            throw new IllegalStateException("workerId out of range");
+        }
+        if (datacenterIdConfigured < 0 || datacenterIdConfigured > maxDatacenterId) {
+            throw new IllegalStateException("datacenterId out of range");
+        }
+
+        SnowflakeIdGenerator.workerId = workerIdConfigured;
         SnowflakeIdGenerator.datacenterId = datacenterIdConfigured;
         INSTANCE = this;
-	}
+    }
+
 
     public SnowflakeIdGenerator() {
 

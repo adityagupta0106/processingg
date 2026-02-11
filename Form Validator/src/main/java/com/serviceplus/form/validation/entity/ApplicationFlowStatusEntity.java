@@ -5,25 +5,37 @@ import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
 
+import java.time.LocalDateTime;
+import java.util.Date;
+
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
 
 @Table(name = "application_flow_status", schema = SP_SCHEMA_NAME)
 public class ApplicationFlowStatusEntity implements Persistable<String> {
 
     @Id
+    private String id;
+
     private String applicationId;
 
-    private String status;
+    private String activityType;
 
-    private String statusMessage;
+    private String txnId;
 
-    private String processId;
+    private Integer completed;   //0 (incomplete),1 (complete), 2(complete/skipped by system)
 
     private String formId;
 
+    private String dataId;
+
+    private Integer serviceId;
+
+    private String taskId;
+
+    private LocalDateTime lastUpdate;
+
     private String tenantId;
 
-    private Boolean completed;
 
     @Transient
     private boolean newEntity = false;
@@ -36,7 +48,7 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
 
     @Override
     public String getId() {
-        return applicationId;
+        return id;
     }
 
 
@@ -48,28 +60,40 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
         this.applicationId = applicationId;
     }
 
-    public String getStatus() {
-        return status;
+    public LocalDateTime getLastUpdate() {
+        return lastUpdate;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    public void setLastUpdate(LocalDateTime lastUpdate) {
+        this.lastUpdate = lastUpdate;
     }
 
-    public String getStatusMessage() {
-        return statusMessage;
+    public String getDataId() {
+        return dataId;
     }
 
-    public void setStatusMessage(String statusMessage) {
-        this.statusMessage = statusMessage;
+    public void setDataId(String dataId) {
+        this.dataId = dataId;
     }
 
-    public String getProcessId() {
-        return processId;
+    public void setCompleted(Integer completed) {
+        this.completed = completed;
     }
 
-    public void setProcessId(String processId) {
-        this.processId = processId;
+    public String getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(String txnId) {
+        this.txnId = txnId;
+    }
+
+    public String getActivityType() {
+        return activityType;
+    }
+
+    public void setActivityType(String activityType) {
+        this.activityType = activityType;
     }
 
     public String getFormId() {
@@ -96,12 +120,28 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
         this.tenantId = tenantId;
     }
 
-    public Boolean getCompleted() {
-        return completed;
+    public Integer getServiceId() {
+        return serviceId;
     }
 
-    public void setCompleted(Boolean completed) {
-        this.completed = completed;
+    public void setServiceId(Integer serviceId) {
+        this.serviceId = serviceId;
+    }
+
+    public String getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(String taskId) {
+        this.taskId = taskId;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public Integer getCompleted() {
+        return completed;
     }
 }
 

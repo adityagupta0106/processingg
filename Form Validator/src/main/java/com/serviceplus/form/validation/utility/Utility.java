@@ -5,19 +5,22 @@ import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
 import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -25,7 +28,6 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -35,6 +37,7 @@ import com.serviceplus.form.validation.dto.UserSessionObject;
 import jakarta.annotation.PostConstruct;
 import reactor.core.publisher.Mono;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLY_METADATA_ENC_KEY_PART;
 import static com.serviceplus.form.validation.utility.KeyGenerator.generatePassKey;
 
 @Component
@@ -46,7 +49,7 @@ public class Utility {
 	private static String AES_AUTH_KEY;
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
-	
+
 	@PostConstruct
 	public void initalize() {
 		AES_AUTH_KEY = this.aesAuthKey;
@@ -71,7 +74,7 @@ public class Utility {
 	}
 	
 	public static String entityToString(Object data) {
-		return new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").create().toJson(data);
+		return new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").registerTypeAdapter(LocalDateTime.class, new LocalDateTimeAdapter()).create().toJson(data);
 	}
 	
 	public static Object stringToEntityUsingType(String data, Type typeOfT) {
@@ -160,13 +163,25 @@ public class Utility {
 	
 	public static String encryptServiceKeys(Services service) {
 		String encKey = generatePassKey(6);		
-		String finalKey = encKey.concat("1111111111");		
-		String aesEncrypt = AESEncrypt(service.getServiceId() + "~" + service.getFormId() + "~" + service.getTaskId() + "~" + service.getTaskType(),finalKey);
-		return aesEncrypt + encKey;
+		String finalKey = encKey.concat(APPLY_METADATA_ENC_KEY_PART);
+
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            String locationsJson = mapper.writeValueAsString(service.getLocations());
+            StringBuilder sb = new StringBuilder();
+            String aesEncrypt = AESEncrypt(sb.append(service.getServiceId()).append("~")
+                                                                .append(service.getFormId()).append("~").append(service.getTaskId()).append("~")
+                                                                .append(service.getTaskType()).append("~").append(locationsJson).append("~")
+                                                                .append(service.getServiceName()).toString(),finalKey);
+
+            return aesEncrypt + encKey;
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
 	}
 	
-	public static Services descryptServiceKeys(String serviceKey) {
-		
+	public static Services decryptServiceKeys(String serviceKey) {
 		if (serviceKey.contains("%2B")) {
 			serviceKey = serviceKey.replace("%2B", "+");
 		}
@@ -174,7 +189,7 @@ public class Utility {
 			serviceKey = serviceKey.replaceAll(" ", "+");
 		}
 		
-		String key = serviceKey.substring(serviceKey.length() - 6).concat("1111111111");
+		String key = serviceKey.substring(serviceKey.length() - 6).concat(APPLY_METADATA_ENC_KEY_PART);
 		String content = serviceKey.substring(0,serviceKey.length() - 6);
 		
 		String decrypt = AESDecrypt(content,key);
@@ -182,10 +197,30 @@ public class Utility {
 		
 		Services service = new Services();
 		service.setServiceId(Integer.parseInt(applyData[0]));
+        service.setBaseServiceId(Integer.parseInt(applyData[0]) / 10000);
 		service.setFormId(applyData[1]);
 		service.setTaskId(applyData[2]);
 		service.setTaskType(applyData[3]);
+        service.setServiceName(applyData[5]);
+        service.setServiceKey(serviceKey);
 
+        String locationsJson = applyData[4];
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            List<Services.AvailableApplyLocations> locations =
+                    mapper.readValue(
+                            locationsJson,
+                            new TypeReference<>() {
+                            }
+                    );
+
+            service.setLocations(locations);
+        }
+        catch(JsonProcessingException e){
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
 		return service;
 	}
 	
@@ -230,20 +265,48 @@ public class Utility {
         applicationFlowLogs.error("Client error for txnId {} from downstream: {}",txnId,ex.getResponseBodyAsString());
         Map<String,Object> res = (Map<String, Object>) stringToEntity(ex.getResponseBodyAsString(), Map.class);
 
-        if (status.is4xxClientError()) {
+        String message =  res.containsKey("message") ? (String)res.get("message") : (String)res.get("errorMessage");
+        Map<String, Object> data = res.containsKey("data") ? (Map<String, Object>) res.get("data") : null;
 
-            return Mono.error(new SPRuntimeError(
-                    ((String)res.get("message")).concat(" [DOWN-ERROR-001]"),
-                    HttpStatus.BAD_REQUEST));
-        } else if (status.is5xxServerError()) {
-            return Mono.error(new SPRuntimeError(
-                    ((String)res.get("message")).concat(ex.getResponseBodyAsString()).concat(" [DOWN-ERROR-002]"),
-                    HttpStatus.BAD_GATEWAY));
-        } else {
-            return Mono.error(new SPRuntimeError(
-                    ((String)res.get("message")).concat(ex.getResponseBodyAsString()).concat(" [DOWN-ERROR-003]"),
-                    HttpStatus.BAD_GATEWAY));
-        }
+        SPRuntimeError error = getSpRuntimeError(status, message);
+        error.setData(data);
+        return Mono.error(error);
+
     }
-	
+
+    private static SPRuntimeError getSpRuntimeError(HttpStatusCode status, String message) {
+        SPRuntimeError error;
+
+        if (status.is4xxClientError()) {
+            error = new SPRuntimeError(
+                    message.concat(" [DOWN-ERROR-001]"),
+                    HttpStatus.valueOf(status.value())
+            );
+        } else if (status.is5xxServerError()) {
+            error = new SPRuntimeError(
+                    message.concat(" [DOWN-ERROR-002]"),
+                    HttpStatus.BAD_GATEWAY
+            );
+        } else {
+            error = new SPRuntimeError(
+                    message.concat(" [DOWN-ERROR-003]"),
+                    HttpStatus.BAD_GATEWAY
+            );
+        }
+        return error;
+    }
+
+    public static SecretKey getMasterKey() {
+        String masterKeyBase64 = System.getenv("MASTER_KEY_BASE64");
+        byte[] decoded = Base64.getDecoder().decode(masterKeyBase64);
+        return new SecretKeySpec(decoded, "AES");
+    }
+
+    public static SecretKey generateRandomAESKey() throws Exception {
+        javax.crypto.KeyGenerator keyGen = javax.crypto.KeyGenerator.getInstance("AES");
+        keyGen.init(256);
+        return keyGen.generateKey();
+    }
+
+
 }
