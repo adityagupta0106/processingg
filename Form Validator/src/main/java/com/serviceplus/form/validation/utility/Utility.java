@@ -3,6 +3,8 @@ package com.serviceplus.form.validation.utility;
 
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
@@ -37,7 +39,8 @@ import com.serviceplus.form.validation.dto.UserSessionObject;
 import jakarta.annotation.PostConstruct;
 import reactor.core.publisher.Mono;
 
-import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLY_METADATA_ENC_KEY_PART;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLY_METADATA_ENC_KEY;
+import static com.serviceplus.form.validation.utility.CryptoUtil.HMACSHA256;
 import static com.serviceplus.form.validation.utility.KeyGenerator.generatePassKey;
 
 @Component
@@ -160,47 +163,62 @@ public class Utility {
 		}
 		return null;
 	}
-	
-	public static String encryptServiceKeys(Services service) {
-		String encKey = generatePassKey(6);		
-		String finalKey = encKey.concat(APPLY_METADATA_ENC_KEY_PART);
 
+    public static String encryptServiceKeys(Services service) {
         ObjectMapper mapper = new ObjectMapper();
+
         try {
             String locationsJson = mapper.writeValueAsString(service.getLocations());
-            StringBuilder sb = new StringBuilder();
-            String aesEncrypt = AESEncrypt(sb.append(service.getServiceId()).append("~")
-                                                                .append(service.getFormId()).append("~").append(service.getTaskId()).append("~")
-                                                                .append(service.getTaskType()).append("~").append(locationsJson).append("~")
-                                                                .append(service.getServiceName()).toString(),finalKey);
 
-            return aesEncrypt + encKey;
+            StringBuilder sb = new StringBuilder();
+            String plain = sb.append(service.getServiceId()).append("~")
+                    .append(service.getFormId()).append("~")
+                    .append(service.getTaskId()).append("~")
+                    .append(service.getTaskType()).append("~")
+                    .append(locationsJson).append("~")
+                    .append(service.getServiceName())
+                    .toString();
+
+            String secretKey = APPLY_METADATA_ENC_KEY;
+
+            String aesEncrypt = AESEncrypt(plain, secretKey);
+
+            String signature = HMACSHA256(aesEncrypt, secretKey);
+            return aesEncrypt.concat(".").concat(signature);
+
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
             throw new RuntimeException(e);
         }
-	}
-	
-	public static Services decryptServiceKeys(String serviceKey) {
-		if (serviceKey.contains("%2B")) {
-			serviceKey = serviceKey.replace("%2B", "+");
-		}
-		if (serviceKey.contains(" ")) {
-			serviceKey = serviceKey.replaceAll(" ", "+");
-		}
-		
-		String key = serviceKey.substring(serviceKey.length() - 6).concat(APPLY_METADATA_ENC_KEY_PART);
-		String content = serviceKey.substring(0,serviceKey.length() - 6);
-		
-		String decrypt = AESDecrypt(content,key);
-		String[] applyData = decrypt.split("~");
-		
-		Services service = new Services();
-		service.setServiceId(Integer.parseInt(applyData[0]));
+    }
+
+    public static Services decryptServiceKeys(String serviceKey) {
+        if (serviceKey.contains("%2B")) {
+            serviceKey = serviceKey.replace("%2B", "+");
+        }
+        if (serviceKey.contains(" ")) {
+            serviceKey = serviceKey.replaceAll(" ", "+");
+        }
+
+
+        String[] parts = serviceKey.split("\\.");
+        String encrypted = parts[0];
+        String signature = parts[1];
+
+        String secretKey = APPLY_METADATA_ENC_KEY;
+
+        if (!HMACSHA256(encrypted, secretKey).equals(signature)) {
+            throw new RuntimeException("Invalid token signature");
+        }
+
+        String decrypt = AESDecrypt(encrypted, secretKey);
+        String[] applyData = decrypt.split("~");
+
+        Services service = new Services();
+        service.setServiceId(Integer.parseInt(applyData[0]));
         service.setBaseServiceId(Integer.parseInt(applyData[0]) / 10000);
-		service.setFormId(applyData[1]);
-		service.setTaskId(applyData[2]);
-		service.setTaskType(applyData[3]);
+        service.setFormId(applyData[1]);
+        service.setTaskId(applyData[2]);
+        service.setTaskType(applyData[3]);
         service.setServiceName(applyData[5]);
         service.setServiceKey(serviceKey);
 
@@ -209,22 +227,17 @@ public class Utility {
 
         try {
             List<Services.AvailableApplyLocations> locations =
-                    mapper.readValue(
-                            locationsJson,
-                            new TypeReference<>() {
-                            }
-                    );
-
+                    mapper.readValue(locationsJson, new TypeReference<>() {});
             service.setLocations(locations);
-        }
-        catch(JsonProcessingException e){
-            e.printStackTrace();
+        } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
-		return service;
-	}
-	
-	public static String getClientIpAddr(ServerHttpRequest request) {
+
+        return service;
+    }
+
+
+    public static String getClientIpAddr(ServerHttpRequest request) {
 		String ip = "";
 		if (request != null) {
 			ip = getHeaderValue("X-Forwarded-For",request);
@@ -308,5 +321,12 @@ public class Utility {
         return keyGen.generateKey();
     }
 
+    public static String URLEncode(String data){
+        return URLEncoder.encode(data,StandardCharsets.UTF_8);
+    }
+
+    public static String URLDecode(String data){
+        return URLDecoder.decode(data,StandardCharsets.UTF_8);
+    }
 
 }
