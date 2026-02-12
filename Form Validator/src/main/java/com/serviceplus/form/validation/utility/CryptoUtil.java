@@ -1,18 +1,22 @@
 package com.serviceplus.form.validation.utility;
 
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
 
-public class AESUtil {
+public class CryptoUtil {
 
     private static final String AES = "AES";
     private static final String AES_GCM = "AES/GCM/NoPadding";
     private static final int IV_SIZE = 12;
     private static final int TAG_SIZE = 128;
+    private static final String HMAC_SHA256 = "HmacSHA256";
 
     public static String encryptWithAESGCM(String data, SecretKey key) throws Exception {
         byte[] iv = new byte[IV_SIZE];
@@ -41,4 +45,19 @@ public class AESUtil {
 
         return new String(cipher.doFinal(encrypted));
     }
+
+    public static String HMACSHA256(String data, String secretKey) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_SHA256);
+            SecretKeySpec secretKeySpec = new SecretKeySpec(secretKey.getBytes(), HMAC_SHA256);
+            mac.init(secretKeySpec);
+
+            byte[] rawHmac = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(rawHmac);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to calculate HMAC-SHA256", e);
+        }
+    }
+
 }

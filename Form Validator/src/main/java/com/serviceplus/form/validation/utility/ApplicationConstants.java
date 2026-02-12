@@ -34,6 +34,6 @@ public class ApplicationConstants {
             11,"D"
     );
 
-    public static final String APPLY_METADATA_ENC_KEY_PART = "1qdkCB8zWr";
+    public static final String APPLY_METADATA_ENC_KEY = "OJPJth1qdkCB8zWr";
 
 }
