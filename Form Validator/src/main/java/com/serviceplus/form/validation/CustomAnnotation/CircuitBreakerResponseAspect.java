@@ -45,7 +45,7 @@ public class CircuitBreakerResponseAspect {
 
 	                    return Mono.error(new SPRuntimeError(
 	                        checkCircuitBreakerResponse.errorMessage() + ": " + responseEntity.getBody(),
-	                        HttpStatus.FAILED_DEPENDENCY
+	                        HttpStatus.FAILED_DEPENDENCY,""
 	                    ));
 	                }
 	            }

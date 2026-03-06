@@ -1,7 +1,7 @@
 package com.serviceplus.form.validation.dto;
 
 import java.util.List;
-import com.serviceplus.form.validation.dto.Services.AvailableApplyLocations;
+import com.serviceplus.form.validation.dto.ServiceMeta.AvailableApplyLocations;
 
 public class TaskAvailableOfficeLocation {
 

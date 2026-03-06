@@ -1,5 +1,6 @@
 package com.serviceplus.form.validation.utility;
 
+import com.serviceplus.form.validation.controller.ApplicationFetchController;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +23,9 @@ public class PathRouter {
     @Autowired
     private HandlerController handlerController;
 
+    @Autowired
+    private ApplicationFetchController applicationFetchController;
+
 	@Value("${service.context.path}")
 	private String contextPath;
 	
@@ -35,8 +39,11 @@ public class PathRouter {
         		.andRoute(POST(contextPath + "/a/form/render"), preProcessingController::render)
         		//.andRoute(POST(contextPath + "/a/form/submission"), preProcessingController::submitApplication)
                 .andRoute(POST(contextPath + "/a/form/handler/action"), handlerController::processAction)
-                .andRoute(POST(contextPath + "/a/form/handler/draft"), handlerController::draft)
-                .andRoute(POST(contextPath + "/a/apply/serviceKey"), preProcessingController::fetchServiceKey);
+                .andRoute(POST(contextPath + "/a/form/handler/loadDraft"), handlerController::draft)
+                .andRoute(POST(contextPath + "/a/apply/serviceKey"), preProcessingController::fetchServiceKey)
+                .andRoute(POST(contextPath + "/a/form/edit"), handlerController::edit)
+                .andRoute(POST(contextPath + "/a/app/list"), applicationFetchController::getApplicationList)
+                .andRoute(POST(contextPath + "/a/app/preload"), applicationFetchController::loadApplicationAndFetchServiceKey);
     }
     
     

@@ -35,5 +35,9 @@ public class ApplicationConstants {
     );
 
     public static final String APPLY_METADATA_ENC_KEY = "OJPJth1qdkCB8zWr";
+    public static final String ACTIVITY_FORM_STATUS_KEY = "FS";
+    public static final String ACTIVITY_ENCLOSURE_STATUS_KEY = "ES";
+    public static final String APPLICATION_STATUS_DRAFT = "S";
+
 
 }

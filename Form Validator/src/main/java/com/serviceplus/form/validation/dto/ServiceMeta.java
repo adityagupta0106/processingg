@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class Services {
+public class ServiceMeta {
 
 	private Integer serviceId;
 	private String serviceName;
@@ -34,6 +34,8 @@ public class Services {
 
     @JsonIgnore
     private TaskActivity activityMap;
+
+    private String departmentName;
 
     public static class AvailableApplyLocations{
         private Long orgUnitCode;
@@ -166,5 +168,13 @@ public class Services {
 
     public void setCurrentProcessId(String currentProcessId) {
         this.currentProcessId = currentProcessId;
+    }
+
+    public String getDepartmentName() {
+        return departmentName;
+    }
+
+    public void setDepartmentName(String departmentName) {
+        this.departmentName = departmentName;
     }
 }

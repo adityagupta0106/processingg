@@ -10,7 +10,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 
 import reactor.core.Exceptions;
@@ -36,7 +36,7 @@ public class PreProcessingService {
 
 		} catch (Exception e) {
 			e.printStackTrace();
-            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
+            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR,""));
         }
     }
 
@@ -44,10 +44,10 @@ public class PreProcessingService {
         try {
             UserSessionObject user = getUserSessionDetails(request);
             //APPID,TASKID
-            Services service = preProcessingFacade.decryptApplyKey(applyKey);
+            ServiceMeta service = preProcessingFacade.decryptApplyKey(applyKey);
 
             if(!service.getServiceId().toString().equals(serviceId)){
-                return Mono.error(new SPRuntimeError("Key mismatch", HttpStatus.NOT_ACCEPTABLE));
+                return Mono.error(new SPRuntimeError("Key mismatch", HttpStatus.NOT_ACCEPTABLE,null));
             }
 
             return preProcessingFacade.getFormDataAndSaveTempTxn(service, user,request)
@@ -59,14 +59,14 @@ public class PreProcessingService {
                                                 .onErrorResume(Exception.class, ex -> {
                                                     Throwable actual = Exceptions.unwrap(ex);
                                                     if (actual instanceof SPRuntimeError spr) {
-                                                        return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode()));
+                                                        return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(),null));
                                                     }
-                                                    return Mono.error(new SPRuntimeError("Internal server error [REN - 01]", HttpStatus.INTERNAL_SERVER_ERROR));
+                                                    return Mono.error(new SPRuntimeError("Internal server error [REN - 01]", HttpStatus.INTERNAL_SERVER_ERROR,null));
                                             });
 
         } catch (Exception e) {
         	e.printStackTrace();
-        	return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
+        	return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 
@@ -78,7 +78,7 @@ public class PreProcessingService {
 
         } catch (Exception e) {
             e.printStackTrace();
-            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR));
+            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR,null));
         }
     }
 

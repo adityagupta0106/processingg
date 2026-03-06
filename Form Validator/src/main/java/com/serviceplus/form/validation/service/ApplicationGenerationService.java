@@ -22,7 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
 import com.serviceplus.form.validation.kafka.KafkaProducer;
@@ -69,7 +69,7 @@ public class ApplicationGenerationService {
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
     
-    public Mono<ServerResponse> executeApplicationProcessing(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
+    public Mono<ServerResponse> executeApplicationProcessing(String dataId, ServiceMeta service, UserSessionObject user, ProcessingTxn txnLog, String appId
                                                                     , String appStatus) {
 
             applicationFlowLogs.info("Finalizing application for txnId {} applicationId {} status {} taskType {}",
@@ -79,7 +79,7 @@ public class ApplicationGenerationService {
                 return saveTxn(txnLog,dataId,service,user,"",appId,txnLog.getTxnId(),"","",appStatus);
             }
             else{
-                return reactiveApiClient.fetchReferenceAbbrviation(service.getServiceId(),user)
+                return reactiveApiClient.fetchReferenceAbbrviation(service.getServiceId(),user,txnLog.getTxnId())
                         .flatMap(data -> {
                             try {
                                 JSONObject json = new JSONObject(data);
@@ -94,7 +94,7 @@ public class ApplicationGenerationService {
                             } catch (Exception e) {
                                 return Mono.error(new SPRuntimeError(
                                         "Issue while processing the request [SUB - 009]",
-                                        HttpStatus.INTERNAL_SERVER_ERROR
+                                        HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()
                                 ));
                             }
                         })
@@ -104,7 +104,7 @@ public class ApplicationGenerationService {
 
     }
 
-    private Mono<ServerResponse> saveTxn(ProcessingTxn txnLog, String dataId, Services service, UserSessionObject user, String referenceNo, String applicationId,
+    private Mono<ServerResponse> saveTxn(ProcessingTxn txnLog, String dataId, ServiceMeta service, UserSessionObject user, String referenceNo, String applicationId,
                                               String currentTxnId, String previousTxnId, String previousTaskId, String appStatus) {
         txnLog.setEndTime(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
         txnLog.setNewEntity(false);
@@ -117,7 +117,7 @@ public class ApplicationGenerationService {
         ).then(ServerResponse.ok().bodyValue(hr));
     }
 
-    private Mono<?> saveApplicationAndCurrentProcess(ProcessingTxn savedLog, Services service, UserSessionObject user, String referenceNo, String appId, String appStatus, String dataId) {
+    private Mono<?> saveApplicationAndCurrentProcess(ProcessingTxn savedLog, ServiceMeta service, UserSessionObject user, String referenceNo, String appId, String appStatus, String dataId) {
 
         return applicationDetailsRepository.findByApplicationIdAndTenantId(appId,user.getTenantId()).flatMap(ad ->{
             final Integer status = isEmpty(appStatus) ? FALLBACK_ACTION_NO : Integer.parseInt(appStatus);
@@ -139,7 +139,7 @@ public class ApplicationGenerationService {
     }
 
     private Mono<?> saveCurrentProcess(ApplicationDetails ad, ProcessingTxn savedLog,
-                                       Services service, UserSessionObject user, Integer appStatus, String dataId) {
+                                       ServiceMeta service, UserSessionObject user, Integer appStatus, String dataId) {
         return currentProcessRepository.findByServiceIdAndApplicationIdAndCurrentTaskAndActionTakenAndTenantId(
                         service.getServiceId(),ad.getApplicationId(),service.getTaskId(),"N", user.getTenantId()
                 )
@@ -157,7 +157,7 @@ public class ApplicationGenerationService {
                 });
     }
 
-    private Mono<? extends CurrentProcess> createCurrentProcess(ApplicationDetails ad, Services service, UserSessionObject user) {
+    private Mono<? extends CurrentProcess> createCurrentProcess(ApplicationDetails ad, ServiceMeta service, UserSessionObject user) {
         CurrentProcess currentProcess = new CurrentProcess();
         currentProcess.setProcessId(createUniqueId());
         currentProcess.setPreviousProcessId("");
@@ -179,11 +179,11 @@ public class ApplicationGenerationService {
             InboxKafka inboxKafka,
             ProcessingTxn txn) {
 
-        return transactionalDBExecutor.execute(inboxKafka.getProcessList(), ad, txn);
+        return transactionalDBExecutor.execute(txn.getTxnId(),inboxKafka.getProcessList(), ad, txn);
     }
 
 
-    private Mono<Object> sendToInboxService(InboxKafka inboxKafka, ApplicationDetails appDetails,Services service) {
+    private Mono<Object> sendToInboxService(InboxKafka inboxKafka, ApplicationDetails appDetails,ServiceMeta service) {
         String key = appDetails.getApplicationId().concat("_").concat(UUID.randomUUID().toString());
         inboxKafka.setApplicationRefNo(appDetails.getReferenceNo());
         kafkaProducer.sendMessage(PUSH_FORM_SUBMISSION_DATA_INBOX_TOPIC,key,entityToString(inboxKafka));

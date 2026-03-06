@@ -2,7 +2,7 @@ package com.serviceplus.form.validation.controller;
 
 import java.util.Optional;
 
-import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.ServiceMeta;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -34,7 +34,7 @@ public class PreProcessingController {
             Optional<String> serviceIdOpt = request.queryParam("serviceId");
 
             if (applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
-                return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST));
+                return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST,null));
             }
 
             return preProcessingService.apply(request.exchange().getRequest(), applyKeyOpt.get(),serviceIdOpt.get());
@@ -51,7 +51,7 @@ public class PreProcessingController {
         String serviceId = serviceIdOpt.orElse("-1");
 
         if (serviceIdOpt.isEmpty()) {
-            return Mono.error(new SPRuntimeError("serviceId is required", HttpStatus.BAD_REQUEST));
+            return Mono.error(new SPRuntimeError("serviceId is required", HttpStatus.BAD_REQUEST,null));
         }
 
         return preProcessingService.fetchServiceKey(request.exchange().getRequest(),serviceIdOpt.get(),applicationIdOpt.orElse(""),taskIdOpt.orElse(""),serviceId);

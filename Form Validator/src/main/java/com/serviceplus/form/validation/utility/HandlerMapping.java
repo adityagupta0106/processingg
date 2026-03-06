@@ -11,6 +11,9 @@ import org.springframework.stereotype.Component;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_ENCLOSURE_STATUS_KEY;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
+
 @Component
 public class HandlerMapping {
 
@@ -24,8 +27,8 @@ public class HandlerMapping {
 
     @EventListener(ApplicationReadyEvent.class)
     public void init() {
-        HANDLERS.put("FS", formSubmissionHandler);
-        HANDLERS.put("ES", enclosureHandler);
+        HANDLERS.put(ACTIVITY_FORM_STATUS_KEY, formSubmissionHandler);
+        HANDLERS.put(ACTIVITY_ENCLOSURE_STATUS_KEY, enclosureHandler);
        // HANDLERS.put("BEMVEL", enclosureHandler);
     }
 }

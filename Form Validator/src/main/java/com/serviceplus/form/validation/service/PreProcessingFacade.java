@@ -20,7 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Service;
 
-import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 
@@ -53,7 +53,7 @@ public class PreProcessingFacade {
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
-    public Mono<List<Services>> getServiceList(UserSessionObject user) {
+    public Mono<List<ServiceMeta>> getServiceList(UserSessionObject user) {
         return reactiveApiClient.fetchServiceList(user)
             .map(services -> {
                 services.forEach(service -> {
@@ -63,7 +63,7 @@ public class PreProcessingFacade {
             });
     }
 
-    public Mono<HandlerResponse> getFormDataAndSaveTempTxn(Services service, UserSessionObject user, ServerHttpRequest request) {
+    public Mono<HandlerResponse> getFormDataAndSaveTempTxn(ServiceMeta service, UserSessionObject user, ServerHttpRequest request) {
 
         return tempTransactionLogService.mergeTransactionLog(service,user,request)
                     .flatMap(data -> {
@@ -77,24 +77,25 @@ public class PreProcessingFacade {
 
     }
 
-    public Mono<ProcessingTxn> getFormDataAndSaveTxn(Services service, UserSessionObject user, ServerHttpRequest request,
+    public Mono<ProcessingTxn> getFormDataAndSaveTxn(ServiceMeta service, UserSessionObject user, ServerHttpRequest request,
                                                      TempTransactionLogs tempLog, String appId, String dataId, String activityType) {
         String txnId;
         LocalDateTime dt = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
         LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
         String applicationId = isEmpty(appId) ?  createUniqueId() : appId;
 
-        if(tempLog == null) {
-            txnId = createUniqueId();
+        if(isEmpty(appId)) {
+            txnId = tempLog.getTxnId();
         }
         else{
-            txnId = tempLog.getTxnId();
-            if(tempLog.getStartTime() != null) {
-                dt = tempLog.getStartTime().toInstant()
-                        .atZone(ZoneId.systemDefault())
-                        .toLocalDateTime();
-            }
-            service = tempLog.getService();
+            return txnRepository.findById(tempLog.getTxnId());
+//            txnId = tempLog.getTxnId();
+//            if(tempLog.getStartTime() != null) {
+//                dt = tempLog.getStartTime().toInstant()
+//                        .atZone(ZoneId.systemDefault())
+//                        .toLocalDateTime();
+//            }
+//            service = tempLog.getService();
         }
 
 
@@ -131,6 +132,8 @@ public class PreProcessingFacade {
         );
 
         applicationDetails.setNewEntity(isEmpty(appId));
+        applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getLocationId().intValue());
+        applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getLocationName());
 
         ApplicationFlowStatusEntity flowStatus = new ApplicationFlowStatusEntity();
         flowStatus.setId(createUniqueId());
@@ -145,13 +148,13 @@ public class PreProcessingFacade {
         flowStatus.setServiceId(service.getServiceId());
         flowStatus.setLastUpdate(now);
 
-        return transactionalDBExecutor.execute(applicationDetails, flowStatus, txnEntity)
+        return transactionalDBExecutor.execute(txnId,applicationDetails, flowStatus, txnEntity)
                 .then(redis.remove(txnId))
                 .thenReturn(txnEntity)
                 .onErrorResume(Exception.class, ex ->
                         Mono.error(new SPRuntimeError(
                                 "Unable to process your request [AY - 01]",
-                                HttpStatus.INTERNAL_SERVER_ERROR
+                                HttpStatus.INTERNAL_SERVER_ERROR,txnId
                         ))
                 );
 
@@ -175,7 +178,7 @@ public class PreProcessingFacade {
     }
 
 
-    public Services decryptApplyKey(String applyKey) {
+    public ServiceMeta decryptApplyKey(String applyKey) {
         return decryptServiceKeys(applyKey);
     }
 

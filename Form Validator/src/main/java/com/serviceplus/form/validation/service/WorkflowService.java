@@ -47,7 +47,7 @@ public class WorkflowService {
         currentProcessRepository.save(c);
     }
 
-    public Mono<?> generateNextWorkflow(ApplicationDetails ad, ProcessingTxn savedLog, Services service, UserSessionObject user, CurrentProcess cp) {
+    public Mono<?> generateNextWorkflow(ApplicationDetails ad, ProcessingTxn savedLog, ServiceMeta service, UserSessionObject user, CurrentProcess cp) {
                                         final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString());
 
                                         Mono<Object> redisData = redis.fetch(
@@ -58,18 +58,18 @@ public class WorkflowService {
                                 .switchIfEmpty(
                                         apiClient.fetchProcessFlow(service.getBaseServiceId(), user,
                                                         savedLog.getApplicationId(), service.getTaskId(), service.getServiceId(),savedLog.getTxnId())
-                                                .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY)))
+                                                .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY,savedLog.getTxnId())))
                                                 .flatMap(Mono::just)
                 )
                 .flatMap(response -> generate((ServiceWorkFlow) response, ad, savedLog, service, user,cp))
                 .onErrorResume(ex -> {
                     ex.printStackTrace();
-                    return Mono.error(new SPRuntimeError("Workflow Error [ERR -01]",HttpStatus.INTERNAL_SERVER_ERROR));
+                    return Mono.error(new SPRuntimeError("Workflow Error [ERR -01]",HttpStatus.INTERNAL_SERVER_ERROR,savedLog.getTxnId()));
                 });
     }
 
     private Mono<?> generate(ServiceWorkFlow response, ApplicationDetails ad, ProcessingTxn savedLog,
-                             Services service, UserSessionObject user, CurrentProcess cp) {
+                             ServiceMeta service, UserSessionObject user, CurrentProcess cp) {
         List<ServiceWorkFlow.Data> wf =  response.getData();
         String currentTask = service.getTaskId();
 
@@ -88,7 +88,7 @@ public class WorkflowService {
     }
 
     private Mono<?> calculateNextWorkflow(ServiceWorkFlow.Data.Nodes node, ServiceWorkFlow.Data data
-                                                , Services service, ApplicationDetails ad, ProcessingTxn txn
+                                                , ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn
                                                 , UserSessionObject user, List<ServiceWorkFlow.Data> wf, CurrentProcess currentActionProcess) {
 
         LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
@@ -234,7 +234,7 @@ public class WorkflowService {
     private TaskAvailableOfficeLocation nextAllowedOfficeLocation(List<ServiceWorkFlow.Data> wf, ServiceWorkFlow.Data.Nodes next,String txnId){
         TaskAvailableOfficeLocation location = new TaskAvailableOfficeLocation();
         location.setTaskId(next.getId());
-        Optional<List<Services.AvailableApplyLocations>> list = wf.stream()
+        Optional<List<ServiceMeta.AvailableApplyLocations>> list = wf.stream()
                 .filter(d -> d.getNode().getId().equals(next.getId()))
                 .map(ServiceWorkFlow.Data::getAllowedOffices).findFirst();
 
