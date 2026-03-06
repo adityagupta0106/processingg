@@ -1,15 +1,16 @@
 package com.serviceplus.form.validation.entity;
 
-import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.ServiceMeta;
 
 import java.util.Date;
 
 public class TempTransactionLogs {
 
     private String txnId;
-    private Services service;
+    private ServiceMeta service;
     private String userIp;
     private Date startTime;
+    private Integer userId;
 
     public TempTransactionLogs(){
         this.startTime = new Date();
@@ -23,11 +24,11 @@ public class TempTransactionLogs {
         this.txnId = txnId;
     }
 
-    public Services getService() {
+    public ServiceMeta getService() {
         return service;
     }
 
-    public void setService(Services service) {
+    public void setService(ServiceMeta service) {
         this.service = service;
     }
 
@@ -45,5 +46,13 @@ public class TempTransactionLogs {
 
     public void setStartTime(Date startTime) {
         this.startTime = startTime;
+    }
+
+    public Integer getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Integer userId) {
+        this.userId = userId;
     }
 }

@@ -12,7 +12,7 @@ public class ServiceWorkFlow {
 
         private Nodes node;
         private List<MappedTask> mappedTasks;
-        private List <Services.AvailableApplyLocations> allowedOffices;
+        private List <ServiceMeta.AvailableApplyLocations> allowedOffices;
 
         public static class MappedTask{
             private Nodes node;
@@ -111,11 +111,11 @@ public class ServiceWorkFlow {
                     .concat("}");
         }
 
-        public List<Services.AvailableApplyLocations> getAllowedOffices() {
+        public List<ServiceMeta.AvailableApplyLocations> getAllowedOffices() {
             return allowedOffices;
         }
 
-        public void setAllowedOffices(List<Services.AvailableApplyLocations> allowedOffices) {
+        public void setAllowedOffices(List<ServiceMeta.AvailableApplyLocations> allowedOffices) {
             this.allowedOffices = allowedOffices;
         }
     }

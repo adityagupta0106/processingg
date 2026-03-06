@@ -12,15 +12,17 @@ public class ErrorDetails {
 	private HttpStatus status;
 	private Integer errorCode;
 	private Map<String,Object> data;
+    private String txnId;
 
 	public ErrorDetails() {
 	}
 	
-	public ErrorDetails(String message, HttpStatus status, Integer errorCode) {
+	public ErrorDetails(String message, HttpStatus status, Integer errorCode,String txnId) {
 		super();
 		this.message = message;
 		this.status = status;
 		this.errorCode = errorCode;
+        this.txnId = txnId;
 	}
 
 	public String getMessage() {
@@ -53,5 +55,13 @@ public class ErrorDetails {
 
     public void setData(Map<String, Object> data) {
         this.data = data;
+    }
+
+    public String getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(String txnId) {
+        this.txnId = txnId;
     }
 }

@@ -26,8 +26,7 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
-import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_ACTIVITY_REDIS_KEY_APPENDER;
-import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_WORKFLOW_REDIS_KEY_APPENDER;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
 import static com.serviceplus.form.validation.utility.Utility.*;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -52,7 +51,7 @@ public class ReactiveApiClient {
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
     @SuppressWarnings("unchecked")
-	public Mono<List<Services>> fetchServiceList(UserSessionObject user) {
+	public Mono<List<ServiceMeta>> fetchServiceList(UserSessionObject user) {
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
         String url = METADATA_SERVICE.concat("apply/serviceList");
 
@@ -71,8 +70,8 @@ public class ReactiveApiClient {
         return callExternalEndpoint.flatMap(apiResponse -> {
 				                String body = apiResponse.getBody().toString();
 				
-				                Type listType = new TypeToken<List<Services>>() {}.getType();
-				                List<Services> servicesList = (List<Services>) stringToEntityUsingType(body, listType);
+				                Type listType = new TypeToken<List<ServiceMeta>>() {}.getType();
+				                List<ServiceMeta> servicesList = (List<ServiceMeta>) stringToEntityUsingType(body, listType);
 				
 				                return Mono.just(servicesList);
 				            })
@@ -80,7 +79,7 @@ public class ReactiveApiClient {
     }
 
     @SuppressWarnings("unchecked")
-	public Mono<HandlerResponse> fetchFormData(String txnId, Services service, UserSessionObject user) {
+	public Mono<HandlerResponse> fetchFormData(String txnId, ServiceMeta service, UserSessionObject user) {
         String url = FORM_MANAGEMENT_SERVICE.concat("getByFormId?");
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
 
@@ -97,8 +96,8 @@ public class ReactiveApiClient {
         
        return callExternalEndpoint.flatMap(apiResponse -> {
                 String body = apiResponse.getBody();
-                if (body == null) {
-                    return Mono.error(new SPRuntimeError("Unable to process your request", HttpStatus.FAILED_DEPENDENCY));
+                if (body == null || body.isBlank()) {
+                    return Mono.error(new SPRuntimeError("Unable to process your request", HttpStatus.FAILED_DEPENDENCY,txnId));
                 }
                 
                 ObjectMapper mapper = new ObjectMapper();
@@ -109,33 +108,35 @@ public class ReactiveApiClient {
                 } catch (JsonProcessingException e) {
                     e.printStackTrace();
                     return Mono.error(new SPRuntimeError(
-                        "Issue while processing the request [ERR - 002]", HttpStatus.INTERNAL_SERVER_ERROR));
+                        "Issue while processing the request [ERR - 002]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
                 }
                 HandlerResponse hr = new HandlerResponse();
-                responseJson.put("locations",service.getLocations());
                 hr.setData(responseJson);
                 hr.setTxnId(txnId);
+                hr.setActivityType(ACTIVITY_FORM_STATUS_KEY);
+                hr.setApplyLocations(service.getLocations());
                 return Mono.just(hr);
             });
     }
 
-	public Mono<ResponseEntity<String>> saveFormData(String txnId, Services service, String appData,UserSessionObject user) {
+	public Mono<ResponseEntity<String>> saveFormData(String txnId, ServiceMeta service, String appData, UserSessionObject user, String dataId) {
     	String url = FORM_MANAGEMENT_SERVICE.concat("addApplicationData");
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+        dataId = isEmpty(dataId) ? "" : dataId;
 
         return AsynchronousApiExecutor.callExternalEndpoint(
 											                String.class,
 											                HttpMethod.POST,
                                                             headers,
 											                Map.of("txnId", txnId, "formId", service.getFormId(),
-                                                                 "serviceId",service.getServiceId(),"taskId",service.getTaskId()
+                                                                 "serviceId",service.getServiceId(),"taskId",service.getTaskId(),"applicationId",dataId
                                                              ),
 											                url,
 											                appData,
 											                MediaType.APPLICATION_JSON);
 	}
     //CHECK CIRCUIT BREAKER AND ADD LOGS
-	public Mono<String> fetchReferenceAbbrviation(Integer serviceId, UserSessionObject user) {
+	public Mono<String> fetchReferenceAbbrviation(Integer serviceId, UserSessionObject user, String txnId) {
         String url = METADATA_SERVICE.concat("serviceAbbreviation");
 
         Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
@@ -157,7 +158,7 @@ public class ReactiveApiClient {
                 } catch (JsonProcessingException e) {
                     e.printStackTrace();
                     return Mono.error(new SPRuntimeError(
-                        "Issue while processing the request [SUB - 004]", HttpStatus.FAILED_DEPENDENCY));
+                        "Issue while processing the request [SUB - 004]", HttpStatus.FAILED_DEPENDENCY,txnId));
                 }
 
                 String message = responseJson.getOrDefault("errorMessage", "");
@@ -165,26 +166,26 @@ public class ReactiveApiClient {
                 if(apiResponse.getStatusCode().is4xxClientError()) {
                 	return Mono.error(new SPRuntimeError(
                 			message.concat(" - issue while processing [SUB - 005]"),
-                       HttpStatus.BAD_REQUEST));
+                       HttpStatus.BAD_REQUEST,txnId));
                 }
                 else if(!apiResponse.getStatusCode().is2xxSuccessful()){
                     return Mono.error(new SPRuntimeError(
                     		message.concat(" - issue while processing [SUB - 006]"),
-                        HttpStatus.UNPROCESSABLE_ENTITY));
+                        HttpStatus.UNPROCESSABLE_ENTITY,txnId));
                 }
                 
                 if (body == null) {
-                    return Mono.error(new SPRuntimeError("Unable to process your request [SUB - 007]", HttpStatus.FAILED_DEPENDENCY));
+                    return Mono.error(new SPRuntimeError("Unable to process your request [SUB - 007]", HttpStatus.FAILED_DEPENDENCY,txnId));
                 }
                 
                 return Mono.just(body);
             });
     }
 
-    public Mono<Services> fetchServiceKey(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId) {
+    public Mono<ServiceMeta> fetchServiceKey(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId) {
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
         String url = METADATA_SERVICE.concat("apply/resolveForm?");
-        //CACHE AT THIS LEVEL !!!!!
+        //CACHE AT THIS LEVEL ?????
 
         Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
                                                                                 String.class,
@@ -199,8 +200,8 @@ public class ReactiveApiClient {
         return callExternalEndpoint.flatMap(apiResponse -> {
             String body = apiResponse.getBody();
 
-            Type listType = new TypeToken<Services>() {}.getType();
-            Services service = (Services) stringToEntityUsingType(body, listType);
+            Type listType = new TypeToken<ServiceMeta>() {}.getType();
+            ServiceMeta service = (ServiceMeta) stringToEntityUsingType(body, listType);
             service.setServiceKey(encryptServiceKeys(service));
             TaskActivity taskActivity = service.getActivityMap();
             String key = SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()));
@@ -236,6 +237,47 @@ public class ReactiveApiClient {
                 })
                 .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnId))
                 ;
+    }
+
+    public Mono<ServerResponse> fetchApplicantData(String dataId, String formId,UserSessionObject user,String txnId,String applicationId) {
+        String url = FORM_MANAGEMENT_SERVICE.concat("getApplicationData?");
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
+                String.class,
+                HttpMethod.POST,
+                headers,
+                Collections.emptyMap(),
+                url,
+                entityToString(Map.of( "formId", formId,"applicationId",dataId,"txnId",txnId)),
+                MediaType.APPLICATION_JSON);
+
+        return callExternalEndpoint.flatMap(apiResponse -> {
+            String body = apiResponse.getBody();
+            if (body == null || body.isBlank()) {
+                return Mono.error(new SPRuntimeError("Unable to process your request", HttpStatus.FAILED_DEPENDENCY,txnId));
+            }
+
+            ObjectMapper mapper = new ObjectMapper();
+
+            Map<String, Object> responseJson;
+            try {
+                responseJson = mapper.readValue(body, new TypeReference<>() {
+                });
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+                return Mono.error(new SPRuntimeError(
+                        "Issue while processing the request [ERR - 002]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
+            }
+            HandlerResponse hr = new HandlerResponse();
+            responseJson.remove("applicationId");
+            responseJson.remove("status");
+            hr.setData(responseJson);
+            hr.setTxnId(txnId);
+            hr.setApplicationId(applicationId);
+            return ServerResponse.ok().bodyValue(hr);
+        });
+
     }
 }
 

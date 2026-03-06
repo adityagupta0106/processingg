@@ -12,6 +12,8 @@ public class HandlerResponse {
 
     private String txnId;
     private String applicationId;
+    private String activityType;
+    private List<ServiceMeta.AvailableApplyLocations> applyLocations;
 
     public Map<String, Object> getData() {
         return data;
@@ -35,5 +37,21 @@ public class HandlerResponse {
 
     public void setApplicationId(String applicationId) {
         this.applicationId = applicationId;
+    }
+
+    public String getActivityType() {
+        return activityType;
+    }
+
+    public void setActivityType(String activityType) {
+        this.activityType = activityType;
+    }
+
+    public List<ServiceMeta.AvailableApplyLocations> getApplyLocations() {
+        return applyLocations;
+    }
+
+    public void setApplyLocations(List<ServiceMeta.AvailableApplyLocations> applyLocations) {
+        this.applyLocations = applyLocations;
     }
 }

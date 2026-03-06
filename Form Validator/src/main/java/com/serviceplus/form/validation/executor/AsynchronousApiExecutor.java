@@ -6,6 +6,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -32,6 +34,8 @@ public class AsynchronousApiExecutor  implements ApiExecutor{
     @Autowired
     private CircuitBreakerRegistry circuitBreakerRegistry;
 
+    private static final Logger apiExecutorLogs = LogManager.getLogger("apiExecutorLogger");
+
     @Override
     @CheckCircuitBreakerResponse(errorMessage = "Failed to fetch due to circuit breaker")
     public Mono<ResponseEntity<String>> callExternalEndpoint(Class<?> returnObj,
@@ -47,6 +51,8 @@ public class AsynchronousApiExecutor  implements ApiExecutor{
                 .anyMatch(cb -> cb.getName().equals(serviceName)) ? serviceName : "default";
 
         CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker(circuitBreakerName);
+
+        apiExecutorLogs.info("Calling endpoint {} with params {} body {} header {}",url,params,bodyContent,headers);
 
         WebClient.RequestBodySpec requestSpec = webClientBuilder.build()
 									                .method(httpMethod)
@@ -72,7 +78,7 @@ public class AsynchronousApiExecutor  implements ApiExecutor{
 									                             .toEntity(String.class);
 
         return responseMono
-                .timeout(Duration.ofSeconds(5))
+                .timeout(Duration.ofSeconds(150))
                 .transformDeferred(CircuitBreakerOperator.of(circuitBreaker))
                 .onErrorResume(CallNotPermittedException.class, t -> callExternalEndpointFallback(url))
                 .onErrorResume(TimeoutException.class, t -> callExternalEndpointFallback(url));

@@ -1,7 +1,7 @@
 package com.serviceplus.form.validation.flow;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.TaskActivity;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
@@ -57,11 +57,11 @@ public class EventDecider {
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
-    public Mono<ServerResponse> proceedToNext(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
+    public Mono<ServerResponse> proceedToNext(String dataId, ServiceMeta service, UserSessionObject user, ProcessingTxn txnLog, String appId
             , String actionCode, String from, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus) {
 
         if (isEmpty(from)) {
-            return Mono.error(new SPRuntimeError("Execution failure [EX -01]", HttpStatus.INTERNAL_SERVER_ERROR));
+            return Mono.error(new SPRuntimeError("Execution failure [EX -01]", HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()));
         }
 
         applicationFlowLogs.info("Next action for txnId {} applicationId {} ,from {} ,actionCode {} ,isNew {}"
@@ -80,7 +80,7 @@ public class EventDecider {
         }
     }
 
-    private Mono<ServerResponse> preProcess(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
+    private Mono<ServerResponse> preProcess(String dataId, ServiceMeta service, UserSessionObject user, ProcessingTxn txnLog, String appId
             , String actionCode, String from, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus){
 
         flowStatus.setTxnId(txnLog.getTxnId());
@@ -92,7 +92,7 @@ public class EventDecider {
         txnLog.setEndTime(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
         txnLog.setActivityType(flowStatus.getActivityType());
 
-        return transactionalDBExecutor.execute(txnLog)
+        return transactionalDBExecutor.execute(txnLog.getTxnId(),txnLog)
                 .then(
                         process(dataId, service, user, txnLog, appId, actionCode,from, reactiveRequestObject,flowStatus)
                 )
@@ -105,12 +105,12 @@ public class EventDecider {
                             actual instanceof SPRuntimeError spr
                                     ? spr
                                     : new SPRuntimeError("Execution error [EX - 04]",
-                                    HttpStatus.INTERNAL_SERVER_ERROR)
+                                    HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId())
                     );
                 });
     }
 
-    private Mono<ServerResponse> process(String dataId, Services service, UserSessionObject user, ProcessingTxn txnLog, String appId
+    private Mono<ServerResponse> process(String dataId, ServiceMeta service, UserSessionObject user, ProcessingTxn txnLog, String appId
             , String actionCode, String from, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus) {
         Mono<Object> fetch = redis.fetch(SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_")
                         .concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()))
@@ -119,7 +119,7 @@ public class EventDecider {
         return fetch
                 .switchIfEmpty(
                         reactiveApiClient.fetchServiceKey(service.getBaseServiceId(), user, appId, service.getTaskId(), service.getServiceId())
-                                .switchIfEmpty(Mono.error(new SPRuntimeError("Execution error [EX - 02]", HttpStatus.INTERNAL_SERVER_ERROR)))
+                                .switchIfEmpty(Mono.error(new SPRuntimeError("Execution error [EX - 02]", HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId())))
                                 .flatMap(response -> Mono.just(response.getActivityMap()))
                 )
                 .flatMap(activityMap -> {
@@ -127,7 +127,7 @@ public class EventDecider {
                     TaskActivity.ActivityData nextActivity = findNext(from, service.getTaskId(), activity);
 
                     if (isNull(nextActivity)) {
-                        return Mono.error(new SPRuntimeError("Execution error [EX - 03]", HttpStatus.INTERNAL_SERVER_ERROR));
+                        return Mono.error(new SPRuntimeError("Execution error [EX - 03]", HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()));
                     } else {
 
                         applicationFlowLogs.info("Next activity for txnId {} applicationId {} is {}", txnLog.getTxnId(), appId, nextActivity.toString());
@@ -139,7 +139,7 @@ public class EventDecider {
                                     );
                         } else {
                             return transactionGeneration.createNewTransactionAndFlow(service, appId, nextActivity,
-                                    user, reactiveRequestObject.exchange().getRequest()
+                                    user, reactiveRequestObject.exchange().getRequest(),null
                             ).flatMap(generatedTxn ->
                                             markActivityAsDone(flowStatus)
                                                     .thenReturn(generatedTxn))
@@ -153,7 +153,7 @@ public class EventDecider {
     }
 
     private Mono<Void> markActivityAsDone(ApplicationFlowStatusEntity flowStatus) {
-        return transactionalDBExecutor.execute(flowStatus);
+        return transactionalDBExecutor.execute(flowStatus.getTxnId(),flowStatus);
     }
 
     private TaskActivity.ActivityData findNext(String from, String taskId, TaskActivity map){

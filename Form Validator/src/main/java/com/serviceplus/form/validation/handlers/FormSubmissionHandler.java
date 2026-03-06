@@ -2,10 +2,12 @@ package com.serviceplus.form.validation.handlers;
 
 import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.ServiceMeta;
+import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
-import com.serviceplus.form.validation.service.FormSubmissionService;
+import com.serviceplus.form.validation.service.FormService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,6 +17,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Optional;
 
+import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 
 @Service
@@ -22,36 +25,55 @@ import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 public class FormSubmissionHandler implements ApplicationFlowHandler {
 
     @Autowired
-    private FormSubmissionService formSubmissionService;
+    private FormService formService;
 
     @Autowired
     private ProcessingTxnRepository txnRepository;
 
     @Override
     public Mono<ServerResponse> process(String applicationId, ServerRequest request, String statusKey, String txnId, Mono<TempTransactionLogs> tempLog
-                                                                , ApplicationFlowStatusEntity flowStatus, boolean fromDraft) {
+                                                                , ApplicationFlowStatusEntity flowStatus, ServiceMeta service, boolean fromDraft) {
 
-        //CHECK IF REQUEST IS COMING FROM DRAFT
-        boolean draft = false;
         Optional<String> applyKeyOpt = request.queryParam("serviceKey");
         Optional<String> appIdOpt = request.queryParam("appId");
         Optional<String> serviceIdOpt = request.queryParam("serviceId");
 
         if (isEmpty(txnId) || applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
-            return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST));
+            return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST,txnId));
         }
 
-        String applyKey = applyKeyOpt.get();
         String applId = appIdOpt.orElse("");
 
-        return request.bodyToMono(String.class)
-                .switchIfEmpty(
-                        Mono.error(new SPRuntimeError("Form data not found in request",HttpStatus.BAD_REQUEST))
-                )
-                .flatMap(appData ->
-                        formSubmissionService.applicationSubmission(
-                                request.exchange().getRequest(), txnId, appData, applyKey,applId,draft,request,flowStatus,serviceIdOpt.get()
-                        )
-                );
+        Mono<String> bodyMono = request.bodyToMono(String.class).cache();
+
+        return bodyMono.hasElement()
+                .flatMap(hasBody -> {
+                    if (hasBody) {
+                        return bodyMono.flatMap(appData ->
+                                formService.applicationSubmission(
+                                        request.exchange().getRequest(), txnId, appData,
+                                        applId, fromDraft, request, flowStatus,
+                                        serviceIdOpt.get(), service
+                                )
+                        );
+                    } else {
+                        return fetch(applicationId, request, statusKey, txnId,
+                                tempLog, flowStatus, service, fromDraft);
+                    }
+                });
+
+    }
+
+    @Override
+    public Mono<ServerResponse> fetch(String applicationId, ServerRequest request, String statusKey, String txnId, Mono<TempTransactionLogs> fetch,
+                                      ApplicationFlowStatusEntity flow,ServiceMeta service, boolean fromDraft) {
+        UserSessionObject user = getUserSessionDetails(request.exchange().getRequest());
+        Optional<String> serviceIdOpt = request.queryParam("serviceId");
+
+        if(serviceIdOpt.isEmpty()){
+            return Mono.error(new SPRuntimeError("Key missing",HttpStatus.BAD_REQUEST,txnId));
+        }
+
+        return formService.fetchFormData(flow.getDataId(),flow.getFormId(),user, flow.getTxnId(), applicationId,serviceIdOpt.get(),service);
     }
 }

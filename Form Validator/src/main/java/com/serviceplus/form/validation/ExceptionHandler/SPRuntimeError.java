@@ -14,15 +14,17 @@ public class SPRuntimeError extends RuntimeException{
 	private String message;
 	private HttpStatus errorCode;
     private Map<String,Object> data;
+    private String txnId;
 	
 	public SPRuntimeError() {
 		super();
 	}
 	
-	public SPRuntimeError(String message, HttpStatus badRequest) {
+	public SPRuntimeError(String message, HttpStatus badRequest,String txnId) {
 		super();
 		this.message = message;
 		this.errorCode = badRequest;
+        this.txnId = txnId;
 	}
 	
 	public String getMessage() {
@@ -44,5 +46,13 @@ public class SPRuntimeError extends RuntimeException{
 
     public void setData(Map<String, Object> data) {
         this.data = data;
+    }
+
+    public String getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(String txnId) {
+        this.txnId = txnId;
     }
 }

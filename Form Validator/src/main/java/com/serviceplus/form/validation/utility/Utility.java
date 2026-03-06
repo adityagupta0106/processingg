@@ -33,10 +33,12 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.serviceplus.form.validation.dto.Services;
+import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLY_METADATA_ENC_KEY;
@@ -164,7 +166,7 @@ public class Utility {
 		return null;
 	}
 
-    public static String encryptServiceKeys(Services service) {
+    public static String encryptServiceKeys(ServiceMeta service) {
         ObjectMapper mapper = new ObjectMapper();
 
         try {
@@ -191,7 +193,7 @@ public class Utility {
         }
     }
 
-    public static Services decryptServiceKeys(String serviceKey) {
+    public static ServiceMeta decryptServiceKeys(String serviceKey) {
         if (serviceKey.contains("%2B")) {
             serviceKey = serviceKey.replace("%2B", "+");
         }
@@ -213,7 +215,7 @@ public class Utility {
         String decrypt = AESDecrypt(encrypted, secretKey);
         String[] applyData = decrypt.split("~");
 
-        Services service = new Services();
+        ServiceMeta service = new ServiceMeta();
         service.setServiceId(Integer.parseInt(applyData[0]));
         service.setBaseServiceId(Integer.parseInt(applyData[0]) / 10000);
         service.setFormId(applyData[1]);
@@ -226,7 +228,7 @@ public class Utility {
         ObjectMapper mapper = new ObjectMapper();
 
         try {
-            List<Services.AvailableApplyLocations> locations =
+            List<ServiceMeta.AvailableApplyLocations> locations =
                     mapper.readValue(locationsJson, new TypeReference<>() {});
             service.setLocations(locations);
         } catch (JsonProcessingException e) {
@@ -281,29 +283,29 @@ public class Utility {
         String message =  res.containsKey("message") ? (String)res.get("message") : (String)res.get("errorMessage");
         Map<String, Object> data = res.containsKey("data") ? (Map<String, Object>) res.get("data") : null;
 
-        SPRuntimeError error = getSpRuntimeError(status, message);
+        SPRuntimeError error = getSpRuntimeError(status, message,txnId);
         error.setData(data);
         return Mono.error(error);
 
     }
 
-    private static SPRuntimeError getSpRuntimeError(HttpStatusCode status, String message) {
+    private static SPRuntimeError getSpRuntimeError(HttpStatusCode status, String message,String txnId) {
         SPRuntimeError error;
 
         if (status.is4xxClientError()) {
             error = new SPRuntimeError(
                     message.concat(" [DOWN-ERROR-001]"),
-                    HttpStatus.valueOf(status.value())
+                    HttpStatus.valueOf(status.value()),txnId
             );
         } else if (status.is5xxServerError()) {
             error = new SPRuntimeError(
                     message.concat(" [DOWN-ERROR-002]"),
-                    HttpStatus.BAD_GATEWAY
+                    HttpStatus.BAD_GATEWAY,txnId
             );
         } else {
             error = new SPRuntimeError(
                     message.concat(" [DOWN-ERROR-003]"),
-                    HttpStatus.BAD_GATEWAY
+                    HttpStatus.BAD_GATEWAY,txnId
             );
         }
         return error;
@@ -329,4 +331,13 @@ public class Utility {
         return URLDecoder.decode(data,StandardCharsets.UTF_8);
     }
 
+    public static Mono<ServerResponse> returnError(Exception ex, String txnId, Logger logger){
+        Throwable actual = Exceptions.unwrap(ex);
+        if (actual instanceof SPRuntimeError spr) {
+            logger.warn("Error while saving form data: {}", spr.getMessage());
+            return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(),txnId));
+        }
+        logger.error("Unexpected error while saving form data", ex);
+        return Mono.error(new SPRuntimeError("Internal server error [SUB-500]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
+    }
 }

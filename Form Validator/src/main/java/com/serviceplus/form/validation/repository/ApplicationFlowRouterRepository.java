@@ -8,6 +8,8 @@ import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 
+import java.util.Optional;
+
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
 
 @Repository
@@ -16,4 +18,17 @@ public interface ApplicationFlowRouterRepository  extends ReactiveCrudRepository
     Mono<ApplicationFlowStatusEntity> findByApplicationIdAndCompletedAndTaskIdAndServiceIdAndTenantId(String applicationId,Integer completed,String taskId,Integer serviceId,String tenantId);
 
     Mono<ApplicationFlowStatusEntity> findByApplicationIdAndTxnIdAndCompletedAndTaskIdAndServiceIdAndTenantId(String applicationId,String txnId,Integer completed,String taskId,Integer serviceId,String tenantId);
+
+    Mono<ApplicationFlowStatusEntity> findFirstByApplicationIdAndCompletedAndTaskIdAndServiceIdAndTenantIdAndActivityTypeOrderByIdDesc(
+            String applicationId,
+            Integer completed,
+            String taskId,
+            Integer serviceId,
+            String tenantId,
+            String activityType
+    );
+
+    Mono<ApplicationFlowStatusEntity> findByApplicationIdAndCompletedAndServiceIdAndTenantId(String applicationId,Integer completed,Integer serviceId,String tenantId);
+
+
 }

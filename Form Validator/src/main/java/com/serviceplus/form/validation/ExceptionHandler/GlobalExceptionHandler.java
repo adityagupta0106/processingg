@@ -15,7 +15,8 @@ public class GlobalExceptionHandler {
         ErrorDetails err = new ErrorDetails(
                 ex.getMessage(),
                 ex.getErrorCode(),
-                ex.getErrorCode().value()
+                ex.getErrorCode().value(),
+                ex.getTxnId()
         );
         err.setData(ex.getData());
         return Mono.just(ResponseEntity
@@ -29,7 +30,8 @@ public class GlobalExceptionHandler {
         ErrorDetails err = new ErrorDetails(
                 ex.getLocalizedMessage(),
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                HttpStatus.INTERNAL_SERVER_ERROR.value()
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                null
         );
 
         return Mono.just(ResponseEntity
