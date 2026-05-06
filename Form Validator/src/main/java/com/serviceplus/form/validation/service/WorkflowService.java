@@ -239,7 +239,6 @@ public class WorkflowService {
     }
     
     private Mono<List<ServiceWorkFlow.Data.MappedTask>> executeGatewayMvel(
-
             ServiceMeta service,
             ApplicationDetails applicationDetails,
             ProcessingTxn txn,
@@ -309,6 +308,7 @@ public class WorkflowService {
                 .filter(Objects::nonNull)
                 .toList();
     }
+
     private TaskAvailableOfficeLocation nextAllowedOfficeLocation(List<ServiceWorkFlow.Data> wf, ServiceWorkFlow.Data.Nodes next,String txnId){
         TaskAvailableOfficeLocation location = new TaskAvailableOfficeLocation();
         location.setTaskId(next.getId());

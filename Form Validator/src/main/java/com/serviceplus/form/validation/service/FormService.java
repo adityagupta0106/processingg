@@ -27,6 +27,7 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
+import com.serviceplus.form.validation.entity.ProcessingTxn;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.flow.EventDecider;
 
@@ -177,13 +178,7 @@ public class FormService {
                                         TempTransactionLogs txnLog,boolean newEntityFlag){
     	
     	return validateTransaction(txnLog, service, appData)
-
-                .flatMap(serviceModified ->
-                        executeFormSubmissionMvel(serviceModified, txnLog, appData, flowStatus)
-                                .thenReturn(serviceModified) 
-                )
-
-                .flatMap(serviceModified ->
+                    .flatMap(serviceModified ->
                         reactiveApiClient.saveFormData(
                                         txnId,
                                         serviceModified,
