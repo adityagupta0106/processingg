@@ -335,7 +335,7 @@ public class Utility {
         Throwable actual = Exceptions.unwrap(ex);
         if (actual instanceof SPRuntimeError spr) {
             logger.warn("Error while saving form data: {}", spr.getMessage());
-            return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(),txnId));
+            return Mono.error(spr);
         }
         logger.error("Unexpected error while saving form data", ex);
         return Mono.error(new SPRuntimeError("Internal server error [SUB-500]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));

@@ -1,5 +1,24 @@
 package com.serviceplus.form.validation.service;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_SUBMISSION_TASK_FLAG;
+import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
+import static com.serviceplus.form.validation.utility.Utility.handleWebClientError;
+import static com.serviceplus.form.validation.utility.Utility.returnError;
+import static java.util.Objects.isNull;
+
+import java.util.List;
+import java.util.Map;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.reactive.function.server.ServerRequest;
+import org.springframework.web.reactive.function.server.ServerResponse;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,25 +29,10 @@ import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.flow.EventDecider;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.web.reactive.function.server.ServerRequest;
-import org.springframework.web.reactive.function.server.ServerResponse;
+
 import reactor.core.Exceptions;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.util.List;
-import java.util.Map;
-
-import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_SUBMISSION_TASK_FLAG;
-import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
-import static com.serviceplus.form.validation.utility.Utility.*;
-import static java.util.Objects.isNull;
 
 @Service
 @SanitizeRequest
@@ -56,7 +60,7 @@ public class FormService {
 
     public Mono<ServerResponse> applicationSubmission(ServerHttpRequest request, String txnId, String appData
                                                      , String appId, boolean draft, ServerRequest reactiveRequestObject
-                                                     , ApplicationFlowStatusEntity flowStatus, String serviceId,ServiceMeta service) {
+                                                     , ApplicationFlowStatusEntity flowStatus, String serviceId,ServiceMeta service,boolean newEntityFlag) {
         try {
             UserSessionObject user = getUserSessionDetails(request);
 
@@ -66,14 +70,7 @@ public class FormService {
 
             applicationFlowLogs.info("Submitting application for txnId {} applicationId {} user {} service {} ",txnId,appId,user.getUserID(),service.toString());
 
-            if(appId.isEmpty() && service.getTaskType().equals(OFFICIAL_TASK_FLAG)){
-                return Mono.error(new SPRuntimeError(
-                        "Issue while processing the request [SUB - 008]",
-                        HttpStatus.INTERNAL_SERVER_ERROR,txnId
-                ));
-            }
-
-            return saveFormData(txnId, user,appData,service,appId,draft,request,reactiveRequestObject,flowStatus);
+            return saveFormData(txnId, user,appData,service,appId,draft,request,reactiveRequestObject,flowStatus,newEntityFlag);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -89,14 +86,14 @@ public class FormService {
             ServiceMeta service,
             String appId,
             boolean draft,
-            ServerHttpRequest request, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus) {
+            ServerHttpRequest request, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus,boolean newEntityFlag) {
 
         return tempTransactionLogService.fetch(txnId)
                 .switchIfEmpty(
                         createTempAndExecute(txnId,user,appData,service,appId,draft,request,reactiveRequestObject, flowStatus,new TempTransactionLogs())
                  )
                  .flatMap(
-                         txnLog -> executeTransaction(txnId,user,appData,service,appId,draft,request,reactiveRequestObject, flowStatus,txnLog)
+                         txnLog -> executeTransaction(txnId,user,appData,service,appId,draft,request,reactiveRequestObject, flowStatus,txnLog,newEntityFlag)
                 )
                 .onErrorResume(Exception.class, ex -> {
                     Throwable actual = Exceptions.unwrap(ex);
@@ -135,10 +132,10 @@ public class FormService {
         }
 
         try {
-            Map<String,Object> formDate =  objectMapper.readValue(appData,Map.class);
+            Map<String,Object> formData =  objectMapper.readValue(appData,Map.class);
             List<ServiceMeta.AvailableApplyLocations> locations = service.getLocations();
 
-            Map<String,Object> selectedLocation = (Map<String,Object>) formDate.get("location");
+            Map<String,Object> selectedLocation = (Map<String,Object>) formData.get("location");
 
             if(service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)) {
 
@@ -177,14 +174,41 @@ public class FormService {
                                         String appId,
                                         boolean draft,
                                         ServerHttpRequest request, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus,
-                                        TempTransactionLogs txnLog){
+                                        TempTransactionLogs txnLog,boolean newEntityFlag){
+    	
+    	return validateTransaction(txnLog, service, appData)
 
-       return validateTransaction(txnLog, service,appData)
-                .flatMap( serviceModified ->
-                        reactiveApiClient.saveFormData(txnId, service, appData,user,flowStatus.getDataId())
-                                .flatMap(body -> handleSuccessfulResponse(body.getBody(), serviceModified, user, request, txnLog, appId,reactiveRequestObject,flowStatus))
+                .flatMap(serviceModified ->
+                        executeFormSubmissionMvel(serviceModified, txnLog, appData, flowStatus)
+                                .thenReturn(serviceModified) 
                 )
-                .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnLog.getTxnId()));
+
+                .flatMap(serviceModified ->
+                        reactiveApiClient.saveFormData(
+                                        txnId,
+                                        serviceModified,
+                                        appData,
+                                        user,
+                                        flowStatus.getDataId(),
+                                        appId
+                                )
+                                .flatMap(body ->
+                                        handleSuccessfulResponse(
+                                                body.getBody(),
+                                                serviceModified,
+                                                user,
+                                                request,
+                                                txnLog,
+                                                appId,
+                                                reactiveRequestObject,
+                                                flowStatus,
+                                                appData,newEntityFlag
+                                        )
+                                )
+                )
+
+                .onErrorResume(WebClientResponseException.class,
+                        ex -> handleWebClientError(ex, txnLog.getTxnId()));
     }
 
     private Mono<ServerResponse> handleSuccessfulResponse(
@@ -193,31 +217,94 @@ public class FormService {
             UserSessionObject user,
             ServerHttpRequest request,
             TempTransactionLogs txnLog,
-            String appId, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus) {
+            String appId,
+            ServerRequest reactiveRequestObject,
+            ApplicationFlowStatusEntity flowStatus,
+			String appData,boolean newEntityFlag) {
 
-        Map<String, String> responseJson;
-        applicationFlowLogs.info("Response from form management for txnId {} applicationId {} response {}",txnLog.getTxnId(),appId,responseBody);
-        //preProcessingFacade.saveTransactionReactive();
+		Map<String, String> responseJson;
 
-        try {
-            responseJson = objectMapper.readValue(responseBody, new TypeReference<>() {});
-        } catch (JsonProcessingException e) {
-            applicationFlowLogs.error("Error parsing downstream response", e);
-            return Mono.error(new SPRuntimeError("Invalid downstream response [SUB-003]", HttpStatus.BAD_GATEWAY,txnLog.getTxnId()));
-        }
+		applicationFlowLogs.info("Response from form management for txnId {} applicationId {} response {}",
+				txnLog.getTxnId(), appId, responseBody);
 
-        String dataId = responseJson.getOrDefault("dataId", "");
-        String actionCode = responseJson.getOrDefault("actionCode", "");
+		try {
+			responseJson = objectMapper.readValue(responseBody, new TypeReference<>() {
+			});
+		} catch (JsonProcessingException e) {
+			applicationFlowLogs.error("Error parsing downstream response", e);
+			return Mono.error(new SPRuntimeError("Invalid downstream response [SUB-003]", HttpStatus.BAD_GATEWAY,
+					txnLog.getTxnId()));
+		}
 
-        return preProcessingFacade.getFormDataAndSaveTxn(service, user, request, txnLog,appId,dataId,"FS")
-                .flatMap(txn ->
-                        eventDecider.proceedToNext(dataId, service, user, txn, txn.getApplicationId(),actionCode,"FS",reactiveRequestObject,flowStatus))
-                .onErrorResume(Exception.class, ex -> returnError(ex,txnLog.getTxnId(),applicationFlowLogs));
-                       // applicationGenerationService.executeApplicationProcessing(dataId, service, user, txn, appId,actionCode));
-    }
+		String dataId = responseJson.getOrDefault("dataId", "");
+		String actionCode = responseJson.getOrDefault("actionCode", "");
+
+		return preProcessingFacade.getFormDataAndSaveTxn(service, user, request, txnLog, appId, dataId, "FS",newEntityFlag)
+				.flatMap(txn ->  eventDecider.proceedToNext(dataId, service, user, txn, txn.getApplicationId(),
+								actionCode, "FS", reactiveRequestObject, flowStatus)
+						)
+				.onErrorResume(Exception.class, ex -> returnError(ex, txnLog.getTxnId(), applicationFlowLogs));
+		// applicationGenerationService.executeApplicationProcessing(dataId, service,
+		// user, txn, appId,actionCode));
+	}
 
     public Mono<ServerResponse> fetchFormData(String dataId, String formId, UserSessionObject user, String txnId, String applId, String serviceId, ServiceMeta service) {
         return reactiveApiClient.fetchApplicantData(dataId,formId,user,txnId,applId);
+    }
+
+    private Mono<ServerResponse> executeFormSubmissionMvel(
+            ServiceMeta service,
+            TempTransactionLogs txn,
+            String appData,
+            ApplicationFlowStatusEntity flowStatus) {
+
+        return reactiveApiClient.fetchMvelDetails(service.getServiceId())
+                .flatMapMany(Flux::fromIterable)
+                .filter(m -> "FS".equalsIgnoreCase(m.getValue()))
+                .filter(m -> m.getNodeId().equals(flowStatus.getTaskId()))
+                .flatMap(m ->
+                        reactiveApiClient.executeMvel(
+                                        m.getMvelId(),
+                                        txn.getTxnId(),                  
+                                        flowStatus.getId(),          
+                                        "FS",                             
+                                        flowStatus.getApplicationId(),   
+                                        service.getServiceId(),
+                                        null,
+                                        appData,
+                                        null,
+                                        null,
+                                        null,
+                                        null
+                                )
+                                .flatMap(mvelResponse -> {
+                                    if (!mvelResponse.isSuccess()) {
+                                        return Mono.error(new SPRuntimeError(
+                                                "Invalid downstream response [MVEL-001]",
+                                                HttpStatus.BAD_GATEWAY,
+                                                txn.getTxnId()
+                                        ));
+                                    }
+
+                                    List<Map<String, Object>> attributeResponse =
+                                            mvelResponse.getAttributeResponse();
+                                    boolean hasError = attributeResponse != null &&
+                                            attributeResponse.stream()
+                                                    .anyMatch(attr -> attr.get("error") != null);
+                                    if (hasError) {
+                                        SPRuntimeError error = new SPRuntimeError(
+                                                "Validation Error",
+                                                HttpStatus.BAD_REQUEST,
+                                                txn.getTxnId()
+                                        );
+                                        error.setData(mvelResponse.getDataResponse());
+                                        return Mono.error(error);
+                                    }
+
+                                    return Mono.empty(); 
+                                })
+                )
+                .then(ServerResponse.ok().build());
     }
 }
 

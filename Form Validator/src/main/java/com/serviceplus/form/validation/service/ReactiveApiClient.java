@@ -2,6 +2,7 @@ package com.serviceplus.form.validation.service;
 
 import java.lang.reflect.Type;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -41,6 +42,9 @@ public class ReactiveApiClient {
 
     @Value("${formmgmt.service}")
     private String FORM_MANAGEMENT_SERVICE;
+    
+    @Value("${mvel.execution.service}")
+    private String MVEL_EXECUTION_SERVICE;
     
     @Autowired
     private ObjectMapper mapper;
@@ -119,7 +123,7 @@ public class ReactiveApiClient {
             });
     }
 
-	public Mono<ResponseEntity<String>> saveFormData(String txnId, ServiceMeta service, String appData, UserSessionObject user, String dataId) {
+	public Mono<ResponseEntity<String>> saveFormData(String txnId, ServiceMeta service, String appData, UserSessionObject user, String dataId,String applId) {
     	String url = FORM_MANAGEMENT_SERVICE.concat("addApplicationData");
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
         dataId = isEmpty(dataId) ? "" : dataId;
@@ -129,7 +133,7 @@ public class ReactiveApiClient {
 											                HttpMethod.POST,
                                                             headers,
 											                Map.of("txnId", txnId, "formId", service.getFormId(),
-                                                                 "serviceId",service.getServiceId(),"taskId",service.getTaskId(),"applicationId",dataId
+                                                                 "serviceId",service.getServiceId(),"taskId",service.getTaskId(),"dataId",dataId,"applId",applId
                                                              ),
 											                url,
 											                appData,
@@ -249,7 +253,7 @@ public class ReactiveApiClient {
                 headers,
                 Collections.emptyMap(),
                 url,
-                entityToString(Map.of( "formId", formId,"applicationId",dataId,"txnId",txnId)),
+                entityToString(Map.of( "formId", formId,"dataId",dataId,"txnId",txnId)),
                 MediaType.APPLICATION_JSON);
 
         return callExternalEndpoint.flatMap(apiResponse -> {
@@ -278,6 +282,98 @@ public class ReactiveApiClient {
             return ServerResponse.ok().bodyValue(hr);
         });
 
+    }
+    public Mono<List<MvelDetailsDTO>> fetchMvelDetails(Integer serviceId) {
+
+        Map<String, String> headers = Map.of();
+
+        String url = METADATA_SERVICE.concat("apply/mvelDetails?");
+
+        Mono<ResponseEntity<String>> call = AsynchronousApiExecutor.callExternalEndpoint(
+                String.class,
+                HttpMethod.POST,
+                headers,
+                Map.of("serviceId", serviceId),
+                url,
+                null,
+                MediaType.APPLICATION_JSON
+        );
+
+        return call.flatMap(res -> {
+
+            String body = res.getBody();
+
+            Type type = new TypeToken<List<MvelDetailsDTO>>() {}.getType();
+
+            List<MvelDetailsDTO> list =
+                    (List<MvelDetailsDTO>) stringToEntityUsingType(body, type);
+
+            return Mono.just(list);
+        });
+    }
+    public Mono<MvelExecutionResponse> executeMvel(
+            Long mvelId,
+            String txnId,
+            String activityId,
+            String triggerPoint,
+            String appId,
+            Integer serviceId,
+            String currentProcessId,
+            String formData,
+            Map<String, Object> appDetails,
+            Map<String, Object> serviceDetails,
+            Map<String, List<Integer>> userList,
+            List<String> nextNodeList
+    ) {
+
+        String url = MVEL_EXECUTION_SERVICE.concat("execute");
+
+        Map<String, String> headers = new HashMap<>();
+        MvelExecutionRequest request = new MvelExecutionRequest();
+        request.setFunctionId(mvelId);
+        request.setTxnId(txnId);
+        request.setActivityId(activityId);
+        request.setTriggerPoint(triggerPoint);
+        request.setApplicationId(appId);
+        request.setServiceId(serviceId);
+        request.setCurrentProcessId(currentProcessId);
+        request.setFormData(formData);
+        request.setApplicationDetails(appDetails);
+        request.setServiceDetails(serviceDetails);
+        request.setUserList(userList);
+        request.setNextNodeList(nextNodeList);
+
+        return AsynchronousApiExecutor.callExternalEndpoint(
+                MvelExecutionResponse.class,
+                HttpMethod.POST,
+                headers,
+                Map.of(),
+                url,
+                entityToString(request),
+                MediaType.APPLICATION_JSON
+        )
+        .map(ResponseEntity::getBody)
+        .flatMap(body -> {
+            try {
+                MvelExecutionResponse res =
+                		mapper.readValue(body, MvelExecutionResponse.class);
+
+                if (res == null) {
+                    return Mono.error(new RuntimeException("MVEL response is null"));
+                }
+
+                return Mono.just(res);
+
+            } catch (Exception e) {
+                return Mono.error(new RuntimeException("Failed to parse MVEL response", e));
+            }
+        })
+        .onErrorResume(ex -> {
+            MvelExecutionResponse errorRes = new MvelExecutionResponse();
+            errorRes.setSuccess(false);
+            errorRes.setError(ex.getMessage());
+            return Mono.just(errorRes);
+        });
     }
 }
 

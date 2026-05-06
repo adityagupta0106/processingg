@@ -61,6 +61,7 @@ public class PreProcessingService {
                                                     if (actual instanceof SPRuntimeError spr) {
                                                         return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(),null));
                                                     }
+                                                    ex.printStackTrace();
                                                     return Mono.error(new SPRuntimeError("Internal server error [REN - 01]", HttpStatus.INTERNAL_SERVER_ERROR,null));
                                             });
 

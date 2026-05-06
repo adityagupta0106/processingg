@@ -1,33 +1,42 @@
 package com.serviceplus.form.validation.service;
 
-import com.google.gson.reflect.TypeToken;
-import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.*;
-import com.serviceplus.form.validation.entity.ApplicationDetails;
-import com.serviceplus.form.validation.entity.CurrentProcess;
-import com.serviceplus.form.validation.entity.ProcessingTxn;
-import com.serviceplus.form.validation.kafka.KafkaProducer;
-import com.serviceplus.form.validation.repository.CurrentProcessRepository;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.FALLBACK_ACTION_NO;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_EXCLUSIVE_CONVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_INCLUSIVE_CONVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_INCLUSIVE_DIVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_PARALLEL_CONVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_PARALLEL_DIVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_WORKFLOW_REDIS_KEY_APPENDER;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_GATEWAY;
+import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+
+import com.google.gson.reflect.TypeToken;
+import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.InboxKafka;
+import com.serviceplus.form.validation.dto.ServiceMeta;
+import com.serviceplus.form.validation.dto.ServiceWorkFlow;
+import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
+import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.entity.ApplicationDetails;
+import com.serviceplus.form.validation.entity.CurrentProcess;
+import com.serviceplus.form.validation.entity.ProcessingTxn;
+import com.serviceplus.form.validation.repository.CurrentProcessRepository;
+
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
-import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
-import static com.serviceplus.form.validation.utility.Utility.entityToString;
 
 @Service
 public class WorkflowService {
@@ -87,138 +96,136 @@ public class WorkflowService {
         return Mono.empty();
     }
 
-    private Mono<?> calculateNextWorkflow(ServiceWorkFlow.Data.Nodes node, ServiceWorkFlow.Data data
-                                                , ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn
-                                                , UserSessionObject user, List<ServiceWorkFlow.Data> wf, CurrentProcess currentActionProcess) {
+    private Mono<InboxKafka> calculateNextWorkflow(
+    		ServiceWorkFlow.Data.Nodes node, ServiceWorkFlow.Data data,
+    		ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn,
+    		UserSessionObject user, List<ServiceWorkFlow.Data> wf, CurrentProcess currentActionProcess) {
 
-        LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
-        List<ServiceWorkFlow.Data.MappedTask> mappedTasks = data.getMappedTasks();
-        List<CurrentProcess> nextCurrentProcess = new ArrayList<>();
+        LocalDateTime now = LocalDateTime.now();
         List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations = new ArrayList<>();
-        AtomicInteger i = new AtomicInteger(0);
+        List<CurrentProcess> pList = new ArrayList<>();
+        return Flux.fromIterable(data.getMappedTasks())
 
-        mappedTasks.forEach(task -> {
-            ServiceWorkFlow.Data.Nodes next = task.getNode();
-            // else if(TYPE_TASK.equals(next.getType())){
+                .flatMap(task -> {
 
-            CurrentProcess currentProcessCurrent = new CurrentProcess();
-            currentProcessCurrent.setPreviousProcessId(currentActionProcess.getProcessId());
-            currentProcessCurrent.setCurrentTask(next.getId());
-            currentProcessCurrent.setCurrentTaskName(next.getName());
-            currentProcessCurrent.setPreviousTask(node.getId());
-            currentProcessCurrent.setPreviousTaskName(node.getName());
-            currentProcessCurrent.setServiceId(service.getServiceId());
-            currentProcessCurrent.setActionCode(FALLBACK_ACTION_NO);
-            currentProcessCurrent.setApplicationId(ad.getApplicationId());
-            currentProcessCurrent.setTenantId(user.getTenantId());
-            currentProcessCurrent.setBaseServiceId(service.getBaseServiceId());
-            currentProcessCurrent.setFormId(next.getFormId());
-            currentProcessCurrent.setInitiatedOn(now);
+                    ServiceWorkFlow.Data.Nodes next = task.getNode();
+                    CurrentProcess baseProcess = buildBaseProcess(currentActionProcess,node,next,service,ad,user,now,taskAvailableOfficeLocations,wf,txn);
+                    pList.add(baseProcess);
+                    
+                    if (TYPE_GATEWAY.equals(next.getType())) {
 
+                        ServiceWorkFlow.Data nextToGatewayData = fetchNode(wf, next.getId());
 
-            if(TYPE_GATEWAY.equals(next.getType())){
-                currentProcessCurrent.setActionTaken("Y");
-                currentProcessCurrent.setProcessId(createUniqueId());
-                currentProcessCurrent.setActionOn(now);
-            }
-            else{
-                currentProcessCurrent.setInitiatedOn(now);
-                currentProcessCurrent.setProcessId(createUniqueId());
-                taskAvailableOfficeLocations.add(nextAllowedOfficeLocation(wf,next,txn.getTxnId()));
-//                currentProcessCurrent.setProcessId(createUniqueId().concat("_temp"));
-            }
+                        List<ServiceWorkFlow.Data.MappedTask> nextToGateway =
+                                nextToGatewayData.getMappedTasks();
 
-            currentProcessCurrent.setNewEntity(true);
-            nextCurrentProcess.add(currentProcessCurrent);
-
-            //}
-
-            applicationFlowLogs.info("Creating current process for txnId {}  task {}",txn.getTxnId(),next);
-
-            if(TYPE_GATEWAY.equals(next.getType())){
-
-                String behaviour = next.getBehaviour();
-                ServiceWorkFlow.Data nextToGatewayData = fetchNode(wf, next.getId());
-
-                if (behaviour.equals(GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT)
-                        || behaviour.equals(GATEWAY_BEHAVIOUR_INCLUSIVE_DIVERGENT) || behaviour.equals(GATEWAY_BEHAVIOUR_PARALLEL_DIVERGENT)) {
-
-                    //NEED TO CALL DATA STORE TO FETCH TASK AND USER ATTRIBUTE VALUES
-
-                    List<ServiceWorkFlow.Data.MappedTask> nextToGateway = nextToGatewayData.getMappedTasks();
-                    nextToGateway.forEach(nextToGatewayTask -> {
-
-                        ServiceWorkFlow.Data.Nodes nodes = nextToGatewayTask.getNode();
-
-                        applicationFlowLogs.info("Creating current process next to gateway for txnId {}  task {}",txn.getTxnId(),nodes);
-
-                        CurrentProcess currentProcess = new CurrentProcess();
-                        currentProcess.setPreviousProcessId(currentProcessCurrent.getProcessId());
-                        currentProcess.setCurrentTask(nodes.getId());
-                        currentProcess.setCurrentTaskName(nodes.getName());
-                        currentProcess.setPreviousTask(next.getId());
-                        currentProcess.setPreviousTaskName(next.getName());
-                        currentProcess.setServiceId(service.getServiceId());
-                        currentProcess.setActionCode(FALLBACK_ACTION_NO);
-                        currentProcess.setApplicationId(ad.getApplicationId());
-                        currentProcess.setTenantId(user.getTenantId());
-                        currentProcess.setActionTaken("N");
-                        currentProcess.setInitiatedOn(now);
-                        currentProcess.setNewEntity(true);
-                        currentProcess.setProcessId(createUniqueId());
-                        currentProcess.setBaseServiceId(service.getBaseServiceId());
-                        currentProcess.setFormId(nodes.getFormId());
-
-                        if(i.get() == 1){
-                           // currentProcess.setProcessId(null);
+                        String behaviour = next.getBehaviour();
+                        if (isDivergentGateway(behaviour)) {
+                            return executeGatewayMvel(service,ad,txn,"",currentActionProcess,next.getId(),nextToGateway)
+                            .flatMapMany(Flux::fromIterable)
+                            .map(filteredTask -> buildGatewayNextProcess(baseProcess,next,filteredTask.getNode(),service,ad, user,now,taskAvailableOfficeLocations,wf,txn));
                         }
-                        i.getAndIncrement();
+                        else if (isConvergentGateway(behaviour)) {
+                            ServiceWorkFlow.Data.Nodes nextNode = nextToGatewayData.getNode();
+                            CurrentProcess cp = buildGatewayNextProcess(baseProcess,next,nextNode,service,ad,user,now,taskAvailableOfficeLocations,wf,txn);
+                            //need to check condition.
+                            return Mono.just(cp);
+                        }
+                    }
+                    return Mono.just(baseProcess);
+                })
+                .collectList()
+                .map(processList -> {
+                    processList.add(currentActionProcess);
+                    processList.add(pList.getFirst());
+                    InboxKafka inboxKafkaDto = new InboxKafka();
+                    inboxKafkaDto.setLocationId(service.getSelectedLocationByUser());
+                    inboxKafkaDto.setLocationName(service.getSelectedLocationNameByUser());
+                    inboxKafkaDto.setProcessList(processList);
+                    inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
+                    inboxKafkaDto.setServiceName(service.getServiceName());
 
-                        nextCurrentProcess.add(currentProcess);
-                        taskAvailableOfficeLocations.add(nextAllowedOfficeLocation(wf,nodes,txn.getTxnId()));
+                    return inboxKafkaDto;
+                });
+    }
+    
+    private CurrentProcess buildBaseProcess(CurrentProcess currentActionProcess,ServiceWorkFlow.Data.Nodes currentNode,ServiceWorkFlow.Data.Nodes currentTask,
+            ServiceMeta service,ApplicationDetails ad,UserSessionObject user,
+            LocalDateTime now,List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,List<ServiceWorkFlow.Data> wf,
+            ProcessingTxn txn
+    ) {
 
-                    });
+        CurrentProcess cp = new CurrentProcess();
 
-                }
-                else if(behaviour.equals(GATEWAY_BEHAVIOUR_EXCLUSIVE_CONVERGENT)
-                        || behaviour.equals(GATEWAY_BEHAVIOUR_INCLUSIVE_CONVERGENT) || behaviour.equals(GATEWAY_BEHAVIOUR_PARALLEL_CONVERGENT)){
+        cp.setPreviousProcessId(currentActionProcess.getProcessId());
+        cp.setCurrentTask(currentTask.getId());
+        cp.setCurrentTaskName(currentTask.getName());
+        cp.setPreviousTask(currentNode.getId());
+        cp.setPreviousTaskName(currentNode.getName());
+        cp.setServiceId(service.getServiceId());
+        cp.setApplicationId(ad.getApplicationId());
+        cp.setTenantId(user.getTenantId());
+        cp.setBaseServiceId(service.getBaseServiceId());
+        cp.setFormId(currentTask.getFormId());
+        if(TYPE_GATEWAY.equals(currentTask.getType())){
+        	cp.setActionTaken("Y");
+        	cp.setProcessId(createUniqueId());
+        	cp.setActionOn(now);
+        }else{
+    	  cp.setInitiatedOn(now);
+    	  cp.setProcessId(createUniqueId());
+    	  taskAvailableOfficeLocations.add(nextAllowedOfficeLocation(wf,currentTask,txn.getTxnId()));
+        }       
+        cp.setProcessId(createUniqueId());
+        cp.setNewEntity(true);
+        cp.setActionCode(FALLBACK_ACTION_NO);
 
-                    ServiceWorkFlow.Data.Nodes nodes = nextToGatewayData.getNode();
-                    CurrentProcess currentProcess = new CurrentProcess();
-                    currentProcess.setPreviousProcessId(currentProcessCurrent.getProcessId());
-                    currentProcess.setCurrentTask(nodes.getId());
-                    currentProcess.setCurrentTaskName(nodes.getName());
-                    currentProcess.setPreviousTask(next.getId());
-                    currentProcess.setPreviousTaskName(next.getName());
-                    currentProcess.setServiceId(service.getServiceId());
-                    currentProcess.setActionOn(now);
-                    currentProcess.setActionCode(FALLBACK_ACTION_NO);
-                    currentProcess.setApplicationId(ad.getApplicationId());
-                    currentProcess.setTenantId(user.getTenantId());
-                    currentProcess.setActionTaken("N");
+        return cp;
+    }
+    private CurrentProcess buildGatewayNextProcess(
+            CurrentProcess parent,
+            ServiceWorkFlow.Data.Nodes gatewayNode,
+            ServiceWorkFlow.Data.Nodes nextNode,
+            ServiceMeta service,
+            ApplicationDetails ad,
+            UserSessionObject user,
+            LocalDateTime now,
+            List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
+            List<ServiceWorkFlow.Data> wf,
+            ProcessingTxn txn
+    ) {
 
-                    currentProcess.setNewEntity(true);
-                   // currentProcess.setProcessId(createUniqueId().concat("_temp"));
-                    currentProcess.setProcessId(createUniqueId());
-                    currentProcess.setBaseServiceId(service.getBaseServiceId());
-                    currentProcess.setFormId(nodes.getFormId());
+        CurrentProcess cp = new CurrentProcess();
 
-                    nextCurrentProcess.add(currentProcess);
-                    taskAvailableOfficeLocations.add(nextAllowedOfficeLocation(wf,nodes,txn.getTxnId()));
-                }
+        cp.setPreviousProcessId(parent.getProcessId());
+        cp.setCurrentTask(nextNode.getId());
+        cp.setCurrentTaskName(nextNode.getName());
+        cp.setPreviousTask(gatewayNode.getId());
+        cp.setPreviousTaskName(gatewayNode.getName());
+        cp.setServiceId(service.getServiceId());
+        cp.setApplicationId(ad.getApplicationId());
+        cp.setTenantId(user.getTenantId());
+        cp.setBaseServiceId(service.getBaseServiceId());
+        cp.setFormId(nextNode.getFormId());
+        cp.setInitiatedOn(now);
+        cp.setProcessId(createUniqueId());
+        cp.setNewEntity(true);
+        cp.setActionTaken("N");
+        cp.setActionCode(FALLBACK_ACTION_NO);
+        taskAvailableOfficeLocations.add(nextAllowedOfficeLocation(wf,nextNode,txn.getTxnId()));
 
-            }
-        });
+        return cp;
+    }
+    private boolean isDivergentGateway(String behaviour) {
+        return behaviour.equals(GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT)
+                || behaviour.equals(GATEWAY_BEHAVIOUR_INCLUSIVE_DIVERGENT)
+                || behaviour.equals(GATEWAY_BEHAVIOUR_PARALLEL_DIVERGENT);
+    }
 
-        nextCurrentProcess.add(currentActionProcess);
-        InboxKafka inboxKafkaDto = new InboxKafka();
-        inboxKafkaDto.setLocationId(service.getSelectedLocationByUser());
-        inboxKafkaDto.setLocationName(service.getSelectedLocationNameByUser());
-        inboxKafkaDto.setProcessList(nextCurrentProcess);
-        inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
-        inboxKafkaDto.setServiceName(service.getServiceName());
-
-        return Mono.just(inboxKafkaDto);
+    private boolean isConvergentGateway(String behaviour) {
+        return behaviour.equals(GATEWAY_BEHAVIOUR_EXCLUSIVE_CONVERGENT)
+                || behaviour.equals(GATEWAY_BEHAVIOUR_INCLUSIVE_CONVERGENT)
+                || behaviour.equals(GATEWAY_BEHAVIOUR_PARALLEL_CONVERGENT);
     }
 
     private ServiceWorkFlow.Data fetchNode(List<ServiceWorkFlow.Data> wf , String task){
@@ -230,7 +237,78 @@ public class WorkflowService {
         }
         return null;
     }
+    
+    private Mono<List<ServiceWorkFlow.Data.MappedTask>> executeGatewayMvel(
 
+            ServiceMeta service,
+            ApplicationDetails applicationDetails,
+            ProcessingTxn txn,
+            String appData,
+            CurrentProcess currentActionProcess ,
+            String gatewayId,
+            List<ServiceWorkFlow.Data.MappedTask> nextToGateway
+
+    ) {
+        List<String> nextNodeIds = extractNextNodeIds(nextToGateway);
+
+        return apiClient.fetchMvelDetails(service.getServiceId())
+
+                .flatMapMany(Flux::fromIterable)
+                .filter(m -> "GW".equalsIgnoreCase(m.getValue()))
+                .filter(m -> m.getNodeId().equals(gatewayId))
+
+                .flatMap(m ->
+                        apiClient.executeMvel(
+                                        m.getMvelId(),
+                                        txn.getTxnId(),
+                                        "",
+                                        "GW",
+                                        currentActionProcess.getApplicationId(),
+                                        service.getServiceId(),
+                                        null,
+                                        appData,
+                                        null,
+                                        null,
+                                        null,
+                                        nextNodeIds   
+                                )
+                                .flatMap(response -> {
+
+                                    if (!response.isSuccess()) {
+                                        return Mono.error(new SPRuntimeError(
+                                                "Gateway MVEL failed",
+                                                HttpStatus.BAD_GATEWAY,
+                                                txn.getTxnId()
+                                        ));
+                                    }
+                                    List<String> filteredNodeIds = response.getNextNodeList();
+
+                                    if (filteredNodeIds == null || filteredNodeIds.isEmpty()) {
+                                        return Mono.error(new SPRuntimeError(
+                                                "No valid next node from gateway",
+                                                HttpStatus.BAD_REQUEST,
+                                                txn.getTxnId()
+                                        ));
+                                    }
+
+                                    List<ServiceWorkFlow.Data.MappedTask> filteredTasks =
+                                            nextToGateway.stream()
+                                                    .filter(task ->
+                                                            filteredNodeIds.contains(task.getNode().getId())
+                                                    )
+                                                    .toList();
+
+                                    return Mono.just(filteredTasks);
+                                })
+                ).next().switchIfEmpty(Mono.just(nextToGateway));
+    }
+    private List<String> extractNextNodeIds(List<ServiceWorkFlow.Data.MappedTask> mappedTasks) {
+
+        return mappedTasks.stream()
+                .map(m -> m.getNode().getId())
+                .filter(Objects::nonNull)
+                .toList();
+    }
     private TaskAvailableOfficeLocation nextAllowedOfficeLocation(List<ServiceWorkFlow.Data> wf, ServiceWorkFlow.Data.Nodes next,String txnId){
         TaskAvailableOfficeLocation location = new TaskAvailableOfficeLocation();
         location.setTaskId(next.getId());
