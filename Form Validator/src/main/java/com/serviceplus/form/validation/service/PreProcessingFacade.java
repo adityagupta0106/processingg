@@ -78,26 +78,11 @@ public class PreProcessingFacade {
     }
 
     public Mono<ProcessingTxn> getFormDataAndSaveTxn(ServiceMeta service, UserSessionObject user, ServerHttpRequest request,
-                                                     TempTransactionLogs tempLog, String appId, String dataId, String activityType) {
-        String txnId;
+                                                     TempTransactionLogs tempLog, String appId, String dataId, String activityType, boolean newEntityFlag) {
+        String txnId=tempLog.getTxnId();
         LocalDateTime dt = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
         LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
         String applicationId = isEmpty(appId) ?  createUniqueId() : appId;
-
-        if(isEmpty(appId)) {
-            txnId = tempLog.getTxnId();
-        }
-        else{
-            return txnRepository.findById(tempLog.getTxnId());
-//            txnId = tempLog.getTxnId();
-//            if(tempLog.getStartTime() != null) {
-//                dt = tempLog.getStartTime().toInstant()
-//                        .atZone(ZoneId.systemDefault())
-//                        .toLocalDateTime();
-//            }
-//            service = tempLog.getService();
-        }
-
 
         applicationFlowLogs.info("Saving txn log for txnId {} applicationId {} dataId {} ",txnId,applicationId,dataId);
 
@@ -118,7 +103,7 @@ public class PreProcessingFacade {
             txnEntity.setStartTime(dt);
         }
 
-        txnEntity.setNewEntity(isEmpty(appId));
+        txnEntity.setNewEntity(newEntityFlag);
 
         ApplicationDetails applicationDetails = new ApplicationDetails(
                 applicationId,
@@ -131,7 +116,7 @@ public class PreProcessingFacade {
                 user.getTenantId()
         );
 
-        applicationDetails.setNewEntity(isEmpty(appId));
+        applicationDetails.setNewEntity(newEntityFlag);
         applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getLocationId().intValue());
         applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getLocationName());
 

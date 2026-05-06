@@ -17,8 +17,10 @@ import reactor.core.publisher.Mono;
 
 import java.util.Optional;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
+import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 
 @Service
 @SanitizeRequest
@@ -37,12 +39,17 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
         Optional<String> applyKeyOpt = request.queryParam("serviceKey");
         Optional<String> appIdOpt = request.queryParam("appId");
         Optional<String> serviceIdOpt = request.queryParam("serviceId");
-
         if (isEmpty(txnId) || applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
             return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST,txnId));
         }
-
-        String applId = appIdOpt.orElse("");
+        if(appIdOpt.isEmpty() && service.getTaskType().equals(OFFICIAL_TASK_FLAG)){
+            return Mono.error(new SPRuntimeError(
+                    "Issue while processing the request [SUB - 008]",
+                    HttpStatus.INTERNAL_SERVER_ERROR,txnId
+            ));
+        }
+        final boolean newEntityFlag = appIdOpt.isEmpty();
+        String applId = appIdOpt.orElse(createUniqueId());
 
         Mono<String> bodyMono = request.bodyToMono(String.class).cache();
 
@@ -53,7 +60,7 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
                                 formService.applicationSubmission(
                                         request.exchange().getRequest(), txnId, appData,
                                         applId, fromDraft, request, flowStatus,
-                                        serviceIdOpt.get(), service
+                                        serviceIdOpt.get(), service,newEntityFlag
                                 )
                         );
                     } else {
