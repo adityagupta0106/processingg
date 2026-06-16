@@ -1,18 +1,18 @@
 package com.serviceplus.form.validation.utility;
 
 import com.serviceplus.form.validation.controller.ApplicationFetchController;
+import com.serviceplus.form.validation.controller.HandlerController;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
+
 import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.controller.PreProcessingController;
-import com.serviceplus.form.validation.controller.HandlerController;
 
 @Configuration
 public class PathRouter {
@@ -43,7 +43,8 @@ public class PathRouter {
                 .andRoute(POST(contextPath + "/a/apply/serviceKey"), preProcessingController::fetchServiceKey)
                 .andRoute(POST(contextPath + "/a/form/edit"), handlerController::edit)
                 .andRoute(POST(contextPath + "/a/app/list"), applicationFetchController::getApplicationList)
-                .andRoute(POST(contextPath + "/a/app/preload"), applicationFetchController::loadApplicationAndFetchServiceKey);
+                .andRoute(POST(contextPath + "/a/app/preload"), applicationFetchController::loadApplicationAndFetchServiceKey)
+                .andRoute(POST(contextPath + "/a/workflow/inbox/list"), preProcessingController::getWFPInbox);
     }
     
     

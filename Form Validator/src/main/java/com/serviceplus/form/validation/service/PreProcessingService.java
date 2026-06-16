@@ -83,6 +83,30 @@ public class PreProcessingService {
         }
     }
 
+    public Mono<ServerResponse> getWFPInbox(ServerHttpRequest request) {
+
+        try {
+
+            UserSessionObject user = getUserSessionDetails(request);
+
+            return preProcessingFacade.getWFPInbox(user).flatMap(response -> ServerResponse.ok().bodyValue(response))
+                                        .onErrorResume(Exception.class, ex -> {
+
+                                            Throwable actual = Exceptions.unwrap(ex);
+                                            if (actual instanceof SPRuntimeError spr) {
+                                                return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(), null));
+                                            }
+
+                                            ex.printStackTrace();
+                                            return Mono.error(new SPRuntimeError("Internal server error [WFP-INBOX-01]", HttpStatus.INTERNAL_SERVER_ERROR, null));
+                                        });
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+            return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
+        }
+    }
 }
 
 

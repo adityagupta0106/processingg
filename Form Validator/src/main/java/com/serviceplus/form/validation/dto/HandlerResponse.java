@@ -14,6 +14,7 @@ public class HandlerResponse {
     private String applicationId;
     private String activityType;
     private List<ServiceMeta.AvailableApplyLocations> applyLocations;
+    private boolean activityEnd;
 
     public Map<String, Object> getData() {
         return data;
@@ -53,5 +54,13 @@ public class HandlerResponse {
 
     public void setApplyLocations(List<ServiceMeta.AvailableApplyLocations> applyLocations) {
         this.applyLocations = applyLocations;
+    }
+
+    public boolean isActivityEnd() {
+        return activityEnd;
+    }
+
+    public void setActivityEnd(boolean activityEnd) {
+        this.activityEnd = activityEnd;
     }
 }
