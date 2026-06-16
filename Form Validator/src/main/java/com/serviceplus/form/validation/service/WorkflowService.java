@@ -10,6 +10,7 @@ import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEW
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_WORKFLOW_REDIS_KEY_APPENDER;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_GATEWAY;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+import static java.util.Objects.isNull;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -137,7 +138,9 @@ public class WorkflowService {
                 .collectList()
                 .map(processList -> {
                     processList.add(currentActionProcess);
-                    processList.add(pList.getFirst());
+                    if(!pList.isEmpty()) {
+                        processList.add(pList.getFirst());
+                    }
                     InboxKafka inboxKafkaDto = new InboxKafka();
                     inboxKafkaDto.setLocationId(service.getSelectedLocationByUser());
                     inboxKafkaDto.setLocationName(service.getSelectedLocationNameByUser());

@@ -10,6 +10,7 @@ import com.serviceplus.form.validation.dto.*;
 import com.serviceplus.form.validation.executor.ApiExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
@@ -45,7 +46,10 @@ public class ReactiveApiClient {
     
     @Value("${mvel.execution.service}")
     private String MVEL_EXECUTION_SERVICE;
-    
+
+    @Value("${tracking.service}")
+    private String TRACKING_SERVICE;
+
     @Autowired
     private ObjectMapper mapper;
 
@@ -373,6 +377,38 @@ public class ReactiveApiClient {
             errorRes.setSuccess(false);
             errorRes.setError(ex.getMessage());
             return Mono.just(errorRes);
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    public Mono<List<WorkflowInboxResponse>> fetchWFPInbox(UserSessionObject user) {
+
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+        String url = TRACKING_SERVICE.concat("workflow/inbox/list");
+
+        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
+                                                                                    String.class,
+                                                                                    HttpMethod.GET,
+                                                                                    headers,
+                                                                                    Collections.emptyMap(),
+                                                                                    url,
+                                                                                    null,
+                                                                                    MediaType.APPLICATION_JSON
+                                                                            );
+
+        return callExternalEndpoint.flatMap(apiResponse -> {
+
+            String body = apiResponse.getBody();
+
+            if (body == null || body.isBlank()) {
+                return Mono.error(new SPRuntimeError("Unable to fetch inbox", HttpStatus.FAILED_DEPENDENCY, null));
+            }
+
+            Type listType = new TypeToken<List<WorkflowInboxResponse>>() {}.getType();
+
+            List<WorkflowInboxResponse> inboxList = (List<WorkflowInboxResponse>) stringToEntityUsingType(body, listType);
+            return Mono.just(inboxList);
         });
     }
 }

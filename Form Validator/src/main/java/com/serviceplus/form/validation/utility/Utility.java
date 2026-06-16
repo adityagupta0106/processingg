@@ -289,7 +289,7 @@ public class Utility {
 
     }
 
-    private static SPRuntimeError getSpRuntimeError(HttpStatusCode status, String message,String txnId) {
+    public static SPRuntimeError getSpRuntimeError(HttpStatusCode status, String message,String txnId) {
         SPRuntimeError error;
 
         if (status.is4xxClientError()) {
@@ -340,4 +340,5 @@ public class Utility {
         logger.error("Unexpected error while saving form data", ex);
         return Mono.error(new SPRuntimeError("Internal server error [SUB-500]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
     }
+
 }

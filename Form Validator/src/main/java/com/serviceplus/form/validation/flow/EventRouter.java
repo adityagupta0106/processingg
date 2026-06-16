@@ -52,7 +52,7 @@ public class EventRouter {
         applicationFlowLogs.info("Checking route for applicationId {} txnId {} ,statusKey{}",applicationId,txnId,statusKey);
         UserSessionObject user = getUserSessionDetails(request.exchange().getRequest());
 
-        if(fromDraft && !isEmpty(txnId)){
+        if(fromDraft && isEmpty(txnId)){
             flow = applicationFlowRouterRepository.findByApplicationIdAndCompletedAndTaskIdAndServiceIdAndTenantId(
                     applicationId == null ? "-1" : applicationId,0,services.getTaskId(),services.getServiceId(),user.getTenantId()
             );

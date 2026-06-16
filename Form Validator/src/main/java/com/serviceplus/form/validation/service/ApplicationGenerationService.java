@@ -111,6 +111,7 @@ public class ApplicationGenerationService {
         HandlerResponse hr = new HandlerResponse();
         hr.setData(Map.of("referenceNo", referenceNo));
         hr.setApplicationId(applicationId);
+        hr.setActivityEnd(true);
         //return transactionalOperator.execute(status ->
         return saveApplicationAndCurrentProcess(
                 txnLog, service, user, referenceNo, applicationId, appStatus,dataId
@@ -151,6 +152,7 @@ public class ApplicationGenerationService {
                     cp.setActionTaken("Y");
                     cp.setActionOn(LocalDateTime.now());
                     cp.setDataId(dataId);
+                    cp.setUserId(user.getUserID().longValue());
                     return workflowService.generateNextWorkflow(ad,savedLog,service,user,cp).
                             flatMap(inboxKafka -> persistWorkflow(ad, (InboxKafka) inboxKafka, savedLog)
                                     .doOnSuccess(_ -> sendToInboxService((InboxKafka) inboxKafka,ad,service)));

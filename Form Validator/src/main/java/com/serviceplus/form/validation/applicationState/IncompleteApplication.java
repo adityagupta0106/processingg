@@ -69,6 +69,7 @@ public class IncompleteApplication implements ApplicationManager{
                 .onErrorResume(Exception.class , ex -> returnError(ex,"",applicationFlowLogs));
     }
 
+    //THIS method does not sound right
     @Override
     public Mono<ServerResponse> loadApplicationAndFetchServiceKey(ServerRequest request) {
         UserSessionObject user = getUserSessionDetails(request.exchange().getRequest());

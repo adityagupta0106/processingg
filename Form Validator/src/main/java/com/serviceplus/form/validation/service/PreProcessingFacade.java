@@ -1,17 +1,18 @@
 package com.serviceplus.form.validation.service;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Map;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.HandlerResponse;
+import com.serviceplus.form.validation.dto.WorkflowInboxResponse;
 import com.serviceplus.form.validation.entity.*;
-import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,13 +79,22 @@ public class PreProcessingFacade {
     }
 
     public Mono<ProcessingTxn> getFormDataAndSaveTxn(ServiceMeta service, UserSessionObject user, ServerHttpRequest request,
-                                                     TempTransactionLogs tempLog, String appId, String dataId, String activityType, boolean newEntityFlag) {
+                                                     TempTransactionLogs tempLog, String appId, String dataId, String activityType, boolean newEntityFlag,
+                                                     ApplicationFlowStatusEntity oldFlowStatus) {
         String txnId=tempLog.getTxnId();
         LocalDateTime dt = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
         LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
         String applicationId = isEmpty(appId) ?  createUniqueId() : appId;
 
-        applicationFlowLogs.info("Saving txn log for txnId {} applicationId {} dataId {} ",txnId,applicationId,dataId);
+        applicationFlowLogs.info(
+                "Saving transaction started for txnId : {} applicationId : {} dataId : {}",
+                txnId,
+                applicationId,
+                dataId);
+
+        applicationFlowLogs.info(
+                "Preparing ProcessingTxn entity for txnId : {}",
+                txnId);
 
         ProcessingTxn txnEntity = new ProcessingTxn(
             txnId,
@@ -99,11 +109,18 @@ public class PreProcessingFacade {
                 applicationId
         );
 
-        if(tempLog!= null && tempLog.getStartTime() != null) {
+        if(tempLog.getStartTime() != null) {
+            applicationFlowLogs.info(
+                    "Updating start time for existing txnId : {}",
+                    txnId);
             txnEntity.setStartTime(dt);
         }
 
         txnEntity.setNewEntity(newEntityFlag);
+
+        applicationFlowLogs.info(
+                "Preparing ApplicationDetails entity for applicationId : {}",
+                applicationId);
 
         ApplicationDetails applicationDetails = new ApplicationDetails(
                 applicationId,
@@ -120,28 +137,100 @@ public class PreProcessingFacade {
         applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getLocationId().intValue());
         applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getLocationName());
 
-        ApplicationFlowStatusEntity flowStatus = new ApplicationFlowStatusEntity();
-        flowStatus.setId(createUniqueId());
-        flowStatus.setApplicationId(applicationId);
-        flowStatus.setFormId(service.getFormId());
-        flowStatus.setTxnId(txnId);
-        flowStatus.setActivityType("FS");
-        flowStatus.setCompleted(0);
-        flowStatus.setTenantId(user.getTenantId());
-        flowStatus.setNewEntity(true);
-        flowStatus.setTaskId(service.getTaskId());
-        flowStatus.setServiceId(service.getServiceId());
-        flowStatus.setLastUpdate(now);
+        applicationFlowLogs.info(
+                "Preparing ApplicationFlowStatusEntity for txnId : {}",
+                txnId);
 
-        return transactionalDBExecutor.execute(txnId,applicationDetails, flowStatus, txnEntity)
+        ApplicationFlowStatusEntity flowStatus = new ApplicationFlowStatusEntity();
+
+        if(isNull(oldFlowStatus) || isNull(oldFlowStatus.getId())){
+            flowStatus.setId(createUniqueId());
+            flowStatus.setApplicationId(applicationId);
+            flowStatus.setFormId(service.getFormId());
+            flowStatus.setTxnId(txnId);
+            flowStatus.setActivityType("FS");
+            flowStatus.setCompleted(0);
+            flowStatus.setTenantId(user.getTenantId());
+            flowStatus.setNewEntity(true);
+            flowStatus.setTaskId(service.getTaskId());
+            flowStatus.setServiceId(service.getServiceId());
+            flowStatus.setLastUpdate(now);
+        }
+        else{
+            flowStatus = oldFlowStatus;
+        }
+
+
+        applicationFlowLogs.info(
+                "Executing transactional DB operation for txnId : {} newEntityFlag : {}",
+                txnId,
+                newEntityFlag);
+
+        if(newEntityFlag) {
+
+            return transactionalDBExecutor
+                    .execute(
+                            txnId,
+                            applicationDetails,
+                            flowStatus,
+                            txnEntity)
+                    .doOnSuccess(success ->
+                            applicationFlowLogs.info(
+                                    "Transaction saved successfully for txnId : {}",
+                                    txnId))
+                    .then(redis.remove(txnId))
+                    .doOnSuccess(success ->
+                            applicationFlowLogs.info(
+                                    "Redis temporary transaction removed successfully for txnId : {}",
+                                    txnId))
+                    .thenReturn(txnEntity)
+                    .onErrorResume(Exception.class, ex -> {
+
+                        applicationFlowLogs.error(
+                                "Unable to process transaction for txnId : {} error : {}",
+                                txnId,
+                                ex.getMessage(),
+                                ex);
+
+                        return Mono.error(
+                                new SPRuntimeError(
+                                        "Unable to process your request [AY - 01]",
+                                        HttpStatus.INTERNAL_SERVER_ERROR,
+                                        txnId
+                                ));
+                    });
+        }
+
+        return transactionalDBExecutor
+                .execute(
+                        txnId,
+                        txnEntity,
+                        flowStatus)
+                .doOnSuccess(success ->
+                        applicationFlowLogs.info(
+                                "Transaction updated successfully for txnId : {}",
+                                txnId))
                 .then(redis.remove(txnId))
+                .doOnSuccess(success ->
+                        applicationFlowLogs.info(
+                                "Redis temporary transaction removed successfully for txnIda : {}",
+                                txnId))
                 .thenReturn(txnEntity)
-                .onErrorResume(Exception.class, ex ->
-                        Mono.error(new SPRuntimeError(
-                                "Unable to process your request [AY - 01]",
-                                HttpStatus.INTERNAL_SERVER_ERROR,txnId
-                        ))
-                );
+                .onErrorResume(Exception.class, ex -> {
+
+                    applicationFlowLogs.error(
+                            "Unable to update transaction for txnId : {} error : {}",
+                            txnId,
+                            ex.getMessage(),
+                            ex);
+
+                    return Mono.error(
+                            new SPRuntimeError(
+                                    "Unable to process your request [AY - 02]",
+                                    HttpStatus.INTERNAL_SERVER_ERROR,
+                                    txnId
+                            ));
+                });
 
 
 //        Mono<ProcessingTxn> res = applicationDetailsRepository.save(applicationDetails)
@@ -170,6 +259,51 @@ public class PreProcessingFacade {
     public Mono<ServerResponse> fetchServiceKey(Integer baseServiceId, UserSessionObject user, ServerHttpRequest request, String appId, String taskId, Integer serviceId) {
         return reactiveApiClient.fetchServiceKey(baseServiceId,user,appId,taskId,serviceId)
                 .flatMap(response -> ServerResponse.ok().bodyValue(response));
+    }
+
+    public Mono<List<WorkflowInboxResponse>> getWFPInbox(UserSessionObject user) {
+
+        return reactiveApiClient.fetchWFPInbox(user).map(inboxList -> {
+            DateTimeFormatter formatter =  DateTimeFormatter.ofPattern("dd MMM yyyy hh:mm a");
+            inboxList.forEach(inbox -> {
+
+                ServiceMeta service = getServiceMeta(inbox);
+                inbox.setTaskType(OFFICIAL_TASK_FLAG);
+                inbox.setServiceKey(encryptServiceKeys(service));
+                if(inbox.getApplRecievedOn() != null) {
+
+                    String formattedDate =
+                            inbox.getApplRecievedOn()
+                                    .toInstant()
+                                    .atZone(
+                                            ZoneId.systemDefault())
+                                    .format(formatter);
+
+                    inbox.setReceivedDate(formattedDate);
+                }
+            });
+
+            return inboxList;
+        });
+    }
+
+    private static ServiceMeta getServiceMeta(WorkflowInboxResponse inbox) {
+        ServiceMeta service = new ServiceMeta();
+
+        service.setServiceId(inbox.getServiceId());
+        service.setServiceName(inbox.getServiceName());
+        service.setFormId(inbox.getFormId());
+        service.setTaskId(inbox.getTaskId());
+        service.setTaskType(OFFICIAL_TASK_FLAG);
+        service.setBaseServiceId(inbox.getBaseServiceId());
+        service.setCurrentProcessId(inbox.getCurrentProcessId());
+
+        ServiceMeta.AvailableApplyLocations location = new ServiceMeta.AvailableApplyLocations();
+        location.setLocationId(inbox.getLocationId().longValue());
+        location.setLocationName("");
+
+        service.setLocations(List.of(location));
+        return service;
     }
 }
 

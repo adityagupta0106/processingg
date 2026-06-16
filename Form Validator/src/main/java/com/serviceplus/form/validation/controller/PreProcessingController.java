@@ -56,4 +56,8 @@ public class PreProcessingController {
 
         return preProcessingService.fetchServiceKey(request.exchange().getRequest(),serviceIdOpt.get(),applicationIdOpt.orElse(""),taskIdOpt.orElse(""),serviceId);
     }
+
+    public Mono<ServerResponse> getWFPInbox(ServerRequest request) {
+        return preProcessingService.getWFPInbox(request.exchange().getRequest());
+    }
 }

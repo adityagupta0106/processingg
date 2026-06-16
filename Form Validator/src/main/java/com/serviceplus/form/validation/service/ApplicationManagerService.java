@@ -43,12 +43,12 @@ public class ApplicationManagerService implements IApplicationManagerService{
         return appList
                 .flatMap(t -> {
                     List<ApplicationDetails> list = (List<ApplicationDetails>) t;
+                    List<Applications> finalList = new ArrayList<>();
 
                     if(list.isEmpty()){
-                        return Mono.error(new SPRuntimeError("No record found or invalid request",HttpStatus.BAD_REQUEST,null));
+                        return Mono.just(finalList);
                     }
 
-                    List<Applications> finalList = new ArrayList<>();
                     DateTimeFormatter formatter =  DateTimeFormatter.ofPattern("dd MMM yyyy hh:mm a");
                     list.forEach(item -> {
                             Applications app = new Applications();
