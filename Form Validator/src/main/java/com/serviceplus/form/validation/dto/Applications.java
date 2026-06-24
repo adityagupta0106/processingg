@@ -1,6 +1,8 @@
 package com.serviceplus.form.validation.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import org.springframework.cglib.core.Local;
 
 import java.time.LocalDateTime;
 
@@ -9,10 +11,14 @@ public class Applications {
 
     private String applicationId;
     private String applicationRefNo;
-    private String applyDate;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime applyDate;
+
     private String status;
     private Integer serviceId;
     private String draftRefNo;
+    private String serviceName;
 
     public Integer getServiceId() {
         return serviceId;
@@ -28,14 +34,6 @@ public class Applications {
 
     public void setStatus(String status) {
         this.status = status;
-    }
-
-    public String getApplyDate() {
-        return applyDate;
-    }
-
-    public void setApplyDate(String applyDate) {
-        this.applyDate = applyDate;
     }
 
     public String getApplicationRefNo() {
@@ -60,5 +58,21 @@ public class Applications {
 
     public void setDraftRefNo(String draftRefNo) {
         this.draftRefNo = draftRefNo;
+    }
+
+    public String getServiceName() {
+        return serviceName;
+    }
+
+    public void setServiceName(String serviceName) {
+        this.serviceName = serviceName;
+    }
+
+    public LocalDateTime getApplyDate() {
+        return applyDate;
+    }
+
+    public void setApplyDate(LocalDateTime applyDate) {
+        this.applyDate = applyDate;
     }
 }

@@ -62,18 +62,18 @@ public class WorkflowService {
     }
 
     public Mono<?> generateNextWorkflow(ApplicationDetails ad, ProcessingTxn savedLog, ServiceMeta service, UserSessionObject user, CurrentProcess cp) {
-                                        final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString());
+        final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString());
 
-                                        Mono<Object> redisData = redis.fetch(
-                                                REDIS_KEY, new TypeToken<ServiceWorkFlow>(){}.getType()
-                                        );
+        Mono<Object> redisData = redis.fetch(
+                REDIS_KEY, new TypeToken<ServiceWorkFlow>(){}.getType()
+        );
 
-                return redisData
-                                .switchIfEmpty(
-                                        apiClient.fetchProcessFlow(service.getBaseServiceId(), user,
-                                                        savedLog.getApplicationId(), service.getTaskId(), service.getServiceId(),savedLog.getTxnId())
-                                                .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY,savedLog.getTxnId())))
-                                                .flatMap(Mono::just)
+        return redisData
+                .switchIfEmpty(
+                        apiClient.fetchProcessFlow(service.getBaseServiceId(), user,
+                                        savedLog.getApplicationId(), service.getTaskId(), service.getServiceId(),savedLog.getTxnId())
+                                .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY,savedLog.getTxnId())))
+                                .flatMap(Mono::just)
                 )
                 .flatMap(response -> generate((ServiceWorkFlow) response, ad, savedLog, service, user,cp))
                 .onErrorResume(ex -> {
@@ -101,241 +101,246 @@ public class WorkflowService {
         return Mono.empty();
     }
 
-	private Mono<InboxKafka> calculateNextWorkflow(ServiceWorkFlow.Data.Nodes node, ServiceWorkFlow.Data data,
-			ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
-			List<ServiceWorkFlow.Data> wf, CurrentProcess currentActionProcess) {
+    private Mono<InboxKafka> calculateNextWorkflow(ServiceWorkFlow.Data.Nodes node, ServiceWorkFlow.Data data,
+                                                   ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
+                                                   List<ServiceWorkFlow.Data> wf, CurrentProcess currentActionProcess) {
 
-		LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now();
 
-		List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations = new ArrayList<>();
-		List<CurrentProcess> pList = new ArrayList<>();
+        List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations = new ArrayList<>();
+        List<CurrentProcess> pList = new ArrayList<>();
 
-		Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
+        Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
 
-		applicationFlowLogs.info("calculateNextWorkflow started txnId={}, currentNode={}, mappedTasks={}",
-				txn.getTxnId(), node.getId(), data.getMappedTasks().size());
+        applicationFlowLogs.info("calculateNextWorkflow started txnId={}, currentNode={}, mappedTasks={}",
+                txn.getTxnId(), node.getId(), data.getMappedTasks().size());
 
-		return Flux.fromIterable(data.getMappedTasks())
+        return Flux.fromIterable(data.getMappedTasks())
 
-				.concatMap(task -> {
+                .concatMap(task -> {
 
-					ServiceWorkFlow.Data.Nodes next = task.getNode();
+                    ServiceWorkFlow.Data.Nodes next = task.getNode();
 
-					applicationFlowLogs.info("Processing taskId={}, taskType={}, txnId={}", next.getId(),
-							next.getType(), txn.getTxnId());
+                    applicationFlowLogs.info("Processing taskId={}, taskType={}, txnId={}", next.getId(),
+                            next.getType(), txn.getTxnId());
 
-					return nextAllowedOfficeLocation(wf, next, txn.getTxnId(), service.getServiceId(), user,
-							taskLocationUserHolderMap)
+                    return nextAllowedOfficeLocation(wf, next, txn.getTxnId(), service.getServiceId(), user,
+                            taskLocationUserHolderMap)
 
-							.flatMap(nextAllowedOfficeLocation -> {
+                            .flatMap(nextAllowedOfficeLocation -> {
 
-								applicationFlowLogs.info("nextAllowedOfficeLocation resolved for taskId={} : {}",
-										next.getId(), nextAllowedOfficeLocation);
+                                applicationFlowLogs.info("nextAllowedOfficeLocation resolved for taskId={} : {}",
+                                        next.getId(), nextAllowedOfficeLocation);
 
-								taskAvailableOfficeLocations.add(nextAllowedOfficeLocation);
+                                taskAvailableOfficeLocations.add(nextAllowedOfficeLocation);
 
-								applicationFlowLogs.info("Executing After Task MVEL for taskId={}, currentMap={}",
-										next.getId(), taskLocationUserHolderMap);
+                                applicationFlowLogs.info("Executing After Task MVEL for taskId={}, currentMap={}",
+                                        next.getId(), taskLocationUserHolderMap);
 
-								return executeAfterTaskMvel(service, ad, txn, "", currentActionProcess, next.getId(),
-										taskLocationUserHolderMap)
+                                return executeAfterTaskMvel(service, ad, txn, "", currentActionProcess, next.getId(),
+                                        taskLocationUserHolderMap)
 
-										.then(Mono.defer(() -> {
+                                        .then(Mono.defer(() -> {
 
-											applicationFlowLogs.info(
-													"After Task MVEL completed for taskId={}, updatedMap={}",
-													next.getId(), taskLocationUserHolderMap);
+                                            applicationFlowLogs.info(
+                                                    "After Task MVEL completed for taskId={}, updatedMap={}",
+                                                    next.getId(), taskLocationUserHolderMap);
 
-											refreshTaskAvailableOfficeLocation(nextAllowedOfficeLocation,
-													taskLocationUserHolderMap);
+                                            refreshTaskAvailableOfficeLocation(nextAllowedOfficeLocation,
+                                                    taskLocationUserHolderMap);
 
-											applicationFlowLogs.info("Office locations refreshed for taskId={} : {}",
-													next.getId(), nextAllowedOfficeLocation);
+                                            applicationFlowLogs.info("Office locations refreshed for taskId={} : {}",
+                                                    next.getId(), nextAllowedOfficeLocation);
 
-											CurrentProcess baseProcess = buildBaseProcess(currentActionProcess, node,
-													next, service, ad, user, now, taskAvailableOfficeLocations, wf,
-													txn);
+                                            CurrentProcess baseProcess = buildBaseProcess(currentActionProcess, node,
+                                                    next, service, ad, user, now, taskAvailableOfficeLocations, wf,
+                                                    txn);
 
-											applicationFlowLogs.info("Base process created for taskId={}, process={}",
-													next.getId(), baseProcess);
+                                            applicationFlowLogs.info("Base process created for taskId={}, process={}",
+                                                    next.getId(), baseProcess);
 
-											pList.add(baseProcess);
+                                            pList.add(baseProcess);
 
-											if (TYPE_GATEWAY.equals(next.getType())) {
+                                            if (TYPE_GATEWAY.equals(next.getType())) {
 
-												applicationFlowLogs.info(
-														"Gateway encountered gatewayId={}, behaviour={}", next.getId(),
-														next.getBehaviour());
+                                                applicationFlowLogs.info(
+                                                        "Gateway encountered gatewayId={}, behaviour={}", next.getId(),
+                                                        next.getBehaviour());
 
-												ServiceWorkFlow.Data nextToGatewayData = fetchNode(wf, next.getId());
+                                                ServiceWorkFlow.Data nextToGatewayData = fetchNode(wf, next.getId());
 
-												List<ServiceWorkFlow.Data.MappedTask> nextToGateway = nextToGatewayData
-														.getMappedTasks();
+                                                List<ServiceWorkFlow.Data.MappedTask> nextToGateway = nextToGatewayData
+                                                        .getMappedTasks();
 
-												applicationFlowLogs.info("Gateway next nodes={}",
-														nextToGateway.stream().map(t -> t.getNode().getId()).toList());
+                                                applicationFlowLogs.info("Gateway next nodes={}",
+                                                        nextToGateway.stream().map(t -> t.getNode().getId()).toList());
 
-												String behaviour = next.getBehaviour();
+                                                String behaviour = next.getBehaviour();
 
-												if (isDivergentGateway(behaviour)) {
+                                                if (isDivergentGateway(behaviour)) {
 
-													applicationFlowLogs.info(
-															"Processing Divergent Gateway gatewayId={}", next.getId());
+                                                    applicationFlowLogs.info(
+                                                            "Processing Divergent Gateway gatewayId={}", next.getId());
 
-													return Flux.fromIterable(nextToGateway)
+                                                    return Flux.fromIterable(nextToGateway)
 
-															.doOnNext(mappedTask -> applicationFlowLogs.info(
-																	"Resolving gateway child task={}",
-																	mappedTask.getNode().getId()))
+                                                            .doOnNext(mappedTask -> applicationFlowLogs.info(
+                                                                    "Resolving gateway child task={}",
+                                                                    mappedTask.getNode().getId()))
 
-															.flatMap(mappedTask -> nextAllowedOfficeLocation(wf,
-																	mappedTask.getNode(), txn.getTxnId(),
-																	service.getServiceId(), user,
-																	taskLocationUserHolderMap))
+                                                            .flatMap(mappedTask -> nextAllowedOfficeLocation(wf,
+                                                                    mappedTask.getNode(), txn.getTxnId(),
+                                                                    service.getServiceId(), user,
+                                                                    taskLocationUserHolderMap))
 
-															.collectList()
+                                                            .collectList()
 
-															.doOnNext(gatewayLocations -> applicationFlowLogs.info(
-																	"Gateway child locations resolved={}",
-																	gatewayLocations))
+                                                            .doOnNext(gatewayLocations -> applicationFlowLogs.info(
+                                                                    "Gateway child locations resolved={}",
+                                                                    gatewayLocations))
 
-															.flatMap(gatewayLocations -> {
+                                                            .flatMap(gatewayLocations -> {
 
-																applicationFlowLogs.info(
-																		"Executing Gateway MVEL gatewayId={}, map={}",
-																		next.getId(), taskLocationUserHolderMap);
+                                                                applicationFlowLogs.info(
+                                                                        "Executing Gateway MVEL gatewayId={}, map={}",
+                                                                        next.getId(), taskLocationUserHolderMap);
 
-																return executeGatewayMvel(service, ad, txn, "",
-																		currentActionProcess, next.getId(),
-																		nextToGateway, taskLocationUserHolderMap)
+                                                                return executeGatewayMvel(service, ad, txn, "",
+                                                                        currentActionProcess, next.getId(),
+                                                                        nextToGateway, taskLocationUserHolderMap)
 
-																		.map(filteredTasks -> {
+                                                                        .map(filteredTasks -> {
 
-																			applicationFlowLogs.info(
-																					"Gateway selected taskIds={}",
-																					filteredTasks.stream().map(
-																							t -> t.getNode().getId())
-																							.toList());
+                                                                            applicationFlowLogs.info(
+                                                                                    "Gateway selected taskIds={}",
+                                                                                    filteredTasks.stream().map(
+                                                                                                    t -> t.getNode().getId())
+                                                                                            .toList());
 
-																			return Map.entry(gatewayLocations,
-																					filteredTasks);
-																		});
-															})
+                                                                            return Map.entry(gatewayLocations,
+                                                                                    filteredTasks);
+                                                                        });
+                                                            })
 
-															.flatMapMany(entry -> {
+                                                            .flatMapMany(entry -> {
 
-																List<TaskAvailableOfficeLocation> gatewayLocations = entry
-																		.getKey();
+                                                                List<TaskAvailableOfficeLocation> gatewayLocations = entry
+                                                                        .getKey();
 
-																List<ServiceWorkFlow.Data.MappedTask> filteredTasks = entry
-																		.getValue();
+                                                                List<ServiceWorkFlow.Data.MappedTask> filteredTasks = entry
+                                                                        .getValue();
 
-																applicationFlowLogs.info(
-																		"Refreshing gateway office locations using map={}",
-																		taskLocationUserHolderMap);
+                                                                applicationFlowLogs.info(
+                                                                        "Refreshing gateway office locations using map={}",
+                                                                        taskLocationUserHolderMap);
 
-																Map<String, TaskAvailableOfficeLocation> locationByTaskId = gatewayLocations
-																		.stream()
-																		.collect(Collectors.toMap(
-																				TaskAvailableOfficeLocation::getTaskId,
-																				Function.identity()));
+                                                                Map<String, TaskAvailableOfficeLocation> locationByTaskId = gatewayLocations
+                                                                        .stream()
+                                                                        .collect(Collectors.toMap(
+                                                                                TaskAvailableOfficeLocation::getTaskId,
+                                                                                Function.identity()));
 
-																filteredTasks.forEach(filteredTask -> {
+                                                                filteredTasks.forEach(filteredTask -> {
 
-																	TaskAvailableOfficeLocation location = locationByTaskId
-																			.get(filteredTask.getNode().getId());
+                                                                    TaskAvailableOfficeLocation location = locationByTaskId
+                                                                            .get(filteredTask.getNode().getId());
 
-																	if (location != null) {
+                                                                    if (location != null) {
 
-																		applicationFlowLogs.info(
-																				"Refreshing location for selected gateway task={}",
-																				filteredTask.getNode().getId());
+                                                                        applicationFlowLogs.info(
+                                                                                "Refreshing location for selected gateway task={}",
+                                                                                filteredTask.getNode().getId());
 
-																		refreshTaskAvailableOfficeLocation(location,
-																				taskLocationUserHolderMap);
+                                                                        refreshTaskAvailableOfficeLocation(location,
+                                                                                taskLocationUserHolderMap);
 
-																		taskAvailableOfficeLocations.add(location);
-																	}
-																});
+                                                                        taskAvailableOfficeLocations.add(location);
+                                                                    }
+                                                                });
 
-																return Flux.fromIterable(filteredTasks);
-															})
+                                                                return Flux.fromIterable(filteredTasks);
+                                                            })
 
-															.map(filteredTask -> {
+                                                            .map(filteredTask -> {
 
-																applicationFlowLogs.info(
-																		"Creating gateway process for nodeId={}",
-																		filteredTask.getNode().getId());
+                                                                applicationFlowLogs.info(
+                                                                        "Creating gateway process for nodeId={}",
+                                                                        filteredTask.getNode().getId());
 
-																return buildGatewayNextProcess(baseProcess, next,
-																		filteredTask.getNode(), service, ad, user, now,
-																		taskAvailableOfficeLocations, wf, txn);
-															}).next();
-												}
+                                                                return buildGatewayNextProcess(baseProcess, next,
+                                                                        filteredTask.getNode(), service, ad, user, now,
+                                                                        taskAvailableOfficeLocations, wf, txn);
+                                                            }).next();
+                                                }
 
-												if (isConvergentGateway(behaviour)) {
+                                                if (isConvergentGateway(behaviour)) {
 
-													applicationFlowLogs.info(
-															"Processing Convergent Gateway gatewayId={}", next.getId());
+                                                    applicationFlowLogs.info(
+                                                            "Processing Convergent Gateway gatewayId={}", next.getId());
 
-													ServiceWorkFlow.Data.Nodes nextNode = nextToGatewayData.getNode();
+                                                    ServiceWorkFlow.Data.Nodes nextNode = nextToGatewayData.getNode();
 
-													CurrentProcess cp = buildGatewayNextProcess(baseProcess, next,
-															nextNode, service, ad, user, now,
-															taskAvailableOfficeLocations, wf, txn);
+                                                    CurrentProcess cp = buildGatewayNextProcess(baseProcess, next,
+                                                            nextNode, service, ad, user, now,
+                                                            taskAvailableOfficeLocations, wf, txn);
 
-													applicationFlowLogs.info(
-															"Convergent Gateway produced process for nodeId={}",
-															nextNode.getId());
+                                                    applicationFlowLogs.info(
+                                                            "Convergent Gateway produced process for nodeId={}",
+                                                            nextNode.getId());
 
-													return Mono.just(cp);
-												}
-											}
+                                                    return Mono.just(cp);
+                                                }
+                                            }
 
-											applicationFlowLogs.info("Returning normal base process for taskId={}",
-													next.getId());
+                                            applicationFlowLogs.info("Returning normal base process for taskId={}",
+                                                    next.getId());
 
-											return Mono.just(baseProcess);
-										}));
-							});
+                                            return Mono.just(baseProcess);
+                                        }));
+                            });
 
-				})
+                })
 
-				.collectList()
+                .collectList()
 
-				.map(processList -> {
+                .map(processList -> {
 
-					applicationFlowLogs.info("Workflow processing completed. Generated process count={}",
-							processList.size());
+                    applicationFlowLogs.info("Workflow processing completed. Generated process count={}",
+                            processList.size());
 
-					processList.add(currentActionProcess);
+                    processList.add(currentActionProcess);
 
-					if (!pList.isEmpty()) {
-						processList.add(pList.getFirst());
-					}
+                    if (!pList.isEmpty()) {
+                        processList.add(pList.getFirst());
+                    }
 
-					InboxKafka inboxKafkaDto = new InboxKafka();
-					inboxKafkaDto.setProcessList(processList);
-					inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
-					inboxKafkaDto.setServiceName(service.getServiceName());
+                    InboxKafka inboxKafkaDto = new InboxKafka();
+                    inboxKafkaDto.setProcessList(processList);
+                    inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
+                    inboxKafkaDto.setServiceName(service.getServiceName());
+                    inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
+                    inboxKafkaDto.setServiceName(service.getServiceName());
+                    inboxKafkaDto.setAppliedBy(ad.getBeneficiaryId());
+                    inboxKafkaDto.setBeneficiaryName(ad.getBeneficiaryName());
+                    inboxKafkaDto.setApplyDate(ad.getApplyDate());
 
-					applicationFlowLogs.info("InboxKafka prepared txnId={}, processCount={}, officeLocationCount={}",
-							txn.getTxnId(), inboxKafkaDto.getProcessList().size(),
-							inboxKafkaDto.getOfficeDetails().size());
+                    applicationFlowLogs.info("InboxKafka prepared txnId={}, processCount={}, officeLocationCount={}",
+                            txn.getTxnId(), inboxKafkaDto.getProcessList().size(),
+                            inboxKafkaDto.getOfficeDetails().size());
 
-					applicationFlowLogs.info("Final taskLocationUserHolderMap={}", taskLocationUserHolderMap);
+                    applicationFlowLogs.info("Final taskLocationUserHolderMap={}", taskLocationUserHolderMap);
 
-					return inboxKafkaDto;
-				})
+                    return inboxKafkaDto;
+                })
 
-				.doOnError(
-						ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
-	}
-    
+                .doOnError(
+                        ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
+    }
+
     private CurrentProcess buildBaseProcess(CurrentProcess currentActionProcess,ServiceWorkFlow.Data.Nodes currentNode,ServiceWorkFlow.Data.Nodes currentTask,
-            ServiceMeta service,ApplicationDetails ad,UserSessionObject user,
-            LocalDateTime now,List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,List<ServiceWorkFlow.Data> wf,
-            ProcessingTxn txn
+                                            ServiceMeta service,ApplicationDetails ad,UserSessionObject user,
+                                            LocalDateTime now,List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,List<ServiceWorkFlow.Data> wf,
+                                            ProcessingTxn txn
     ) {
 
         CurrentProcess cp = new CurrentProcess();
@@ -351,13 +356,14 @@ public class WorkflowService {
         cp.setBaseServiceId(service.getBaseServiceId());
         cp.setFormId(currentTask.getFormId());
         if(TYPE_GATEWAY.equals(currentTask.getType())){
-        	cp.setActionTaken("Y");
-        	cp.setProcessId(createUniqueId());
-        	cp.setActionOn(now);
+            cp.setActionTaken("Y");
+            cp.setProcessId(createUniqueId());
+            cp.setActionOn(now);
+            cp.setGateway(Boolean.TRUE);
         }else{
-    	  cp.setInitiatedOn(now);
-    	  cp.setProcessId(createUniqueId());
-        }       
+            cp.setInitiatedOn(now);
+            cp.setProcessId(createUniqueId());
+        }
         cp.setProcessId(createUniqueId());
         cp.setNewEntity(true);
         cp.setActionCode(FALLBACK_ACTION_NO);
@@ -418,7 +424,7 @@ public class WorkflowService {
         }
         return null;
     }
-    
+
     private Mono<List<ServiceWorkFlow.Data.MappedTask>> executeGatewayMvel(
 
             ServiceMeta service,
@@ -441,7 +447,7 @@ public class WorkflowService {
                 nextNodeIds,
                 taskLocationUserHolderMap);
 
-        return apiClient.fetchMvelDetails(service.getServiceId())                     
+        return apiClient.fetchMvelDetails(service.getServiceId())
                 .flatMapMany(Flux::fromIterable)
 
                 .filter(m -> "GW".equalsIgnoreCase(m.getValue()))
@@ -594,176 +600,176 @@ public class WorkflowService {
                 .filter(Objects::nonNull)
                 .toList();
     }
-    
-	private Mono<TaskAvailableOfficeLocation> nextAllowedOfficeLocation(List<ServiceWorkFlow.Data> wf,
-			ServiceWorkFlow.Data.Nodes next, String txnId, Integer serviceId, UserSessionObject user,
-			Map<String, Map<String, List<String>>> taskLocationHolderMap) {
 
-		applicationFlowLogs.info("Calculating nextAllowedOfficeLocation for txnId={}, serviceId={}, taskId={}", txnId,
-				serviceId, next.getId());
+    private Mono<TaskAvailableOfficeLocation> nextAllowedOfficeLocation(List<ServiceWorkFlow.Data> wf,
+                                                                        ServiceWorkFlow.Data.Nodes next, String txnId, Integer serviceId, UserSessionObject user,
+                                                                        Map<String, Map<String, List<String>>> taskLocationHolderMap) {
 
-		TaskAvailableOfficeLocation location = new TaskAvailableOfficeLocation();
-		location.setTaskId(next.getId());
+        applicationFlowLogs.info("Calculating nextAllowedOfficeLocation for txnId={}, serviceId={}, taskId={}", txnId,
+                serviceId, next.getId());
 
-		List<ServiceMeta.AvailableApplyLocations> allowedOffices = wf.stream().filter(d -> d.getNode() != null)
-				.filter(d -> next.getId().equals(d.getNode().getId())).map(ServiceWorkFlow.Data::getAllowedOffices)
-				.filter(Objects::nonNull).findFirst().orElseGet(List::of);
+        TaskAvailableOfficeLocation location = new TaskAvailableOfficeLocation();
+        location.setTaskId(next.getId());
 
-		applicationFlowLogs.info("Allowed offices found for txnId={}, taskId={} : {}", txnId, next.getId(),
-				allowedOffices);
+        List<ServiceMeta.AvailableApplyLocations> allowedOffices = wf.stream().filter(d -> d.getNode() != null)
+                .filter(d -> next.getId().equals(d.getNode().getId())).map(ServiceWorkFlow.Data::getAllowedOffices)
+                .filter(Objects::nonNull).findFirst().orElseGet(List::of);
 
-		location.setAllowedOffices(allowedOffices);
+        applicationFlowLogs.info("Allowed offices found for txnId={}, taskId={} : {}", txnId, next.getId(),
+                allowedOffices);
 
-		return Flux.fromIterable(allowedOffices)
+        location.setAllowedOffices(allowedOffices);
 
-				.doOnNext(office -> applicationFlowLogs.info(
-						"Fetching workflow assignments for txnId={}, taskId={}, locationId={}", txnId, next.getId(),
-						office.getLocationId()))
+        return Flux.fromIterable(allowedOffices)
 
-				.flatMap(office -> apiClient.fetchWorkflowAssignments(serviceId, next.getId(),
-						office.getLocationId().toString(), user, txnId))
+                .doOnNext(office -> applicationFlowLogs.info(
+                        "Fetching workflow assignments for txnId={}, taskId={}, locationId={}", txnId, next.getId(),
+                        office.getLocationId()))
 
-				.doOnNext(assignments -> applicationFlowLogs.info(
-						"Workflow assignments received for txnId={}, taskId={} : {}", txnId, next.getId(), assignments))
+                .flatMap(office -> apiClient.fetchWorkflowAssignments(serviceId, next.getId(),
+                        office.getLocationId().toString(), user, txnId))
 
-				.flatMapIterable(assignments -> assignments)
+                .doOnNext(assignments -> applicationFlowLogs.info(
+                        "Workflow assignments received for txnId={}, taskId={} : {}", txnId, next.getId(), assignments))
 
-				.doOnNext(assignment -> applicationFlowLogs.info("Assignment -> locationId={}, holderId={}",
-						assignment.getLocationId(), assignment.getHolderId()))
+                .flatMapIterable(assignments -> assignments)
 
-				.collectList()
+                .doOnNext(assignment -> applicationFlowLogs.info("Assignment -> locationId={}, holderId={}",
+                        assignment.getLocationId(), assignment.getHolderId()))
 
-				.map(assignments -> {
+                .collectList()
 
-					applicationFlowLogs.info("Total assignments fetched for txnId={}, taskId={} : {}", txnId,
-							next.getId(), assignments.size());
+                .map(assignments -> {
 
-					Map<String, List<String>> locationHolderMap = taskLocationHolderMap.computeIfAbsent(next.getId(),
-							k -> new HashMap<>());
+                    applicationFlowLogs.info("Total assignments fetched for txnId={}, taskId={} : {}", txnId,
+                            next.getId(), assignments.size());
 
-					assignments.stream().filter(a -> a.getLocationId() != null).forEach(a -> {
+                    Map<String, List<String>> locationHolderMap = taskLocationHolderMap.computeIfAbsent(next.getId(),
+                            k -> new HashMap<>());
 
-						applicationFlowLogs.info("Adding holderId={} for locationId={} taskId={}", a.getHolderId(),
-								a.getLocationId(), next.getId());
+                    assignments.stream().filter(a -> a.getLocationId() != null).forEach(a -> {
 
-						locationHolderMap.computeIfAbsent(a.getLocationId(), k -> new ArrayList<>())
-								.add(a.getHolderId());
-					});
+                        applicationFlowLogs.info("Adding holderId={} for locationId={} taskId={}", a.getHolderId(),
+                                a.getLocationId(), next.getId());
 
-					applicationFlowLogs.info("Location holder map before duplicate removal for taskId={} : {}",
-							next.getId(), locationHolderMap);
+                        locationHolderMap.computeIfAbsent(a.getLocationId(), k -> new ArrayList<>())
+                                .add(a.getHolderId());
+                    });
 
-					locationHolderMap.replaceAll(
-							(locationId, holders) -> holders.stream().filter(Objects::nonNull).distinct().toList());
+                    applicationFlowLogs.info("Location holder map before duplicate removal for taskId={} : {}",
+                            next.getId(), locationHolderMap);
 
-					applicationFlowLogs.info("Location holder map after duplicate removal for taskId={} : {}",
-							next.getId(), locationHolderMap);
+                    locationHolderMap.replaceAll(
+                            (locationId, holders) -> holders.stream().filter(Objects::nonNull).distinct().toList());
 
-					location.getAllowedOffices().forEach(office -> {
+                    applicationFlowLogs.info("Location holder map after duplicate removal for taskId={} : {}",
+                            next.getId(), locationHolderMap);
 
-						String officeId = office.getLocationId().toString();
+                    location.getAllowedOffices().forEach(office -> {
 
-						List<String> holderIds = locationHolderMap.getOrDefault(officeId, List.of());
+                        String officeId = office.getLocationId().toString();
 
-						office.setHolderIds(holderIds);
+                        List<String> holderIds = locationHolderMap.getOrDefault(officeId, List.of());
 
-						applicationFlowLogs.info("Mapped office locationId={} with holderIds={} for taskId={}",
-								officeId, holderIds, next.getId());
-					});
+                        office.setHolderIds(holderIds);
 
-					applicationFlowLogs.info("Final taskLocationHolderMap for txnId={}, taskId={} : {}", txnId,
-							next.getId(), taskLocationHolderMap);
+                        applicationFlowLogs.info("Mapped office locationId={} with holderIds={} for taskId={}",
+                                officeId, holderIds, next.getId());
+                    });
 
-					applicationFlowLogs.info("Final TaskAvailableOfficeLocation for txnId={}, taskId={} : {}", txnId,
-							next.getId(), location);
+                    applicationFlowLogs.info("Final taskLocationHolderMap for txnId={}, taskId={} : {}", txnId,
+                            next.getId(), taskLocationHolderMap);
 
-					return location;
-				})
+                    applicationFlowLogs.info("Final TaskAvailableOfficeLocation for txnId={}, taskId={} : {}", txnId,
+                            next.getId(), location);
 
-				.defaultIfEmpty(location)
+                    return location;
+                })
 
-				.doOnSuccess(result -> applicationFlowLogs.info(
-						"Completed nextAllowedOfficeLocation for txnId={}, taskId={}, result={}", txnId, next.getId(),
-						result))
+                .defaultIfEmpty(location)
 
-				.onErrorResume(ex -> {
+                .doOnSuccess(result -> applicationFlowLogs.info(
+                        "Completed nextAllowedOfficeLocation for txnId={}, taskId={}, result={}", txnId, next.getId(),
+                        result))
 
-					applicationFlowLogs.error("Error fetching workflow assignments for txnId={}, taskId={}", txnId,
-							next.getId(), ex);
+                .onErrorResume(ex -> {
 
-					return Mono.just(location);
-				});
-	}
-	
-	private Mono<Void> executeAfterTaskMvel(ServiceMeta service, ApplicationDetails applicationDetails, ProcessingTxn txn, String appData,
-			CurrentProcess currentActionProcess, String taskId, Map<String, Map<String,List<String>>> taskLocationUserHolderMap
-	) {
+                    applicationFlowLogs.error("Error fetching workflow assignments for txnId={}, taskId={}", txnId,
+                            next.getId(), ex);
 
-		return apiClient.fetchMvelDetails(service.getServiceId())
-				.flatMapMany(Flux::fromIterable)
-				.filter(m -> "AT".equalsIgnoreCase(m.getValue())).filter(m -> taskId.equals(m.getNodeId()))
-				.flatMap(m -> apiClient
-						.executeMvel(m.getMvelId(), txn.getTxnId(), "", "AT", currentActionProcess.getApplicationId(),
-								service.getServiceId(), null, appData, null, null, taskLocationUserHolderMap,null)
-						.flatMap(response -> {
-							if (!response.isSuccess()) {
-								return Mono.error(new SPRuntimeError("After Task MVEL failed", HttpStatus.BAD_GATEWAY,
-										txn.getTxnId()));
-							}
-							if (response.getTaskLocationUserHolderMap() != null) {
-								taskLocationUserHolderMap.clear();
-								taskLocationUserHolderMap.putAll(response.getTaskLocationUserHolderMap());
-						    }
-							return Mono.empty();
-						}))
-				.then();
-	}
+                    return Mono.just(location);
+                });
+    }
 
-	private void refreshTaskAvailableOfficeLocation(TaskAvailableOfficeLocation officeLocation,
-			Map<String, Map<String, List<String>>> taskLocationUserHolderMap) {
+    private Mono<Void> executeAfterTaskMvel(ServiceMeta service, ApplicationDetails applicationDetails, ProcessingTxn txn, String appData,
+                                            CurrentProcess currentActionProcess, String taskId, Map<String, Map<String,List<String>>> taskLocationUserHolderMap
+    ) {
 
-		applicationFlowLogs.info("Refreshing office locations for taskId={}, taskLocationUserHolderMap={}",
-				officeLocation.getTaskId(), taskLocationUserHolderMap);
+        return apiClient.fetchMvelDetails(service.getServiceId())
+                .flatMapMany(Flux::fromIterable)
+                .filter(m -> "AT".equalsIgnoreCase(m.getValue())).filter(m -> taskId.equals(m.getNodeId()))
+                .flatMap(m -> apiClient
+                        .executeMvel(m.getMvelId(), txn.getTxnId(), "", "AT", currentActionProcess.getApplicationId(),
+                                service.getServiceId(), null, appData, null, null, taskLocationUserHolderMap,null)
+                        .flatMap(response -> {
+                            if (!response.isSuccess()) {
+                                return Mono.error(new SPRuntimeError("After Task MVEL failed", HttpStatus.BAD_GATEWAY,
+                                        txn.getTxnId()));
+                            }
+                            if (response.getTaskLocationUserHolderMap() != null) {
+                                taskLocationUserHolderMap.clear();
+                                taskLocationUserHolderMap.putAll(response.getTaskLocationUserHolderMap());
+                            }
+                            return Mono.empty();
+                        }))
+                .then();
+    }
 
-		Map<String, List<String>> locationHolderMap = taskLocationUserHolderMap.getOrDefault(officeLocation.getTaskId(),
-				Map.of());
+    private void refreshTaskAvailableOfficeLocation(TaskAvailableOfficeLocation officeLocation,
+                                                    Map<String, Map<String, List<String>>> taskLocationUserHolderMap) {
 
-		applicationFlowLogs.info("Location holder map for taskId {} : {}", officeLocation.getTaskId(),
-				locationHolderMap);
+        applicationFlowLogs.info("Refreshing office locations for taskId={}, taskLocationUserHolderMap={}",
+                officeLocation.getTaskId(), taskLocationUserHolderMap);
 
-		List<ServiceMeta.AvailableApplyLocations> filteredOffices = officeLocation.getAllowedOffices().stream()
-				.filter(office -> {
+        Map<String, List<String>> locationHolderMap = taskLocationUserHolderMap.getOrDefault(officeLocation.getTaskId(),
+                Map.of());
 
-					String locationId = String.valueOf(office.getLocationId());
+        applicationFlowLogs.info("Location holder map for taskId {} : {}", officeLocation.getTaskId(),
+                locationHolderMap);
 
-					List<String> holderIds = locationHolderMap.get(locationId);
+        List<ServiceMeta.AvailableApplyLocations> filteredOffices = officeLocation.getAllowedOffices().stream()
+                .filter(office -> {
 
-					applicationFlowLogs.info("Evaluating taskId={}, locationId={}, holderIds={}",
-							officeLocation.getTaskId(), locationId, holderIds);
+                    String locationId = String.valueOf(office.getLocationId());
 
-					if (holderIds == null || holderIds.isEmpty()) {
+                    List<String> holderIds = locationHolderMap.get(locationId);
 
-						applicationFlowLogs.info("Removing locationId={} for taskId={} because no holders found",
-								locationId, officeLocation.getTaskId());
+                    applicationFlowLogs.info("Evaluating taskId={}, locationId={}, holderIds={}",
+                            officeLocation.getTaskId(), locationId, holderIds);
 
-						return false;
-					}
+                    if (holderIds == null || holderIds.isEmpty()) {
 
-					office.setHolderIds(holderIds);
+                        applicationFlowLogs.info("Removing locationId={} for taskId={} because no holders found",
+                                locationId, officeLocation.getTaskId());
 
-					applicationFlowLogs.info("Retaining locationId={} for taskId={} with holderIds={}", locationId,
-							officeLocation.getTaskId(), holderIds);
+                        return false;
+                    }
 
-					return true;
-				}).toList();
+                    office.setHolderIds(holderIds);
 
-		applicationFlowLogs.info("Filtered offices for taskId={} before={}, after={}", officeLocation.getTaskId(),
-				officeLocation.getAllowedOffices().size(), filteredOffices.size());
+                    applicationFlowLogs.info("Retaining locationId={} for taskId={} with holderIds={}", locationId,
+                            officeLocation.getTaskId(), holderIds);
 
-		officeLocation.setAllowedOffices(new ArrayList<>(filteredOffices));
+                    return true;
+                }).toList();
 
-		applicationFlowLogs.info("Final office locations for taskId={} : {}", officeLocation.getTaskId(),
-				officeLocation.getAllowedOffices());
-	}
-	
+        applicationFlowLogs.info("Filtered offices for taskId={} before={}, after={}", officeLocation.getTaskId(),
+                officeLocation.getAllowedOffices().size(), filteredOffices.size());
+
+        officeLocation.setAllowedOffices(new ArrayList<>(filteredOffices));
+
+        applicationFlowLogs.info("Final office locations for taskId={} : {}", officeLocation.getTaskId(),
+                officeLocation.getAllowedOffices());
+    }
+
 }

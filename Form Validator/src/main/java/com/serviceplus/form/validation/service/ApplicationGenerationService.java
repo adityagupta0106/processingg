@@ -153,6 +153,7 @@ public class ApplicationGenerationService {
                     cp.setActionOn(LocalDateTime.now());
                     cp.setDataId(dataId);
                     cp.setUserId(user.getUserID().longValue());
+                    cp.setFormId(service.getFormId());
                     return workflowService.generateNextWorkflow(ad,savedLog,service,user,cp).
                             flatMap(inboxKafka -> persistWorkflow(ad, (InboxKafka) inboxKafka, savedLog)
                                     .doOnSuccess(_ -> sendToInboxService((InboxKafka) inboxKafka,ad,service)));
