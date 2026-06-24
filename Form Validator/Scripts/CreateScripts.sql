@@ -83,3 +83,8 @@ CREATE TABLE IF NOT EXISTS schm_sp.processing_transactions
     CONSTRAINT processing_transactions_pkey PRIMARY KEY (txn_id)
 )
 
+
+alter table schm_sp.application_flow_status add column service_id integer;
+alter table schm_sp.application_flow_status add column task_id character varying;
+alter table schm_sp.current_process add column base_service_id integer;
+alter table schm_sp.application_details add column service_name character varying;
