@@ -11,7 +11,7 @@ public class MvelExecutionResponse {
     private String error;
     private Map<String,Object> dataResponse=new HashMap<>();
     private List<Map<String,Object>> attributeResponse=new ArrayList<Map<String,Object>>();
-    private Map<String,List<Integer>> userList;
+    private Map<String, Map<String,List<String>>> taskLocationUserHolderMap;
     private List<String> nextNodeList=new ArrayList<String>();
 	public boolean isSuccess() {
 		return success;
@@ -37,11 +37,12 @@ public class MvelExecutionResponse {
 	public void setAttributeResponse(List<Map<String, Object>> attributeResponse) {
 		this.attributeResponse = attributeResponse;
 	}
-	public Map<String, List<Integer>> getUserList() {
-		return userList;
+	
+	public Map<String, Map<String, List<String>>> getTaskLocationUserHolderMap() {
+		return taskLocationUserHolderMap;
 	}
-	public void setUserList(Map<String, List<Integer>> userList) {
-		this.userList = userList;
+	public void setTaskLocationUserHolderMap(Map<String, Map<String, List<String>>> taskLocationUserHolderMap) {
+		this.taskLocationUserHolderMap = taskLocationUserHolderMap;
 	}
 	public List<String> getNextNodeList() {
 		return nextNodeList;

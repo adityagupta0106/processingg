@@ -40,6 +40,7 @@ public class ServiceMeta {
     public static class AvailableApplyLocations{
         private Long orgUnitCode;
         private String orgUnitName;
+        private List<String> holderIds;
 
         public Long getLocationId() {
             return orgUnitCode;
@@ -57,7 +58,15 @@ public class ServiceMeta {
             this.orgUnitName = locationName;
         }
 
-        @Override
+        public List<String> getHolderIds() {
+			return holderIds;
+		}
+
+		public void setHolderIds(List<String> holderIds) {
+			this.holderIds = holderIds;
+		}
+
+		@Override
         public String toString() {
             return "AvailableApplyLocations{" +
                     "orgUnitCode=" + orgUnitCode +
