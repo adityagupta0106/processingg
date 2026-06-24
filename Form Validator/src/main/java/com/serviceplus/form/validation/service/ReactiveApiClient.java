@@ -10,7 +10,6 @@ import com.serviceplus.form.validation.dto.*;
 import com.serviceplus.form.validation.executor.ApiExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.reactivestreams.Publisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
@@ -46,10 +45,8 @@ public class ReactiveApiClient {
     
     @Value("${mvel.execution.service}")
     private String MVEL_EXECUTION_SERVICE;
-
     @Value("${tracking.service}")
     private String TRACKING_SERVICE;
-
     @Autowired
     private ObjectMapper mapper;
 
@@ -326,7 +323,7 @@ public class ReactiveApiClient {
             String formData,
             Map<String, Object> appDetails,
             Map<String, Object> serviceDetails,
-            Map<String, List<Integer>> userList,
+            Map<String, Map<String,List<String>>> taskLocationUserHolderMap,
             List<String> nextNodeList
     ) {
 
@@ -344,8 +341,9 @@ public class ReactiveApiClient {
         request.setFormData(formData);
         request.setApplicationDetails(appDetails);
         request.setServiceDetails(serviceDetails);
-        request.setUserList(userList);
+        request.setTaskLocationUserHolderMap(taskLocationUserHolderMap);
         request.setNextNodeList(nextNodeList);
+        
 
         return AsynchronousApiExecutor.callExternalEndpoint(
                 MvelExecutionResponse.class,
@@ -379,8 +377,34 @@ public class ReactiveApiClient {
             return Mono.just(errorRes);
         });
     }
+    
+	public Mono<List<WorkflowAssignmentDTO>> fetchWorkflowAssignments(Integer serviceId, String taskId,
+			String locationId, UserSessionObject user, String txnId) {
 
-    @SuppressWarnings("unchecked")
+		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+		String url = METADATA_SERVICE.concat("workflow/assignment-details?");
+
+		Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(String.class,
+				HttpMethod.GET, headers, Map.of("serviceId", serviceId, "taskId", taskId, "locationId", locationId),
+				url, null, MediaType.APPLICATION_JSON);
+
+		return callExternalEndpoint.flatMap(apiResponse -> {
+
+			String body = apiResponse.getBody();
+
+			Type listType = new TypeToken<List<WorkflowAssignmentDTO>>() {
+			}.getType();
+
+			List<WorkflowAssignmentDTO> assignments = (List<WorkflowAssignmentDTO>) stringToEntityUsingType(body,
+					listType);
+
+			return Mono.just(assignments);
+
+		}).onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex, txnId));
+	}
+	
+	@SuppressWarnings("unchecked")
     public Mono<List<WorkflowInboxResponse>> fetchWFPInbox(UserSessionObject user) {
 
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));

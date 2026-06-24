@@ -17,7 +17,7 @@ public class MvelExecutionRequest {
     private Map<String, Object> inputAttributeMap;
     private Map<String, Object> applicationDetails;
     private Map<String, Object> serviceDetails;
-    private Map<String,List<Integer>> userList;
+    private Map<String, Map<String,List<String>>> taskLocationUserHolderMap;
     private List<String> nextNodeList;
 	public Integer getServiceId() {
 		return serviceId;
@@ -91,11 +91,11 @@ public class MvelExecutionRequest {
 	public void setServiceDetails(Map<String, Object> serviceDetails) {
 		this.serviceDetails = serviceDetails;
 	}
-	public Map<String, List<Integer>> getUserList() {
-		return userList;
+	public Map<String, Map<String, List<String>>> getTaskLocationUserHolderMap() {
+		return taskLocationUserHolderMap;
 	}
-	public void setUserList(Map<String, List<Integer>> userList) {
-		this.userList = userList;
+	public void setTaskLocationUserHolderMap(Map<String, Map<String, List<String>>> taskLocationUserHolderMap) {
+		this.taskLocationUserHolderMap = taskLocationUserHolderMap;
 	}
 	public List<String> getNextNodeList() {
 		return nextNodeList;
