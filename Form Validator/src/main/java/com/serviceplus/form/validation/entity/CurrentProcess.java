@@ -55,6 +55,9 @@ public class CurrentProcess implements Persistable<String> {
     @Transient
     private boolean newEntity = false;
 
+    @Transient
+    private Boolean gateway = false;
+
     @Override
     @Transient
     public boolean isNew() {
@@ -224,6 +227,14 @@ public class CurrentProcess implements Persistable<String> {
 
     public void setFormId(String formId) {
         this.formId = formId;
+    }
+
+    public Boolean getGateway() {
+        return gateway;
+    }
+
+    public void setGateway(Boolean gateway) {
+        this.gateway = gateway;
     }
 }
 

@@ -136,6 +136,7 @@ public class PreProcessingFacade {
         applicationDetails.setNewEntity(newEntityFlag);
         applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getLocationId().intValue());
         applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getLocationName());
+        applicationDetails.setServiceName(service.getServiceName());
 
         applicationFlowLogs.info(
                 "Preparing ApplicationFlowStatusEntity for txnId : {}",

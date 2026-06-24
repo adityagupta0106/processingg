@@ -26,6 +26,7 @@ public class ApplicationDetails implements Persistable<String> {
     private String grievanceApplicationId;
     private Long beneficiaryId;
     private String tenantId;
+    private String serviceName;
 
     public ApplicationDetails(){}
 
@@ -165,5 +166,13 @@ public class ApplicationDetails implements Persistable<String> {
 
     public void setNewEntity(boolean newEntity) {
         this.newEntity = newEntity;
+    }
+
+    public String getServiceName() {
+        return serviceName;
+    }
+
+    public void setServiceName(String serviceName) {
+        this.serviceName = serviceName;
     }
 }

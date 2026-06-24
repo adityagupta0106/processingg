@@ -1,6 +1,9 @@
 package com.serviceplus.form.validation.dto;
 
 import com.serviceplus.form.validation.entity.CurrentProcess;
+
+import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.List;
 
 public class InboxKafka {
@@ -9,6 +12,9 @@ public class InboxKafka {
     private String locationName;
     private String serviceName;
     private String applicationRefNo;
+    private Long appliedBy;
+    private String beneficiaryName;
+    private LocalDateTime applyDate;
 
     private List<TaskAvailableOfficeLocation> officeDetails;
     private List<CurrentProcess> processList;
@@ -59,5 +65,29 @@ public class InboxKafka {
 
     public void setApplicationRefNo(String applicationRefNo) {
         this.applicationRefNo = applicationRefNo;
+    }
+
+    public Long getAppliedBy() {
+        return appliedBy;
+    }
+
+    public void setAppliedBy(Long appliedBy) {
+        this.appliedBy = appliedBy;
+    }
+
+    public String getBeneficiaryName() {
+        return beneficiaryName;
+    }
+
+    public void setBeneficiaryName(String beneficiaryName) {
+        this.beneficiaryName = beneficiaryName;
+    }
+
+    public LocalDateTime getApplyDate() {
+        return applyDate;
+    }
+
+    public void setApplyDate(LocalDateTime applyDate) {
+        this.applyDate = applyDate;
     }
 }

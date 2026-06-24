@@ -54,7 +54,6 @@ public class ApplicationManagerService implements IApplicationManagerService{
                             Applications app = new Applications();
                             app.setApplicationId(item.getApplicationId());
                             app.setServiceId(item.getServiceId());
-                            app.setApplyDate(item.getApplyDate().format(formatter));
                             if(APPLICATION_STATUS_DRAFT.equals(status)) {
                                 app.setDraftRefNo(item.getDraftReferenceNo());
                             }

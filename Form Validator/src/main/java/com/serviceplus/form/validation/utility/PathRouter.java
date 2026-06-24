@@ -42,7 +42,7 @@ public class PathRouter {
                 .andRoute(POST(contextPath + "/a/form/handler/loadDraft"), handlerController::draft)
                 .andRoute(POST(contextPath + "/a/apply/serviceKey"), preProcessingController::fetchServiceKey)
                 .andRoute(POST(contextPath + "/a/form/edit"), handlerController::edit)
-                .andRoute(POST(contextPath + "/a/app/list"), applicationFetchController::getApplicationList)
+                .andRoute(POST(contextPath + "/a/app/draft/list"), applicationFetchController::fetchApplications)
                 .andRoute(POST(contextPath + "/a/app/preload"), applicationFetchController::loadApplicationAndFetchServiceKey)
                 .andRoute(POST(contextPath + "/a/workflow/inbox/list"), preProcessingController::getWFPInbox);
     }
