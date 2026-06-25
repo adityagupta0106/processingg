@@ -11,6 +11,6 @@ import java.util.Map;
 
 public interface IApplicationManagerService {
 
-    Mono<List<Applications>> fetch(Integer userId, String status, Integer offSet, List<String> refNos,
+    Mono<List<Applications>> fetch(Long userId, String status, Integer offSet, List<String> refNos,
                                    LocalDateTime from, LocalDateTime to, UserSessionObject user, Map<String, Object> params,String dateColumn);
 }

@@ -71,7 +71,7 @@ public class EventRouter {
                 .switchIfEmpty(
                         flow.switchIfEmpty(Mono.error(new SPRuntimeError("Invalid Form Request [H - 01]", HttpStatus.BAD_REQUEST,txnId)))
                             .flatMap(fl ->
-                                generate(fl.getActivityType(), applicationId, request, txnId, Mono.empty(), fl,services,false,fromDraft,0)
+                                generate(fl.getActivityType(), applicationId, request, txnId, Mono.empty(), fl,services,false,fromDraft,0l)
                              )
                 );
 
@@ -79,7 +79,7 @@ public class EventRouter {
     }
 
     public Mono<ServerResponse> generate(String statusKey, String applicationId, ServerRequest request, String txnId, Mono<TempTransactionLogs> fetch,
-                                         ApplicationFlowStatusEntity flow, ServiceMeta service, boolean cache, boolean fromDraft, Integer userId) {
+                                         ApplicationFlowStatusEntity flow, ServiceMeta service, boolean cache, boolean fromDraft, Long userId) {
         ApplicationFlowHandler handler = HANDLERS.get(statusKey);
 
         if (handler != null) {
@@ -107,7 +107,7 @@ public class EventRouter {
     }
 
     public Mono<ServerResponse> next(String statusKey, String applicationId, ServerRequest request, Mono<TempTransactionLogs> fetch,
-                                     ApplicationFlowStatusEntity flow, ServiceMeta service, String txnId, boolean fromDraft, Integer userId) {
+                                     ApplicationFlowStatusEntity flow, ServiceMeta service, String txnId, boolean fromDraft, Long userId) {
 
         ApplicationFlowHandler handler = HANDLERS.get(statusKey);
 
