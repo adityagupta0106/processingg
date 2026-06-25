@@ -10,7 +10,7 @@ public class TempTransactionLogs {
     private ServiceMeta service;
     private String userIp;
     private Date startTime;
-    private Integer userId;
+    private Long userId;
 
     public TempTransactionLogs(){
         this.startTime = new Date();
@@ -48,11 +48,11 @@ public class TempTransactionLogs {
         this.startTime = startTime;
     }
 
-    public Integer getUserId() {
-        return userId;
-    }
+	public Long getUserId() {
+		return userId;
+	}
 
-    public void setUserId(Integer userId) {
-        this.userId = userId;
-    }
+	public void setUserId(Long userId) {
+		this.userId = userId;
+	}
 }

@@ -21,5 +21,5 @@ public interface ApplicationDetailsRepository extends ReactiveCrudRepository<App
             LocalDateTime to
     );
 
-    Mono<Object> findByApplicationIdAndBeneficiaryIdAndStatusAndTenantId(String appId, Integer userID, String status, String tenantId);
+    Mono<Object> findByApplicationIdAndBeneficiaryIdAndStatusAndTenantId(String appId, Long userID, String status, String tenantId);
 }

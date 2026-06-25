@@ -32,7 +32,7 @@ public class ApplicationManagerService implements IApplicationManagerService{
 
     @Override
     @SuppressWarnings("unchecked")
-    public Mono<List<Applications>> fetch(Integer userId, String status, Integer offSet, List<String> refNos,
+    public Mono<List<Applications>> fetch(Long userId, String status, Integer offSet, List<String> refNos,
                                           LocalDateTime from, LocalDateTime to, UserSessionObject user, Map<String, Object> params,String dateColumn) {
 
 

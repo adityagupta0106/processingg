@@ -4,31 +4,35 @@ import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
 
+
 public class UserSessionObject implements Serializable{
 
 	/**
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-	private Integer userID;
+	private Long userID;
 	private Date lastCheck;
 	private String signNo;
-	private Integer stateId;
+	private Integer clcId;
 	private List<Roles> roles;
 	private String userIdentifier;
 	private String emailId;
 	private String jwt;
 	private Integer locationId;
 	private String locationName;
-	private Integer departmentId;
-	private String stateName;
+	private Integer entityId;
+	private String clcName;
 	private String mobileNo;
 	private String userName;
 	private Integer designationId;
-	private Integer departmentLevelId;
-	private String departmentLevelName;
-	private String csrfToken;
-	private String tenantId;
+	private Integer entityLevelId;
+	private String entityLevelName;
+    private Integer categoryId;
+    private String tenantId;
+    private Boolean isTopLevelAdmin;
+    private String atk;
+
 	
 	public static class Roles  implements Serializable{
 		private static final long serialVersionUID = 1L;
@@ -56,14 +60,6 @@ public class UserSessionObject implements Serializable{
 		public void setRoleName(String roleName) {
 			this.roleName = roleName;
 		}
-	}
-	
-	public Integer getUserID() {
-		return userID;
-	}
-
-	public void setUserID(Integer userID) {
-		this.userID = userID;
 	}
 
 
@@ -93,22 +89,6 @@ public class UserSessionObject implements Serializable{
 		this.locationName = locationName;
 	}
 
-	public Integer getDepartmentId() {
-		return departmentId;
-	}
-
-	public void setDepartmentId(Integer departmentId) {
-		this.departmentId = departmentId;
-	}
-
-	public String getStateName() {
-		return stateName;
-	}
-
-	public void setStateName(String stateName) {
-		this.stateName = stateName;
-	}
-
 	public static long getSerialversionuid() {
 		return serialVersionUID;
 	}
@@ -120,16 +100,6 @@ public class UserSessionObject implements Serializable{
 
 	public void setSignNo(String signNo) {
 		this.signNo = signNo;
-	}
-
-
-	public Integer getStateId() {
-		return stateId;
-	}
-
-
-	public void setStateId(Integer stateId) {
-		this.stateId = stateId;
 	}
 
 
@@ -193,36 +163,83 @@ public class UserSessionObject implements Serializable{
 		this.designationId = designationId;
 	}
 
-	public Integer getDepartmentLevelId() {
-		return departmentLevelId;
-	}
+    public String getTenantId() {
+        return tenantId;
+    }
 
-	public void setDepartmentLevelId(Integer departmentLevelId) {
-		this.departmentLevelId = departmentLevelId;
-	}
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
 
-	public String getDepartmentLevelName() {
-		return departmentLevelName;
-	}
+    public Boolean getTopLevelAdmin() {
+        return isTopLevelAdmin;
+    }
 
-	public void setDepartmentLevelName(String departmentLevelName) {
-		this.departmentLevelName = departmentLevelName;
-	}
+    public void setTopLevelAdmin(Boolean topLevelAdmin) {
+        isTopLevelAdmin = topLevelAdmin;
+    }
 
-	public String getCsrfToken() {
-		return csrfToken;
-	}
+    public String getAtk() {
+        return atk;
+    }
 
-	public void setCsrfToken(String csrfToken) {
-		this.csrfToken = csrfToken;
-	}
+    public void setAtk(String atk) {
+        this.atk = atk;
+    }
 
-	public String getTenantId() {
-		return tenantId;
-	}
+    public Integer getClcId() {
+        return clcId;
+    }
 
-	public void setTenantId(String tenantId) {
-		this.tenantId = tenantId;
-	}
-	
+    public void setClcId(Integer clcId) {
+        this.clcId = clcId;
+    }
+
+    public Integer getEntityId() {
+        return entityId;
+    }
+
+    public void setEntityId(Integer entityId) {
+        this.entityId = entityId;
+    }
+
+    public String getClcName() {
+        return clcName;
+    }
+
+    public void setClcName(String clcName) {
+        this.clcName = clcName;
+    }
+
+    public Integer getEntityLevelId() {
+        return entityLevelId;
+    }
+
+    public void setEntityLevelId(Integer entityLevelId) {
+        this.entityLevelId = entityLevelId;
+    }
+
+    public String getEntityLevelName() {
+        return entityLevelName;
+    }
+
+    public void setEntityLevelName(String entityLevelName) {
+        this.entityLevelName = entityLevelName;
+    }
+
+    public Integer getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Integer categoryId) {
+        this.categoryId = categoryId;
+    }
+
+    public Long getUserID() {
+        return userID;
+    }
+
+    public void setUserID(Long userID) {
+        this.userID = userID;
+    }
 }

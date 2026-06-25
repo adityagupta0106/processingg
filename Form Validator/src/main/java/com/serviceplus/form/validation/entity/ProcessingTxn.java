@@ -23,7 +23,7 @@ public class ProcessingTxn implements Persistable<String>{
 
     private String applicationId;
 
-	private Integer userId;
+	private Long userId;
 
     private String userIp;
 	
@@ -54,7 +54,7 @@ public class ProcessingTxn implements Persistable<String>{
 	}
 
 	public ProcessingTxn(String txnId, String formId, Integer serviceId, String taskId, LocalDateTime pageStartTime,
-                         LocalDateTime formEndTime, Integer userId, String tenantId, String userIp, String applicationId) {
+                         LocalDateTime formEndTime, Long userId, String tenantId, String userIp, String applicationId) {
 		super();
 		this.txnId = txnId;
 		this.formId = formId;
@@ -115,11 +115,11 @@ public class ProcessingTxn implements Persistable<String>{
         this.endTime = endTime;
     }
 
-    public Integer getUserId() {
+	public Long getUserId() {
 		return userId;
 	}
 
-	public void setUserId(Integer userId) {
+	public void setUserId(Long userId) {
 		this.userId = userId;
 	}
 
