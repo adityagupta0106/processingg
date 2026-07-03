@@ -15,6 +15,8 @@ public class InboxKafka {
     private Long appliedBy;
     private String beneficiaryName;
     private LocalDateTime applyDate;
+    private Integer loggedInUserLocation;
+    private Long loggedInUserId;
 
     private List<TaskAvailableOfficeLocation> officeDetails;
     private List<CurrentProcess> processList;
@@ -89,5 +91,21 @@ public class InboxKafka {
 
     public void setApplyDate(LocalDateTime applyDate) {
         this.applyDate = applyDate;
+    }
+
+    public Integer getLoggedInUserLocation() {
+        return loggedInUserLocation;
+    }
+
+    public void setLoggedInUserLocation(Integer loggedInUserLocation) {
+        this.loggedInUserLocation = loggedInUserLocation;
+    }
+
+    public Long getLoggedInUserId() {
+        return loggedInUserId;
+    }
+
+    public void setLoggedInUserId(Long loggedInUserId) {
+        this.loggedInUserId = loggedInUserId;
     }
 }

@@ -323,6 +323,8 @@ public class WorkflowService {
                     inboxKafkaDto.setAppliedBy(ad.getBeneficiaryId());
                     inboxKafkaDto.setBeneficiaryName(ad.getBeneficiaryName());
                     inboxKafkaDto.setApplyDate(ad.getApplyDate());
+                    inboxKafkaDto.setLoggedInUserId(user.getUserID());
+                    inboxKafkaDto.setLoggedInUserLocation(user.getLocationId());
 
                     applicationFlowLogs.info("InboxKafka prepared txnId={}, processCount={}, officeLocationCount={}",
                             txn.getTxnId(), inboxKafkaDto.getProcessList().size(),
