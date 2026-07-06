@@ -10,9 +10,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.HandlerResponse;
-import com.serviceplus.form.validation.dto.ServerSidePaginationRecord;
-import com.serviceplus.form.validation.dto.WorkflowInboxResponse;
+import com.serviceplus.form.validation.dto.*;
 import com.serviceplus.form.validation.entity.*;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import org.apache.logging.log4j.LogManager;
@@ -22,8 +20,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Service;
 
-import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 
 import static com.serviceplus.form.validation.utility.Utility.*;
@@ -263,11 +259,12 @@ public class PreProcessingFacade {
                 .flatMap(response -> ServerResponse.ok().bodyValue(response));
     }
 
-    public Mono<List<WorkflowInboxResponse>> getWFPInbox(UserSessionObject user) {
+    public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getWFPInbox(ServerHttpRequest request, UserSessionObject user) {
 
-        return reactiveApiClient.fetchWFPInbox(user).map(inboxList -> {
+        return reactiveApiClient.fetchWFPInbox(request,user).map(inboxList -> {
             DateTimeFormatter formatter =  DateTimeFormatter.ofPattern("dd MMM yyyy hh:mm a");
-            inboxList.forEach(inbox -> {
+            List<WorkflowInboxResponse> data = inboxList.getData();
+            data.forEach(inbox -> {
 
                 ServiceMeta service = getServiceMeta(inbox);
                 inbox.setTaskType(OFFICIAL_TASK_FLAG);

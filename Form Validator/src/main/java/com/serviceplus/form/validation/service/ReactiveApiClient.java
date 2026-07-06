@@ -409,17 +409,23 @@ public class ReactiveApiClient {
 	}
 	
 	@SuppressWarnings("unchecked")
-    public Mono<List<WorkflowInboxResponse>> fetchWFPInbox(UserSessionObject user) {
+    public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> fetchWFPInbox(ServerHttpRequest request, UserSessionObject user) {
 
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
 
-        String url = TRACKING_SERVICE.concat("workflow/inbox/list");
+        String url = TRACKING_SERVICE.concat("/a/workflow/inbox/list");
+
+        Map<String, Object> params = new HashMap<>();
+
+        request.getQueryParams().forEach((key, value) -> {
+            params.put(key, value.size() == 1 ? value.getFirst() : value);
+        });
 
         Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
                                                                                     String.class,
                                                                                     HttpMethod.GET,
                                                                                     headers,
-                                                                                    Collections.emptyMap(),
+                                                                                    params,
                                                                                     url,
                                                                                     null,
                                                                                     MediaType.APPLICATION_JSON
@@ -433,9 +439,9 @@ public class ReactiveApiClient {
                 return Mono.error(new SPRuntimeError("Unable to fetch inbox", HttpStatus.FAILED_DEPENDENCY, null));
             }
 
-            Type listType = new TypeToken<List<WorkflowInboxResponse>>() {}.getType();
+            Type listType = new TypeToken<ServerSidePaginationRecord<WorkflowInboxResponse>>() {}.getType();
 
-            List<WorkflowInboxResponse> inboxList = (List<WorkflowInboxResponse>) stringToEntityUsingType(body, listType);
+            ServerSidePaginationRecord<WorkflowInboxResponse> inboxList = (ServerSidePaginationRecord<WorkflowInboxResponse>) stringToEntityUsingType(body, listType);
             return Mono.just(inboxList);
         });
     }

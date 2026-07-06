@@ -89,7 +89,7 @@ public class PreProcessingService {
 
             UserSessionObject user = getUserSessionDetails(request);
 
-            return preProcessingFacade.getWFPInbox(user).flatMap(response -> ServerResponse.ok().bodyValue(response))
+            return preProcessingFacade.getWFPInbox(request,user).flatMap(response -> ServerResponse.ok().bodyValue(response))
                                         .onErrorResume(Exception.class, ex -> {
 
                                             Throwable actual = Exceptions.unwrap(ex);
