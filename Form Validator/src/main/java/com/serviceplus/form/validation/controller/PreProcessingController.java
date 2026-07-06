@@ -60,4 +60,9 @@ public class PreProcessingController {
     public Mono<ServerResponse> getWFPInbox(ServerRequest request) {
         return preProcessingService.getWFPInbox(request.exchange().getRequest());
     }
+    public Mono<ServerResponse> getPendingApplications(ServerRequest request) {
+    	return preProcessingService.getPendingApplications(request.exchange().getRequest());
+    }
+    
+    
 }
