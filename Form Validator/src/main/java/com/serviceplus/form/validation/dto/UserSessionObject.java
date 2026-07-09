@@ -32,9 +32,11 @@ public class UserSessionObject implements Serializable{
     private String tenantId;
     private Boolean isTopLevelAdmin;
     private String atk;
+    private String csrfToken;
+    private Boolean active;
 
-	
-	public static class Roles  implements Serializable{
+
+    public static class Roles  implements Serializable{
 		private static final long serialVersionUID = 1L;
 		private int roleId;
 		private String roleName;
@@ -241,5 +243,21 @@ public class UserSessionObject implements Serializable{
 
     public void setUserID(Long userID) {
         this.userID = userID;
+    }
+
+    public String getCsrfToken() {
+        return csrfToken;
+    }
+
+    public void setCsrfToken(String csrfToken) {
+        this.csrfToken = csrfToken;
+    }
+
+    public Boolean getActive() {
+        return active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
     }
 }
