@@ -89,7 +89,7 @@ public class ReactiveApiClient {
 
     @SuppressWarnings("unchecked")
 	public Mono<HandlerResponse> fetchFormData(String txnId, ServiceMeta service, UserSessionObject user) {
-        String url = FORM_MANAGEMENT_SERVICE.concat("getByFormId?");
+        String url = FORM_MANAGEMENT_SERVICE.concat("getByFormIdApplicant?");
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
 
         Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
