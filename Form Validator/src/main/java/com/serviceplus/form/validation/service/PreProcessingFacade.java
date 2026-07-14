@@ -131,8 +131,8 @@ public class PreProcessingFacade {
         );
 
         applicationDetails.setNewEntity(newEntityFlag);
-        applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getLocationId().intValue());
-        applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getLocationName());
+        applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getOrgUnitCode().intValue());
+        applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getOrgUnitName());
         applicationDetails.setServiceName(service.getServiceName());
 
         applicationFlowLogs.info(
@@ -298,7 +298,7 @@ public class PreProcessingFacade {
         service.setCurrentProcessId(inbox.getCurrentProcessId());
 
         ServiceMeta.AvailableApplyLocations location = new ServiceMeta.AvailableApplyLocations();
-        location.setLocationId(inbox.getLocationId().longValue());
+        location.setOrgUnitCode(inbox.getLocationId().longValue());
         location.setLocationName("");
 
         service.setLocations(List.of(location));

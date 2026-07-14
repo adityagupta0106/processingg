@@ -2,8 +2,8 @@ package com.serviceplus.form.validation.service;
 
 import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.ActivityMapDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.TaskActivity;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
@@ -39,7 +39,7 @@ public class TransactionGeneration {
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
-    public Mono<ProcessingTxn> createNewTransactionAndFlow(ServiceMeta service, String appId, TaskActivity.ActivityData nextActivity, UserSessionObject user,
+    public Mono<ProcessingTxn> createNewTransactionAndFlow(ServiceMeta service, String appId, ActivityMapDTO.ActivityData nextActivity, UserSessionObject user,
                                              ServerHttpRequest request,String dataId){
 
         LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
@@ -135,7 +135,7 @@ public class TransactionGeneration {
                     return Mono.error(new SPRuntimeError("Unable to process request [EDIT - 01]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
                 }
                 return createNewTransactionAndFlow(
-                        service, appId, new TaskActivity.ActivityData(ACTIVITY_FORM_STATUS_KEY), user,request, result.getDataId()
+                        service, appId, new ActivityMapDTO.ActivityData(ACTIVITY_FORM_STATUS_KEY), user,request, result.getDataId()
                         );
             });
         });

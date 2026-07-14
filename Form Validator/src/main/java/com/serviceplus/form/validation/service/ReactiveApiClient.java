@@ -6,9 +6,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.serviceplus.form.validation.dto.*;
+import com.serviceplus.form.validation.dto.OfficeDetailsDTO.OfficeUnitData;
 import com.serviceplus.form.validation.executor.ApiExecutor;
+
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONException;
@@ -191,62 +195,171 @@ public class ReactiveApiClient {
             });
     }
 
-    public Mono<ServiceMeta> fetchServiceKey(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId) {
-        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
-        String url = METADATA_SERVICE.concat("apply/resolveForm?");
-        //CACHE AT THIS LEVEL ?????
+	public Mono<ServiceJSONDTO> fetchServiceMetadata(UserSessionObject user,Integer serviceId,String txnId) {
 
-        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
-                                                                                String.class,
-                                                                                HttpMethod.POST,
-                                                                                headers,
-                                                                                Map.of("baseServiceId",baseServiceId,"taskId",taskId,"serviceId",serviceId),
-                                                                                url,
-                                                                                null,
-                                                                                MediaType.APPLICATION_JSON);
+	    final String REDIS_KEY = "ServiceMetaData_" + serviceId;
 
+	    return redis.fetch(
+	                    REDIS_KEY,
+	                    new TypeToken<ServiceJSONDTO>() {}.getType())
+	            .cast(ServiceJSONDTO.class)
+	            .switchIfEmpty(fetchAndCacheServiceMetadata(user, serviceId, txnId));
+	}
+	
+	private Mono<ServiceJSONDTO> fetchAndCacheServiceMetadata(
+	        UserSessionObject user,
+	        Integer serviceId,
+			String txnId) {
 
-        return callExternalEndpoint.flatMap(apiResponse -> {
-            String body = apiResponse.getBody();
+		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
 
-            Type listType = new TypeToken<ServiceMeta>() {}.getType();
-            ServiceMeta service = (ServiceMeta) stringToEntityUsingType(body, listType);
-            service.setServiceKey(encryptServiceKeys(service));
-            TaskActivity taskActivity = service.getActivityMap();
-            String key = SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()));
-            redis.add(taskActivity,key,true,5).subscribe();
-            return Mono.just(service);
-            })
-            .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,"FROM FETCH SERVICE LIST"));
+		String url = METADATA_SERVICE.concat("apply/serviceMetadata?");
 
-    }
+		Mono<ResponseEntity<String>> response = AsynchronousApiExecutor.callExternalEndpoint(String.class,
+				HttpMethod.POST, headers, Map.of("serviceId", serviceId), url, "", MediaType.APPLICATION_JSON);
 
-    public Mono<ServiceWorkFlow> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId,String txnId) {
-        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
-        String url = METADATA_SERVICE.concat("apply/processFlow?");
+		return response.flatMap(apiResponse -> {
 
-        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
-                                                                String.class,
-                                                                HttpMethod.POST,
-                                                                headers,
-                                                                Map.of("serviceId",serviceId),
-                                                                url,
-                                                                null,
-                                                                MediaType.APPLICATION_JSON);
+			ServiceJSONDTO metadata = (ServiceJSONDTO) stringToEntityUsingType(apiResponse.getBody(),
+					new TypeToken<ServiceJSONDTO>() {
+					}.getType());
 
+			redis.add(metadata, "ServiceMetaData_" + serviceId, true, 5*60).subscribe();
 
-        return callExternalEndpoint.flatMap(apiResponse -> {
-                    String body = apiResponse.getBody();
+			return Mono.just(metadata);
 
-                    Type listType = new TypeToken<ServiceWorkFlow>() {}.getType();
-                    ServiceWorkFlow workflow = (ServiceWorkFlow) stringToEntityUsingType(body, listType);
-                    final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(baseServiceId.toString());
-                    redis.add(workflow,REDIS_KEY,true,5).subscribe();
-                    return Mono.just(workflow);
-                })
-                .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnId))
-                ;
-    }
+		}).onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex, txnId));
+	}
+	
+	public Mono<ServiceMeta> fetchServiceKey(Integer baseServiceId, UserSessionObject user, String appId, String taskId,
+			Integer serviceId) {
+
+		return fetchServiceMetadata(user, serviceId, "FETCH_SERVICE_KEY").map(metadata -> {
+
+			ServiceMeta service = new ServiceMeta();
+
+			service.setServiceId(metadata.getServiceId());
+			service.setServiceName(metadata.getServiceName());
+			service.setDepartmentName(metadata.getDepartmentName());
+			service.setBaseServiceId(baseServiceId);
+
+			if (taskId == null || taskId.isBlank()) {
+				service.setTaskType("A");
+				service.setTaskId(metadata.getApplSubmissionTaskId());
+				service.setFormId(metadata.getApplFormId());
+			} else {
+				service.setTaskType("O");
+				service.setTaskId(taskId);
+				service.setFormId(metadata.getTaskFormMapping().get(taskId));
+			}
+
+			metadata.getActivityMap()
+            .stream()
+            .filter(a -> service.getTaskId().equals(a.getTaskId()))
+            .findFirst()
+            .ifPresent(activityMap -> {
+
+                ActivityMapDTO taskActivity = new ActivityMapDTO();
+                taskActivity.setData(activityMap.getData());
+
+                service.setActivityMap(taskActivity);
+                service.setServiceKey(encryptServiceKeys(service));
+            });
+
+    // Resolve Office Locations
+		    metadata.getOfficeDetails()
+		            .stream()
+		            .filter(o -> service.getTaskId().equals(o.getTaskId()))
+		            .findFirst()
+		            .ifPresent(o -> {
+
+		                List<ServiceMeta.AvailableApplyLocations> locations =
+		                        o.getAllowedOffices()
+		                                .stream()
+		                                .map(office -> {
+		                                    ServiceMeta.AvailableApplyLocations location =
+		                                    		new ServiceMeta.AvailableApplyLocations();
+		                                    location.setOrgUnitCode(office.getOrgUnitCode() != null
+		                                                    ? office.getOrgUnitCode().longValue()
+		                                                    : null);
+		                                    location.setOrgUnitName(
+		                                            office.getOrgUnitName());
+
+		                                    location.setHolderIds(new ArrayList<>());
+
+		                                    return location;
+
+		                                })
+		                                .collect(Collectors.toList());
+
+		                service.setLocations(locations);
+		            });
+
+			return service;
+		});
+	}
+//    public Mono<ServiceMeta> fetchServiceKey(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId) {
+//        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+//        String url = METADATA_SERVICE.concat("apply/resolveForm?");
+//        //CACHE AT THIS LEVEL ?????
+//
+//        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
+//                                                                                String.class,
+//                                                                                HttpMethod.POST,
+//                                                                                headers,
+//                                                                                Map.of("baseServiceId",baseServiceId,"taskId",taskId,"serviceId",serviceId),
+//                                                                                url,
+//                                                                                null,
+//                                                                                MediaType.APPLICATION_JSON);
+//
+//
+//        return callExternalEndpoint.flatMap(apiResponse -> {
+//            String body = apiResponse.getBody();
+//
+//            Type listType = new TypeToken<ServiceMeta>() {}.getType();
+//            ServiceMeta service = (ServiceMeta) stringToEntityUsingType(body, listType);
+//            service.setServiceKey(encryptServiceKeys(service));
+//            TaskActivity taskActivity = service.getActivityMap();
+//            String key = SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()));
+//            redis.add(taskActivity,key,true,5).subscribe();
+//            return Mono.just(service);
+//            })
+//            .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,"FROM FETCH SERVICE LIST"));
+//
+//    }
+
+//    public Mono<ServiceWorkFlow> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId, String taskId, Integer serviceId,String txnId) {
+//        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+//        String url = METADATA_SERVICE.concat("apply/processFlow?");
+//
+//        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
+//                                                                String.class,
+//                                                                HttpMethod.POST,
+//                                                                headers,
+//                                                                Map.of("serviceId",serviceId),
+//                                                                url,
+//                                                                null,
+//                                                                MediaType.APPLICATION_JSON);
+//
+//
+//        return callExternalEndpoint.flatMap(apiResponse -> {
+//                    String body = apiResponse.getBody();
+//
+//                    Type listType = new TypeToken<ServiceWorkFlow>() {}.getType();
+//                    ServiceWorkFlow workflow = (ServiceWorkFlow) stringToEntityUsingType(body, listType);
+//                    final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(baseServiceId.toString());
+//                    redis.add(workflow,REDIS_KEY,true,5).subscribe();
+//                    return Mono.just(workflow);
+//                })
+//                .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnId))
+//                ;
+//    }
+	
+	public Mono<ServiceProcessFlowDTO> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId,
+			String taskId, Integer serviceId, String txnId) {
+
+		return fetchServiceMetadata(user, serviceId, txnId).map(ServiceJSONDTO::getProcessFlowMap);
+	}
 
     public Mono<ServerResponse> fetchApplicantData(String dataId, String formId,UserSessionObject user,String txnId,String applicationId) {
         String url = FORM_MANAGEMENT_SERVICE.concat("getApplicationData?");
