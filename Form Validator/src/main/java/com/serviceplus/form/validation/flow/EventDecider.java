@@ -1,8 +1,8 @@
 package com.serviceplus.form.validation.flow;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.ActivityMapDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.TaskActivity;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
@@ -114,7 +114,7 @@ public class EventDecider {
             , String actionCode, String from, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus) {
         Mono<Object> fetch = redis.fetch(SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_")
                         .concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()))
-                , TaskActivity.class);
+                , ActivityMapDTO.class);
 
         return fetch
                 .switchIfEmpty(
@@ -123,8 +123,8 @@ public class EventDecider {
                                 .flatMap(response -> Mono.just(response.getActivityMap()))
                 )
                 .flatMap(activityMap -> {
-                    TaskActivity activity = (TaskActivity) activityMap;
-                    TaskActivity.ActivityData nextActivity = findNext(from, service.getTaskId(), activity);
+                	ActivityMapDTO activity = (ActivityMapDTO) activityMap;
+                	ActivityMapDTO.ActivityData nextActivity = findNext(from, service.getTaskId(), activity);
 
                     if (isNull(nextActivity)) {
                         return Mono.error(new SPRuntimeError("Execution error [EX - 03]", HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()));
@@ -156,13 +156,13 @@ public class EventDecider {
         return transactionalDBExecutor.execute(flowStatus.getTxnId(),flowStatus);
     }
 
-    private TaskActivity.ActivityData findNext(String from, String taskId, TaskActivity map){
-        List<TaskActivity.ActivityData> data = map.getData();
-        for(TaskActivity.ActivityData activity : data){
+    private ActivityMapDTO.ActivityData findNext(String from, String taskId, ActivityMapDTO map){
+        List<ActivityMapDTO.ActivityData> data = map.getData();
+        for(ActivityMapDTO.ActivityData activity : data){
             if(activity.getActivityType().equals(from)){
                     if(activity.getLast()) {
                         //return new TaskActivity.ActivityData("ES");
-                        return new TaskActivity.ActivityData("NA");
+                        return new ActivityMapDTO.ActivityData("NA");
                     }
                     else{
                         return data.get(activity.getIndex() + 1);

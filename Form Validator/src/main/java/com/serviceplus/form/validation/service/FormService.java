@@ -142,23 +142,23 @@ public class FormService {
 
                 if (isNull(selectedLocation) || selectedLocation.isEmpty()) {
                     if (locations.size() == 1) {
-                        service.setSelectedLocationByUser(locations.getFirst().getLocationId());
-                        service.setSelectedLocationNameByUser(locations.getFirst().getLocationName());
+                        service.setSelectedLocationByUser(locations.getFirst().getOrgUnitCode());
+                        service.setSelectedLocationNameByUser(locations.getFirst().getOrgUnitName());
                     } else {
                         return Mono.error(new SPRuntimeError(
                                 "Kindly select a location. [VAL - 002]", HttpStatus.BAD_REQUEST,txnLog.getTxnId()));
                     }
                 } else {
                     List<ServiceMeta.AvailableApplyLocations> validLocation = locations.stream()
-                            .filter(loc -> loc.getLocationId().intValue() == (Integer) selectedLocation.get("value"))
+                            .filter(loc -> loc.getOrgUnitCode().intValue() == (Integer) selectedLocation.get("value"))
                             .toList();
                     if (validLocation.isEmpty()) {
                         return Mono.error(new SPRuntimeError(
                                 "Invalid location selected. [SUB-003]", HttpStatus.BAD_REQUEST,txnLog.getTxnId()));
                     }
 
-                    service.setSelectedLocationNameByUser(validLocation.getFirst().getLocationName());
-                    service.setSelectedLocationByUser(validLocation.getFirst().getLocationId());
+                    service.setSelectedLocationNameByUser(validLocation.getFirst().getOrgUnitName());
+                    service.setSelectedLocationByUser(validLocation.getFirst().getOrgUnitCode());
                 }
             }
 

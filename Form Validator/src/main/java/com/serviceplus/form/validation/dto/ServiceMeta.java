@@ -33,7 +33,7 @@ public class ServiceMeta {
     private String selectedLocationNameByUser;
 
     @JsonIgnore
-    private TaskActivity activityMap;
+    private ActivityMapDTO activityMap;
 
     private String departmentName;
 
@@ -42,19 +42,23 @@ public class ServiceMeta {
         private String orgUnitName;
         private List<String> holderIds;
 
-        public Long getLocationId() {
-            return orgUnitCode;
-        }
+        public Long getOrgUnitCode() {
+			return orgUnitCode;
+		}
 
-        public void setLocationId(Long locationId) {
-            this.orgUnitCode = locationId;
-        }
+		public void setOrgUnitCode(Long orgUnitCode) {
+			this.orgUnitCode = orgUnitCode;
+		}
 
-        public String getLocationName() {
-            return orgUnitName;
-        }
+		public String getOrgUnitName() {
+			return orgUnitName;
+		}
 
-        public void setLocationName(String locationName) {
+		public void setOrgUnitName(String orgUnitName) {
+			this.orgUnitName = orgUnitName;
+		}
+
+		public void setLocationName(String locationName) {
             this.orgUnitName = locationName;
         }
 
@@ -122,15 +126,13 @@ public class ServiceMeta {
         this.baseServiceId = baseServiceId;
     }
 
-    public TaskActivity getActivityMap() {
-        return activityMap;
-    }
-
-    public void setActivityMap(TaskActivity activityMap) {
-        this.activityMap = activityMap;
-    }
-
-    public List<AvailableApplyLocations> getLocations() {
+    public ActivityMapDTO getActivityMap() {
+		return activityMap;
+	}
+	public void setActivityMap(ActivityMapDTO activityMap) {
+		this.activityMap = activityMap;
+	}
+	public List<AvailableApplyLocations> getLocations() {
         return locations;
     }
 

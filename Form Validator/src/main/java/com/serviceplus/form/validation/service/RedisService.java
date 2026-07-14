@@ -1,6 +1,5 @@
 package com.serviceplus.form.validation.service;
 
-import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import reactor.core.publisher.Mono;
 
 import java.lang.reflect.Type;
@@ -14,4 +13,6 @@ public interface RedisService {
     Mono<Boolean> add(Object ent, String key,boolean durationRequired,final Integer minutes);
 
     Mono<Void> remove(String key);
+
+	<T> Mono<T> fetchAndRefresh(String key, Type type, int initialTtlHours, int refreshThresholdHours, int extendHours);
 }

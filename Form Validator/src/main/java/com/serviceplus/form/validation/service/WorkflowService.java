@@ -13,6 +13,7 @@ import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.creat
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,11 +31,12 @@ import org.springframework.stereotype.Service;
 import com.google.gson.reflect.TypeToken;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.InboxKafka;
+import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.ServiceWorkFlow;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
 import com.serviceplus.form.validation.dto.UserSessionObject;
-import com.serviceplus.form.validation.dto.WorkflowAssignmentDTO;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
@@ -65,7 +67,7 @@ public class WorkflowService {
         final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString());
 
         Mono<Object> redisData = redis.fetch(
-                REDIS_KEY, new TypeToken<ServiceWorkFlow>(){}.getType()
+                REDIS_KEY, new TypeToken<ServiceProcessFlowDTO>(){}.getType()
         );
 
         return redisData
@@ -75,21 +77,21 @@ public class WorkflowService {
                                 .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY,savedLog.getTxnId())))
                                 .flatMap(Mono::just)
                 )
-                .flatMap(response -> generate((ServiceWorkFlow) response, ad, savedLog, service, user,cp))
+                .flatMap(response -> generate((ServiceProcessFlowDTO) response, ad, savedLog, service, user,cp))
                 .onErrorResume(ex -> {
                     ex.printStackTrace();
                     return Mono.error(new SPRuntimeError("Workflow Error [ERR -01]",HttpStatus.INTERNAL_SERVER_ERROR,savedLog.getTxnId()));
                 });
     }
 
-    private Mono<?> generate(ServiceWorkFlow response, ApplicationDetails ad, ProcessingTxn savedLog,
+    private Mono<?> generate(ServiceProcessFlowDTO response, ApplicationDetails ad, ProcessingTxn savedLog,
                              ServiceMeta service, UserSessionObject user, CurrentProcess cp) {
-        List<ServiceWorkFlow.Data> wf =  response.getData();
+        List<ServiceProcessFlowDTO.Data> wf =  response.getData();
         String currentTask = service.getTaskId();
 
         applicationFlowLogs.info("Generating workflow for txnId {} currentTask {}",savedLog.getTxnId(),currentTask);
 
-        ServiceWorkFlow.Data data = fetchNode(wf, currentTask);
+        ServiceProcessFlowDTO.Data data = fetchNode(wf, currentTask);
 
         if(data != null) {
             applicationFlowLogs.info("Generating workflow for txnId {} currentTask {} nextNode {}"
@@ -101,9 +103,9 @@ public class WorkflowService {
         return Mono.empty();
     }
 
-    private Mono<InboxKafka> calculateNextWorkflow(ServiceWorkFlow.Data.Nodes node, ServiceWorkFlow.Data data,
+    private Mono<InboxKafka> calculateNextWorkflow(ServiceProcessFlowDTO.Data.Nodes node, ServiceProcessFlowDTO.Data data,
                                                    ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
-                                                   List<ServiceWorkFlow.Data> wf, CurrentProcess currentActionProcess) {
+                                                   List<ServiceProcessFlowDTO.Data> wf, CurrentProcess currentActionProcess) {
 
         LocalDateTime now = LocalDateTime.now();
 
@@ -119,7 +121,7 @@ public class WorkflowService {
 
                 .concatMap(task -> {
 
-                    ServiceWorkFlow.Data.Nodes next = task.getNode();
+                	ServiceProcessFlowDTO.Data.Nodes next = task.getNode();
 
                     applicationFlowLogs.info("Processing taskId={}, taskType={}, txnId={}", next.getId(),
                             next.getType(), txn.getTxnId());
@@ -167,9 +169,9 @@ public class WorkflowService {
                                                         "Gateway encountered gatewayId={}, behaviour={}", next.getId(),
                                                         next.getBehaviour());
 
-                                                ServiceWorkFlow.Data nextToGatewayData = fetchNode(wf, next.getId());
+                                                ServiceProcessFlowDTO.Data nextToGatewayData = fetchNode(wf, next.getId());
 
-                                                List<ServiceWorkFlow.Data.MappedTask> nextToGateway = nextToGatewayData
+                                                List<ServiceProcessFlowDTO.Data.MappedTask> nextToGateway = nextToGatewayData
                                                         .getMappedTasks();
 
                                                 applicationFlowLogs.info("Gateway next nodes={}",
@@ -227,7 +229,7 @@ public class WorkflowService {
                                                                 List<TaskAvailableOfficeLocation> gatewayLocations = entry
                                                                         .getKey();
 
-                                                                List<ServiceWorkFlow.Data.MappedTask> filteredTasks = entry
+                                                                List<ServiceProcessFlowDTO.Data.MappedTask> filteredTasks = entry
                                                                         .getValue();
 
                                                                 applicationFlowLogs.info(
@@ -278,7 +280,7 @@ public class WorkflowService {
                                                     applicationFlowLogs.info(
                                                             "Processing Convergent Gateway gatewayId={}", next.getId());
 
-                                                    ServiceWorkFlow.Data.Nodes nextNode = nextToGatewayData.getNode();
+                                                    ServiceProcessFlowDTO.Data.Nodes nextNode = nextToGatewayData.getNode();
 
                                                     CurrentProcess cp = buildGatewayNextProcess(baseProcess, next,
                                                             nextNode, service, ad, user, now,
@@ -310,9 +312,9 @@ public class WorkflowService {
 
                     processList.add(currentActionProcess);
 
-                    if (!pList.isEmpty()) {
-                        processList.add(pList.getFirst());
-                    }
+//                    if (!pList.isEmpty()) {
+//                        processList.add(pList.getFirst());
+//                    }
 
                     InboxKafka inboxKafkaDto = new InboxKafka();
                     inboxKafkaDto.setProcessList(processList);
@@ -339,9 +341,9 @@ public class WorkflowService {
                         ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
     }
 
-    private CurrentProcess buildBaseProcess(CurrentProcess currentActionProcess,ServiceWorkFlow.Data.Nodes currentNode,ServiceWorkFlow.Data.Nodes currentTask,
+    private CurrentProcess buildBaseProcess(CurrentProcess currentActionProcess,ServiceProcessFlowDTO.Data.Nodes currentNode,ServiceProcessFlowDTO.Data.Nodes currentTask,
                                             ServiceMeta service,ApplicationDetails ad,UserSessionObject user,
-                                            LocalDateTime now,List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,List<ServiceWorkFlow.Data> wf,
+                                            LocalDateTime now,List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,List<ServiceProcessFlowDTO.Data> wf,
                                             ProcessingTxn txn
     ) {
 
@@ -374,14 +376,14 @@ public class WorkflowService {
     }
     private CurrentProcess buildGatewayNextProcess(
             CurrentProcess parent,
-            ServiceWorkFlow.Data.Nodes gatewayNode,
-            ServiceWorkFlow.Data.Nodes nextNode,
+            ServiceProcessFlowDTO.Data.Nodes gatewayNode,
+            ServiceProcessFlowDTO.Data.Nodes nextNode,
             ServiceMeta service,
             ApplicationDetails ad,
             UserSessionObject user,
             LocalDateTime now,
             List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
-            List<ServiceWorkFlow.Data> wf,
+            List<ServiceProcessFlowDTO.Data> wf,
             ProcessingTxn txn
     ) {
 
@@ -417,9 +419,9 @@ public class WorkflowService {
                 || behaviour.equals(GATEWAY_BEHAVIOUR_PARALLEL_CONVERGENT);
     }
 
-    private ServiceWorkFlow.Data fetchNode(List<ServiceWorkFlow.Data> wf , String task){
-        for(ServiceWorkFlow.Data data : wf){
-            ServiceWorkFlow.Data.Nodes nodes = data.getNode();
+    private ServiceProcessFlowDTO.Data fetchNode(List<ServiceProcessFlowDTO.Data> wf , String task){
+        for(ServiceProcessFlowDTO.Data data : wf){
+        	ServiceProcessFlowDTO.Data.Nodes nodes = data.getNode();
             if(task.equals(nodes.getId())){
                 return data;
             }
@@ -427,7 +429,7 @@ public class WorkflowService {
         return null;
     }
 
-    private Mono<List<ServiceWorkFlow.Data.MappedTask>> executeGatewayMvel(
+    private Mono<List<ServiceProcessFlowDTO.Data.MappedTask>> executeGatewayMvel(
 
             ServiceMeta service,
             ApplicationDetails applicationDetails,
@@ -435,7 +437,7 @@ public class WorkflowService {
             String appData,
             CurrentProcess currentActionProcess,
             String gatewayId,
-            List<ServiceWorkFlow.Data.MappedTask> nextToGateway,
+            List<ServiceProcessFlowDTO.Data.MappedTask> nextToGateway,
             Map<String, Map<String, List<String>>> taskLocationUserHolderMap
 
     ) {
@@ -548,7 +550,7 @@ public class WorkflowService {
                                         ));
                                     }
 
-                                    List<ServiceWorkFlow.Data.MappedTask> filteredTasks =
+                                    List<ServiceProcessFlowDTO.Data.MappedTask> filteredTasks =
                                             nextToGateway.stream()
                                                     .filter(task ->
                                                             filteredNodeIds.contains(
@@ -595,7 +597,7 @@ public class WorkflowService {
                                 gatewayId,
                                 ex));
     }
-    private List<String> extractNextNodeIds(List<ServiceWorkFlow.Data.MappedTask> mappedTasks) {
+    private List<String> extractNextNodeIds(List<ServiceProcessFlowDTO.Data.MappedTask> mappedTasks) {
 
         return mappedTasks.stream()
                 .map(m -> m.getNode().getId())
@@ -603,8 +605,8 @@ public class WorkflowService {
                 .toList();
     }
 
-    private Mono<TaskAvailableOfficeLocation> nextAllowedOfficeLocation(List<ServiceWorkFlow.Data> wf,
-                                                                        ServiceWorkFlow.Data.Nodes next, String txnId, Integer serviceId, UserSessionObject user,
+    private Mono<TaskAvailableOfficeLocation> nextAllowedOfficeLocation(List<ServiceProcessFlowDTO.Data> wf,
+                                                                        ServiceProcessFlowDTO.Data.Nodes next, String txnId, Integer serviceId, UserSessionObject user,
                                                                         Map<String, Map<String, List<String>>> taskLocationHolderMap) {
 
         applicationFlowLogs.info("Calculating nextAllowedOfficeLocation for txnId={}, serviceId={}, taskId={}", txnId,
@@ -612,11 +614,16 @@ public class WorkflowService {
 
         TaskAvailableOfficeLocation location = new TaskAvailableOfficeLocation();
         location.setTaskId(next.getId());
-
-        List<ServiceMeta.AvailableApplyLocations> allowedOffices = wf.stream().filter(d -> d.getNode() != null)
-                .filter(d -> next.getId().equals(d.getNode().getId())).map(ServiceWorkFlow.Data::getAllowedOffices)
-                .filter(Objects::nonNull).findFirst().orElseGet(List::of);
-
+        List<ServiceMeta.AvailableApplyLocations> allowedOffices = wf.stream()
+                .filter(d -> d.getNode() != null)
+                .filter(d -> next.getId().equals(d.getNode().getId()))
+                .map(ServiceProcessFlowDTO.Data::getAllowedOffices)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(Collections.emptyList())
+                .stream()
+                .map(this::mapAvailableLocation)
+                .collect(Collectors.toList());
         applicationFlowLogs.info("Allowed offices found for txnId={}, taskId={} : {}", txnId, next.getId(),
                 allowedOffices);
 
@@ -626,10 +633,10 @@ public class WorkflowService {
 
                 .doOnNext(office -> applicationFlowLogs.info(
                         "Fetching workflow assignments for txnId={}, taskId={}, locationId={}", txnId, next.getId(),
-                        office.getLocationId()))
+                        office.getOrgUnitCode()))
 
                 .flatMap(office -> apiClient.fetchWorkflowAssignments(serviceId, next.getId(),
-                        office.getLocationId().toString(), user, txnId))
+                        office.getOrgUnitCode().toString(), user, txnId))
 
                 .doOnNext(assignments -> applicationFlowLogs.info(
                         "Workflow assignments received for txnId={}, taskId={} : {}", txnId, next.getId(), assignments))
@@ -669,7 +676,7 @@ public class WorkflowService {
 
                     location.getAllowedOffices().forEach(office -> {
 
-                        String officeId = office.getLocationId().toString();
+                        String officeId = office.getOrgUnitCode().toString();
 
                         List<String> holderIds = locationHolderMap.getOrDefault(officeId, List.of());
 
@@ -701,6 +708,24 @@ public class WorkflowService {
 
                     return Mono.just(location);
                 });
+    }
+    
+    private ServiceMeta.AvailableApplyLocations mapAvailableLocation(
+            OfficeDetailsDTO.OfficeUnitData office) {
+
+        ServiceMeta.AvailableApplyLocations location =
+                new ServiceMeta.AvailableApplyLocations();
+
+        location.setOrgUnitCode(
+                office.getOrgUnitCode() != null
+                        ? office.getOrgUnitCode().longValue()
+                        : null);
+
+        location.setOrgUnitName(office.getOrgUnitName());
+
+        location.setHolderIds(new ArrayList<>());
+
+        return location;
     }
 
     private Mono<Void> executeAfterTaskMvel(ServiceMeta service, ApplicationDetails applicationDetails, ProcessingTxn txn, String appData,
@@ -742,7 +767,7 @@ public class WorkflowService {
         List<ServiceMeta.AvailableApplyLocations> filteredOffices = officeLocation.getAllowedOffices().stream()
                 .filter(office -> {
 
-                    String locationId = String.valueOf(office.getLocationId());
+                    String locationId = String.valueOf(office.getOrgUnitCode());
 
                     List<String> holderIds = locationHolderMap.get(locationId);
 

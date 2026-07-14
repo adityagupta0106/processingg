@@ -90,13 +90,43 @@ public class RedisServiceImpl implements  RedisService{
         }
     }
 
-    @Override
-    public Mono<Void> remove(String key) {
-        return template.opsForValue()
-                .getAndDelete(key)
-                .then()
-                .doOnError(e -> e.printStackTrace());
-    }
+	@Override
+	public Mono<Void> remove(String key) {
+		return template.opsForValue().getAndDelete(key).then().doOnError(e -> e.printStackTrace());
+	}
+
+	public <T> Mono<T> fetchAndRefresh(String key, Type type, int initialTtlHours, int refreshThresholdHours,
+			int extendHours) {
+
+		return fetch(key, type).cast((Class<T>) Object.class).flatMap(value -> getExpire(key).flatMap(ttl -> {
+
+			if (shouldRefresh(ttl, refreshThresholdHours)) {
+
+				Duration newTtl = ttl.plusHours(extendHours);
+
+				return expire(key, newTtl).thenReturn(value);
+			}
+
+			return Mono.just(value);
+		}));
+	}
+
+	public Mono<Duration> getExpire(String key) {
+		return template.getExpire(key);
+	}
+
+	private boolean shouldRefresh(Duration ttl, int refreshThresholdHours) {
+
+		if (ttl == null || ttl.isNegative() || ttl.isZero()) {
+			return false;
+		}
+
+		return ttl.compareTo(Duration.ofHours(refreshThresholdHours)) <= 0;
+	}
+
+	public Mono<Boolean> expire(String key, Duration duration) {
+		return template.expire(key, duration);
+	}
 
 
 }
