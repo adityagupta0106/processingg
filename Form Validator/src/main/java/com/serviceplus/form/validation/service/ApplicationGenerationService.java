@@ -173,6 +173,7 @@ public class ApplicationGenerationService {
         currentProcess.setTenantId(user.getTenantId());
         currentProcess.setBaseServiceId(service.getBaseServiceId());
         currentProcess.setInitiatedOn(LocalDateTime.now());
+        currentProcess.setApplicantTask(Boolean.TRUE);
 
         return Mono.just(currentProcess);
     }

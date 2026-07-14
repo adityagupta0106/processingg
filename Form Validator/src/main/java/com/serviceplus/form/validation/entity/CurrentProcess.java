@@ -58,6 +58,9 @@ public class CurrentProcess implements Persistable<String> {
     @Transient
     private Boolean gateway = false;
 
+    @Transient
+    private Boolean applicantTask = false;
+
     @Override
     @Transient
     public boolean isNew() {
@@ -235,6 +238,14 @@ public class CurrentProcess implements Persistable<String> {
 
     public void setGateway(Boolean gateway) {
         this.gateway = gateway;
+    }
+
+    public Boolean getApplicantTask() {
+        return applicantTask;
+    }
+
+    public void setApplicantTask(Boolean applicantTask) {
+        this.applicantTask = applicantTask;
     }
 }
 

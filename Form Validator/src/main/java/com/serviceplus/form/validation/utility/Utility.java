@@ -275,7 +275,7 @@ public class Utility {
 
     @SuppressWarnings("unchecked")
     public static <T> Mono<T> handleWebClientError(WebClientResponseException ex,String txnId) {
-
+        ex.printStackTrace();
         HttpStatusCode status = ex.getStatusCode();
         applicationFlowLogs.error("Client error for txnId {} from downstream: {}",txnId,ex.getResponseBodyAsString());
         Map<String,Object> res = (Map<String, Object>) stringToEntity(ex.getResponseBodyAsString(), Map.class);

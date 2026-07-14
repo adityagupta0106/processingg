@@ -217,7 +217,7 @@ public class FormService {
             ApplicationFlowStatusEntity flowStatus,
 			String appData,boolean newEntityFlag) {
 
-		Map<String, String> responseJson;
+		Map<String, Object> responseJson;
 
 		applicationFlowLogs.info("Response from form management for txnId {} applicationId {} response {}",
 				txnLog.getTxnId(), appId, responseBody);
@@ -231,8 +231,8 @@ public class FormService {
 					txnLog.getTxnId()));
 		}
 
-		String dataId = responseJson.getOrDefault("dataId", "");
-		String actionCode = responseJson.getOrDefault("actionCode", "");
+		String dataId = (String) responseJson.getOrDefault("dataId", "");
+		String actionCode = (String) responseJson.getOrDefault("actionCode", "");
 
         return preProcessingFacade.getFormDataAndSaveTxn(service, user, request, txnLog, appId, dataId, "FS",newEntityFlag,flowStatus)
 				.flatMap(txn ->  eventDecider.proceedToNext(dataId, service, user, txn, txn.getApplicationId(),
