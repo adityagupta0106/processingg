@@ -411,7 +411,7 @@ public class FormService {
                 selectedWorkflow.setActionAttribute(List.of(finalSelectedAction));
             }
 
-            if (!selectedTaskNodes.isEmpty()) {
+            if (!selectedTaskNodes.isEmpty() && workflow.getTaskAttribute() != null) {
 
                 ServiceProcessFlowDTO.Data.TaskAttribute taskAttribute = new ServiceProcessFlowDTO.Data.TaskAttribute();
 
@@ -422,10 +422,9 @@ public class FormService {
                 selectedWorkflow.setTaskAttribute(taskAttribute);
             }
 
-            if (!selectedUserNodes.isEmpty()) {
+            if (!selectedUserNodes.isEmpty() && workflow.getUserAttribute() != null) {
 
-                ServiceProcessFlowDTO.Data.UserAttribute userAttribute =
-                        new ServiceProcessFlowDTO.Data.UserAttribute();
+                ServiceProcessFlowDTO.Data.UserAttribute userAttribute = new ServiceProcessFlowDTO.Data.UserAttribute();
 
                 userAttribute.setSelectionType("MANUAL");
                 userAttribute.setUserNodes(selectedUserNodes);
