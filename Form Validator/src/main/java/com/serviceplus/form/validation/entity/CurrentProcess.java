@@ -61,6 +61,9 @@ public class CurrentProcess implements Persistable<String> {
     @Transient
     private Boolean applicantTask = false;
 
+    @Transient
+    private String actionName;
+
     @Override
     @Transient
     public boolean isNew() {
@@ -246,6 +249,14 @@ public class CurrentProcess implements Persistable<String> {
 
     public void setApplicantTask(Boolean applicantTask) {
         this.applicantTask = applicantTask;
+    }
+
+    public String getActionName() {
+        return actionName;
+    }
+
+    public void setActionName(String actionName) {
+        this.actionName = actionName;
     }
 }
 

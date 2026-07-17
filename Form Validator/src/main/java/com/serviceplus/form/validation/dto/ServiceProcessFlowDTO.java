@@ -5,252 +5,489 @@ import java.util.List;
 import com.serviceplus.form.validation.dto.OfficeDetailsDTO.OfficeUnitData;
 
 public class ServiceProcessFlowDTO {
-	private Integer serviceId;
+    private Integer serviceId;
+    private List<Data> data;
+    private List<AssociatedActivity> associatedActivities;
 
-	private List<Data> data;
-	
-	private List<AssociatedActivity> associatedActivities;
+    public static class Data {
 
-	public static class Data {
+        private Nodes node;
+        private List<MappedTask> mappedTasks;
+        private List<OfficeUnitData> allowedOffices;
+        private WorkflowElementData workflowElementData;
 
-		private Nodes node;
-		private List<MappedTask> mappedTasks;
-		private List<OfficeUnitData> allowedOffices;
+        public static class WorkflowElementData {
 
-		public static class MappedTask {
-			private Nodes node;
+            private List<ActionAttribute> actionAttribute;
 
-			public Nodes getNode() {
-				return node;
-			}
+            private TaskAttribute taskAttribute;
 
-			public void setNode(Nodes node) {
-				this.node = node;
-			}
+            private UserAttribute userAttribute;
 
-		}
+            public List<ActionAttribute> getActionAttribute() {
+                return actionAttribute;
+            }
 
-		public static class Nodes {
-			private String id;
-			private String type;
-			private String name;
-			private String behaviour;
-			private String formId;
+            public void setActionAttribute(List<ActionAttribute> actionAttribute) {
+                this.actionAttribute = actionAttribute;
+            }
 
-			public String getId() {
-				return id;
-			}
+            public TaskAttribute getTaskAttribute() {
+                return taskAttribute;
+            }
 
-			public void setId(String id) {
-				this.id = id;
-			}
+            public void setTaskAttribute(TaskAttribute taskAttribute) {
+                this.taskAttribute = taskAttribute;
+            }
 
-			public String getType() {
-				return type;
-			}
+            public UserAttribute getUserAttribute() {
+                return userAttribute;
+            }
 
-			public void setType(String type) {
-				this.type = type;
-			}
+            public void setUserAttribute(UserAttribute userAttribute) {
+                this.userAttribute = userAttribute;
+            }
+        }
 
-			public String getName() {
-				return name;
-			}
+        public static class ActionAttribute {
 
-			public void setName(String name) {
-				this.name = name;
-			}
+            private String key;
+            private String label;
+            private String trackLabel;
+            private Boolean logicalClosure;
+            private Boolean completeClosure;
 
-			public String getBehaviour() {
-				return behaviour;
-			}
+            public String getKey() {
+                return key;
+            }
 
-			public void setBehaviour(String behaviour) {
-				this.behaviour = behaviour;
-			}
+            public void setKey(String key) {
+                this.key = key;
+            }
 
-			public String getFormId() {
-				return formId;
-			}
+            public String getLabel() {
+                return label;
+            }
 
-			public void setFormId(String formId) {
-				this.formId = formId;
-			}
+            public void setLabel(String label) {
+                this.label = label;
+            }
 
-		}
+            public String getTrackLabel() {
+                return trackLabel;
+            }
 
-		public Nodes getNode() {
-			return node;
-		}
+            public void setTrackLabel(String trackLabel) {
+                this.trackLabel = trackLabel;
+            }
 
-		public void setNode(Nodes node) {
-			this.node = node;
-		}
+            public Boolean getLogicalClosure() {
+                return logicalClosure;
+            }
 
-		public List<MappedTask> getMappedTasks() {
-			return mappedTasks;
-		}
+            public void setLogicalClosure(Boolean logicalClosure) {
+                this.logicalClosure = logicalClosure;
+            }
 
-		public void setMappedTasks(List<MappedTask> mappedTasks) {
-			this.mappedTasks = mappedTasks;
-		}
+            public Boolean getCompleteClosure() {
+                return completeClosure;
+            }
 
-		public List<OfficeUnitData> getAllowedOffices() {
-			return allowedOffices;
-		}
+            public void setCompleteClosure(Boolean completeClosure) {
+                this.completeClosure = completeClosure;
+            }
+        }
 
-		public void setAllowedOffices(List<OfficeUnitData> allowedOffices) {
-			this.allowedOffices = allowedOffices;
-		}
-	}
-	
-	public static class AssociatedActivity {
+        public static class TaskAttribute {
+            private String selectionType;
+            private String gatewayType;
+            private List<TaskNode> taskNodes;
 
-	    private String id;
+            public String getSelectionType() {
+                return selectionType;
+            }
 
-	    private String type;
-	    
-	    private String sourceTaskId;
+            public void setSelectionType(String selectionType) {
+                this.selectionType = selectionType;
+            }
 
-	    private String targetTaskId;
+            public List<TaskNode> getTaskNodes() {
+                return taskNodes;
+            }
 
-	    private String edgeId;
+            public void setTaskNodes(List<TaskNode> taskNodes) {
+                this.taskNodes = taskNodes;
+            }
 
-	    private String triggerPoint;
+            public String getGatewayType() {
+                return gatewayType;
+            }
 
-	    private OfficialIntimation officialIntimation;
+            public void setGatewayType(String gatewayType) {
+                this.gatewayType = gatewayType;
+            }
+        }
 
-	    private WebServiceDetails webServiceDetails;
+        public static class TaskNode {
 
-		public String getId() {
-			return id;
-		}
+            private String taskId;
 
-		public void setId(String id) {
-			this.id = id;
-		}
+            private String taskName;
+            private Boolean showSelection;
 
-		public String getType() {
-			return type;
-		}
+            public String getTaskId() {
+                return taskId;
+            }
 
-		public void setType(String type) {
-			this.type = type;
-		}
+            public void setTaskId(String taskId) {
+                this.taskId = taskId;
+            }
 
-		public String getSourceTaskId() {
-			return sourceTaskId;
-		}
+            public String getTaskName() {
+                return taskName;
+            }
 
-		public void setSourceTaskId(String sourceTaskId) {
-			this.sourceTaskId = sourceTaskId;
-		}
+            public void setTaskName(String taskName) {
+                this.taskName = taskName;
+            }
 
-		public String getTargetTaskId() {
-			return targetTaskId;
-		}
+            public Boolean getShowSelection() {
+                return showSelection;
+            }
 
-		public void setTargetTaskId(String targetTaskId) {
-			this.targetTaskId = targetTaskId;
-		}
+            public void setShowSelection(Boolean showSelection) {
+                this.showSelection = showSelection;
+            }
+        }
 
-		public String getEdgeId() {
-			return edgeId;
-		}
+        public static class UserAttribute {
 
-		public void setEdgeId(String edgeId) {
-			this.edgeId = edgeId;
-		}
+            private String selectionType;
 
-		public String getTriggerPoint() {
-			return triggerPoint;
-		}
+            private List<UserNode> userNodes;
 
-		public void setTriggerPoint(String triggerPoint) {
-			this.triggerPoint = triggerPoint;
-		}
+            public String getSelectionType() {
+                return selectionType;
+            }
 
-		public OfficialIntimation getOfficialIntimation() {
-			return officialIntimation;
-		}
+            public void setSelectionType(String selectionType) {
+                this.selectionType = selectionType;
+            }
 
-		public void setOfficialIntimation(OfficialIntimation officialIntimation) {
-			this.officialIntimation = officialIntimation;
-		}
+            public List<UserNode> getUserNodes() {
+                return userNodes;
+            }
 
-		public WebServiceDetails getWebServiceDetails() {
-			return webServiceDetails;
-		}
+            public void setUserNodes(List<UserNode> userNodes) {
+                this.userNodes = userNodes;
+            }
+        }
+        public static class UserNode {
 
-		public void setWebServiceDetails(WebServiceDetails webServiceDetails) {
-			this.webServiceDetails = webServiceDetails;
-		}
-	}
-	
-	public static class OfficialIntimation {
+            private String taskId;
 
-	    private List<OfficeUnitData> allowedOffices;
+            private Long locationId;
 
-	    private Boolean allowApplicationView;
+            private String locationName;
 
-	    private Boolean allowHistoryView;
+            private Boolean showSelection;
 
-	    private Boolean autoClear;
+            private String holderId;
 
-		public List<OfficeUnitData> getAllowedOffices() {
-			return allowedOffices;
-		}
+            private String holderName;
 
-		public void setAllowedOffices(List<OfficeUnitData> allowedOffices) {
-			this.allowedOffices = allowedOffices;
-		}
+            public String getTaskId() {
+                return taskId;
+            }
 
-		public Boolean getAllowApplicationView() {
-			return allowApplicationView;
-		}
+            public void setTaskId(String taskId) {
+                this.taskId = taskId;
+            }
 
-		public void setAllowApplicationView(Boolean allowApplicationView) {
-			this.allowApplicationView = allowApplicationView;
-		}
+            public Long getLocationId() {
+                return locationId;
+            }
 
-		public Boolean getAllowHistoryView() {
-			return allowHistoryView;
-		}
+            public void setLocationId(Long locationId) {
+                this.locationId = locationId;
+            }
 
-		public void setAllowHistoryView(Boolean allowHistoryView) {
-			this.allowHistoryView = allowHistoryView;
-		}
+            public String getLocationName() {
+                return locationName;
+            }
 
-		public Boolean getAutoClear() {
-			return autoClear;
-		}
+            public void setLocationName(String locationName) {
+                this.locationName = locationName;
+            }
 
-		public void setAutoClear(Boolean autoClear) {
-			this.autoClear = autoClear;
-		}
-	}
+            public Boolean getShowSelection() {
+                return showSelection;
+            }
 
-	public Integer getServiceId() {
-		return serviceId;
-	}
+            public void setShowSelection(Boolean showSelection) {
+                this.showSelection = showSelection;
+            }
 
-	public void setServiceId(Integer serviceId) {
-		this.serviceId = serviceId;
-	}
+            public String getHolderId() {
+                return holderId;
+            }
 
-	public List<Data> getData() {
-		return data;
-	}
+            public void setHolderId(String holderId) {
+                this.holderId = holderId;
+            }
 
-	public void setData(List<Data> data) {
-		this.data = data;
-	}
+            public String getHolderName() {
+                return holderName;
+            }
 
-	public List<AssociatedActivity> getAssociatedActivities() {
-		return associatedActivities;
-	}
+            public void setHolderName(String holderName) {
+                this.holderName = holderName;
+            }
+        }
 
-	public void setAssociatedActivities(List<AssociatedActivity> associatedActivities) {
-		this.associatedActivities = associatedActivities;
-	}
+
+        public static class MappedTask {
+            private Nodes node;
+
+            public Nodes getNode() {
+                return node;
+            }
+
+            public void setNode(Nodes node) {
+                this.node = node;
+            }
+
+        }
+
+        public static class Nodes {
+            private String id;
+            private String type;
+            private String name;
+            private String behaviour;
+            private String formId;
+
+            public String getId() {
+                return id;
+            }
+
+            public void setId(String id) {
+                this.id = id;
+            }
+
+            public String getType() {
+                return type;
+            }
+
+            public void setType(String type) {
+                this.type = type;
+            }
+
+            public String getName() {
+                return name;
+            }
+
+            public void setName(String name) {
+                this.name = name;
+            }
+
+            public String getBehaviour() {
+                return behaviour;
+            }
+
+            public void setBehaviour(String behaviour) {
+                this.behaviour = behaviour;
+            }
+
+            public String getFormId() {
+                return formId;
+            }
+
+            public void setFormId(String formId) {
+                this.formId = formId;
+            }
+
+        }
+
+        public Nodes getNode() {
+            return node;
+        }
+
+        public void setNode(Nodes node) {
+            this.node = node;
+        }
+
+        public List<MappedTask> getMappedTasks() {
+            return mappedTasks;
+        }
+
+        public void setMappedTasks(List<MappedTask> mappedTasks) {
+            this.mappedTasks = mappedTasks;
+        }
+
+        public List<OfficeUnitData> getAllowedOffices() {
+            return allowedOffices;
+        }
+
+        public void setAllowedOffices(List<OfficeUnitData> allowedOffices) {
+            this.allowedOffices = allowedOffices;
+        }
+
+        public WorkflowElementData getWorkflowElementData() {
+            return workflowElementData;
+        }
+
+        public void setWorkflowElementData(WorkflowElementData workflowElementData) {
+            this.workflowElementData = workflowElementData;
+        }
+    }
+
+    public static class AssociatedActivity {
+
+        private String id;
+
+        private String type;
+
+        private String sourceTaskId;
+
+        private String targetTaskId;
+
+        private String edgeId;
+
+        private String triggerPoint;
+
+        private OfficialIntimation officialIntimation;
+
+        private WebServiceDetails webServiceDetails;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getSourceTaskId() {
+            return sourceTaskId;
+        }
+
+        public void setSourceTaskId(String sourceTaskId) {
+            this.sourceTaskId = sourceTaskId;
+        }
+
+        public String getTargetTaskId() {
+            return targetTaskId;
+        }
+
+        public void setTargetTaskId(String targetTaskId) {
+            this.targetTaskId = targetTaskId;
+        }
+
+        public String getEdgeId() {
+            return edgeId;
+        }
+
+        public void setEdgeId(String edgeId) {
+            this.edgeId = edgeId;
+        }
+
+        public String getTriggerPoint() {
+            return triggerPoint;
+        }
+
+        public void setTriggerPoint(String triggerPoint) {
+            this.triggerPoint = triggerPoint;
+        }
+
+        public OfficialIntimation getOfficialIntimation() {
+            return officialIntimation;
+        }
+
+        public void setOfficialIntimation(OfficialIntimation officialIntimation) {
+            this.officialIntimation = officialIntimation;
+        }
+
+        public WebServiceDetails getWebServiceDetails() {
+            return webServiceDetails;
+        }
+
+        public void setWebServiceDetails(WebServiceDetails webServiceDetails) {
+            this.webServiceDetails = webServiceDetails;
+        }
+    }
+
+    public static class OfficialIntimation {
+
+        private List<OfficeUnitData> allowedOffices;
+
+        private Boolean allowApplicationView;
+
+        private Boolean allowHistoryView;
+
+        private Boolean autoClear;
+
+        public List<OfficeUnitData> getAllowedOffices() {
+            return allowedOffices;
+        }
+
+        public void setAllowedOffices(List<OfficeUnitData> allowedOffices) {
+            this.allowedOffices = allowedOffices;
+        }
+
+        public Boolean getAllowApplicationView() {
+            return allowApplicationView;
+        }
+
+        public void setAllowApplicationView(Boolean allowApplicationView) {
+            this.allowApplicationView = allowApplicationView;
+        }
+
+        public Boolean getAllowHistoryView() {
+            return allowHistoryView;
+        }
+
+        public void setAllowHistoryView(Boolean allowHistoryView) {
+            this.allowHistoryView = allowHistoryView;
+        }
+
+        public Boolean getAutoClear() {
+            return autoClear;
+        }
+
+        public void setAutoClear(Boolean autoClear) {
+            this.autoClear = autoClear;
+        }
+    }
+
+    public Integer getServiceId() {
+        return serviceId;
+    }
+
+    public void setServiceId(Integer serviceId) {
+        this.serviceId = serviceId;
+    }
+
+    public List<Data> getData() {
+        return data;
+    }
+
+    public void setData(List<Data> data) {
+        this.data = data;
+    }
+
+    public List<AssociatedActivity> getAssociatedActivities() {
+        return associatedActivities;
+    }
+
+    public void setAssociatedActivities(List<AssociatedActivity> associatedActivities) {
+        this.associatedActivities = associatedActivities;
+    }
 }

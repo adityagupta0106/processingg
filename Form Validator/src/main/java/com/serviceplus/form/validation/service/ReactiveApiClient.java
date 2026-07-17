@@ -213,7 +213,7 @@ public class ReactiveApiClient {
 
 		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
 
-		String url = METADATA_SERVICE.concat("apply/serviceMetadata?");
+		String url = METADATA_SERVICE.concat("apply/serviceMetaData?");
 
 		Mono<ResponseEntity<String>> response = AsynchronousApiExecutor.callExternalEndpoint(String.class,
 				HttpMethod.POST, headers, Map.of("serviceId", serviceId), url, "", MediaType.APPLICATION_JSON);
@@ -585,5 +585,36 @@ public class ReactiveApiClient {
             return Mono.just(inboxList);
 		});
 	}
+
+    public Mono<FetchTaskHolders> fetchTaskHolders(Integer serviceId,
+                                                   String taskId,
+                                                   UserSessionObject user,
+                                                   String txnId) {
+
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+        String url = METADATA_SERVICE.concat("workflow/fetchTaskHolders?");
+
+        Mono<ResponseEntity<String>> callExternalEndpoint =
+                AsynchronousApiExecutor.callExternalEndpoint(
+                        String.class,
+                        HttpMethod.POST,
+                        headers,
+                        Map.of("serviceId", serviceId, "taskId", taskId),
+                        url,
+                        null,
+                        MediaType.APPLICATION_JSON);
+
+        return callExternalEndpoint.flatMap(apiResponse -> {
+
+            String body = apiResponse.getBody();
+
+            FetchTaskHolders response = (FetchTaskHolders) stringToEntityUsingType(body, new TypeToken<FetchTaskHolders>() {}.getType());
+
+            return Mono.just(response);
+
+        }).onErrorResume(WebClientResponseException.class,
+                ex -> handleWebClientError(ex, txnId));
+    }
 }
 

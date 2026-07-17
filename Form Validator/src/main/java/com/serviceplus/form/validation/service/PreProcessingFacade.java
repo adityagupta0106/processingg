@@ -26,6 +26,7 @@ import static com.serviceplus.form.validation.utility.Utility.*;
 import static java.util.Objects.isNull;
 
 import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Service
@@ -52,27 +53,59 @@ public class PreProcessingFacade {
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
     public Mono<List<ServiceMeta>> getServiceList(UserSessionObject user) {
+
         return reactiveApiClient.fetchServiceList(user)
-            .map(services -> {
-                services.forEach(service -> {
-                	service.setServiceKey(encryptServiceKeys(service));
+                .map(services -> {
+
+                    services.forEach(service ->
+                            service.setServiceKey(encryptServiceKeys(service)));
+
+                    return services;
                 });
-                return services;
-            });
     }
 
-    public Mono<HandlerResponse> getFormDataAndSaveTempTxn(ServiceMeta service, UserSessionObject user, ServerHttpRequest request) {
+    public Mono<HandlerResponse> getFormDataAndSaveTempTxn(ServiceMeta service,
+                                                           UserSessionObject user,
+                                                           ServerHttpRequest request) {
 
-        return tempTransactionLogService.mergeTransactionLog(service,user,request)
-                    .flatMap(data -> {
-                        if(isNull(data)) {
-                            return Mono.empty();
-                         }
-                        else {
-                          return  reactiveApiClient.fetchFormData(data.getTxnId(), service,user);
-                        }
-                    });
+        return tempTransactionLogService
+                .mergeTransactionLog(service, user, request)
+                .flatMap(data -> {
 
+                    if (isNull(data)) {
+                        return Mono.empty();
+                    }
+
+                    return reactiveApiClient
+                            .fetchServiceMetadata(user, service.getServiceId(), data.getTxnId())
+                            .flatMap(metadata -> {
+
+                                if (metadata.getProcessFlowMap() != null && metadata.getProcessFlowMap().getData() != null) {
+
+                                    metadata.getProcessFlowMap()
+                                            .getData()
+                                            .stream()
+                                            .filter(d -> d.getNode().getId().equals(service.getTaskId()))
+                                            .findFirst()
+                                            .map(ServiceProcessFlowDTO.Data::getWorkflowElementData)
+                                            .ifPresent(service::setWorkflowElementData);
+                                }
+
+                                String workflowKey = encryptWorkflowKey(
+                                        data.getTxnId(),
+                                        service);
+
+                                return reactiveApiClient
+                                        .fetchFormData(data.getTxnId(), service, user)
+                                        .map(response -> {
+
+                                            response.setWorkflowElementData(service.getWorkflowElementData());
+                                            response.setWorkflowKey(workflowKey);
+                                            return response;
+                                        });
+                            });
+
+                });
     }
 
     public Mono<ProcessingTxn> getFormDataAndSaveTxn(ServiceMeta service, UserSessionObject user, ServerHttpRequest request,

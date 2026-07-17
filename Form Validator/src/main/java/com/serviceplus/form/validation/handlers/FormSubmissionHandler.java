@@ -15,12 +15,12 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
 import java.util.Optional;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
-import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
-import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+import static com.serviceplus.form.validation.utility.Utility.*;
 
 @Service
 @SanitizeRequest
@@ -32,6 +32,7 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
     @Autowired
     private ProcessingTxnRepository txnRepository;
 
+    @SuppressWarnings("unchecked")
     @Override
     public Mono<ServerResponse> process(String applicationId, ServerRequest request, String statusKey, String txnId, Mono<TempTransactionLogs> tempLog
                                                                 , ApplicationFlowStatusEntity flowStatus, ServiceMeta service, boolean fromDraft) {
@@ -55,18 +56,49 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
 
         return bodyMono.hasElement()
                 .flatMap(hasBody -> {
+
                     if (hasBody) {
-                        return bodyMono.flatMap(appData ->
-                                formService.applicationSubmission(
-                                        request.exchange().getRequest(), txnId, appData,
-                                        applId, fromDraft, request, flowStatus,
-                                        serviceIdOpt.get(), service,newEntityFlag
-                                )
-                        );
+
+                        return bodyMono.flatMap(body -> {
+
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> requestBody = (Map<String, Object>) stringToEntity(body, Map.class);
+                            String workflowKey = (String) requestBody.remove("workflowKey");
+
+                            if (!isEmpty(workflowKey)) {
+                                service.setWorkflowElementData(decryptWorkflowKey(workflowKey));
+                            }
+
+                            String formData = entityToString(requestBody);
+
+                            return formService.applicationSubmission(
+                                    request.exchange().getRequest(),
+                                    txnId,
+                                    formData,
+                                    applId,
+                                    fromDraft,
+                                    request,
+                                    flowStatus,
+                                    serviceIdOpt.get(),
+                                    service,
+                                    newEntityFlag
+                            );
+                        });
+
                     } else {
-                        return fetch(applicationId, request, statusKey, txnId,
-                                tempLog, flowStatus, service, fromDraft);
+
+                        return fetch(
+                                applicationId,
+                                request,
+                                statusKey,
+                                txnId,
+                                tempLog,
+                                flowStatus,
+                                service,
+                                fromDraft
+                        );
                     }
+
                 });
 
     }

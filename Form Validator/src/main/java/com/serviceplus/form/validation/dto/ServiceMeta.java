@@ -37,6 +37,22 @@ public class ServiceMeta {
 
     private String departmentName;
 
+    private ServiceProcessFlowDTO.Data.WorkflowElementData workflowElementData;
+
+    private ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflowElementData;
+
+    private Long issuedAt;
+
+    private Long expiry;
+
+    public ServiceProcessFlowDTO.Data.WorkflowElementData getWorkflowElementData() {
+        return workflowElementData;
+    }
+
+    public void setWorkflowElementData(ServiceProcessFlowDTO.Data.WorkflowElementData workflowElementData) {
+        this.workflowElementData = workflowElementData;
+    }
+
     public static class AvailableApplyLocations{
         private Long orgUnitCode;
         private String orgUnitName;
@@ -187,5 +203,29 @@ public class ServiceMeta {
 
     public void setDepartmentName(String departmentName) {
         this.departmentName = departmentName;
+    }
+
+    public Long getIssuedAt() {
+        return issuedAt;
+    }
+
+    public void setIssuedAt(Long issuedAt) {
+        this.issuedAt = issuedAt;
+    }
+
+    public Long getExpiry() {
+        return expiry;
+    }
+
+    public void setExpiry(Long expiry) {
+        this.expiry = expiry;
+    }
+
+    public ServiceProcessFlowDTO.Data.WorkflowElementData getSelectedWorkflowElementData() {
+        return selectedWorkflowElementData;
+    }
+
+    public void setSelectedWorkflowElementData(ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflowElementData) {
+        this.selectedWorkflowElementData = selectedWorkflowElementData;
     }
 }

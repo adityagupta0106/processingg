@@ -15,6 +15,113 @@ public class HandlerResponse {
     private String activityType;
     private List<ServiceMeta.AvailableApplyLocations> applyLocations;
     private boolean activityEnd;
+    private ServiceProcessFlowDTO.Data.WorkflowElementData workflowElementData;
+    private String workflowKey;
+
+    public static class WorkflowElementData {
+
+        private String gatewayType;
+
+        private String selectionType;
+
+        private List<ActionAttribute> actionAttribute;
+
+        private List<TaskAttribute> taskAttribute;
+
+        public String getGatewayType() {
+            return gatewayType;
+        }
+
+        public void setGatewayType(String gatewayType) {
+            this.gatewayType = gatewayType;
+        }
+
+        public String getSelectionType() {
+            return selectionType;
+        }
+
+        public void setSelectionType(String selectionType) {
+            this.selectionType = selectionType;
+        }
+
+        public List<ActionAttribute> getActionAttribute() {
+            return actionAttribute;
+        }
+
+        public void setActionAttribute(List<ActionAttribute> actionAttribute) {
+            this.actionAttribute = actionAttribute;
+        }
+
+        public List<TaskAttribute> getTaskAttribute() {
+            return taskAttribute;
+        }
+
+        public void setTaskAttribute(List<TaskAttribute> taskAttribute) {
+            this.taskAttribute = taskAttribute;
+        }
+
+        public static class ActionAttribute {
+
+            private String key;
+
+            private String label;
+
+            public ActionAttribute() {
+            }
+
+            public ActionAttribute(String key, String label) {
+                this.key = key;
+                this.label = label;
+            }
+
+            public String getKey() {
+                return key;
+            }
+
+            public void setKey(String key) {
+                this.key = key;
+            }
+
+            public String getLabel() {
+                return label;
+            }
+
+            public void setLabel(String label) {
+                this.label = label;
+            }
+        }
+
+        public static class TaskAttribute {
+
+            private String taskId;
+
+            private String taskName;
+
+            public TaskAttribute() {
+            }
+
+            public TaskAttribute(String taskId, String taskName) {
+                this.taskId = taskId;
+                this.taskName = taskName;
+            }
+
+            public String getTaskId() {
+                return taskId;
+            }
+
+            public void setTaskId(String taskId) {
+                this.taskId = taskId;
+            }
+
+            public String getTaskName() {
+                return taskName;
+            }
+
+            public void setTaskName(String taskName) {
+                this.taskName = taskName;
+            }
+        }
+    }
 
     public Map<String, Object> getData() {
         return data;
@@ -62,5 +169,21 @@ public class HandlerResponse {
 
     public void setActivityEnd(boolean activityEnd) {
         this.activityEnd = activityEnd;
+    }
+
+    public ServiceProcessFlowDTO.Data.WorkflowElementData getWorkflowElementData() {
+        return workflowElementData;
+    }
+
+    public void setWorkflowElementData(ServiceProcessFlowDTO.Data.WorkflowElementData workflowElementData) {
+        this.workflowElementData = workflowElementData;
+    }
+
+    public String getWorkflowKey() {
+        return workflowKey;
+    }
+
+    public void setWorkflowKey(String workflowKey) {
+        this.workflowKey = workflowKey;
     }
 }

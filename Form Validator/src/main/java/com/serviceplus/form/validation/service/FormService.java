@@ -6,9 +6,12 @@ import static com.serviceplus.form.validation.utility.Utility.handleWebClientErr
 import static com.serviceplus.form.validation.utility.Utility.returnError;
 import static java.util.Objects.isNull;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import com.serviceplus.form.validation.dto.FetchTaskHolders;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +30,6 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
-import com.serviceplus.form.validation.entity.ProcessingTxn;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.flow.EventDecider;
 
@@ -149,9 +151,12 @@ public class FormService {
                                 "Kindly select a location. [VAL - 002]", HttpStatus.BAD_REQUEST,txnLog.getTxnId()));
                     }
                 } else {
+                    Long selectedLocationId = ((Number) selectedLocation.get("value")).longValue();
+
                     List<ServiceMeta.AvailableApplyLocations> validLocation = locations.stream()
-                            .filter(loc -> loc.getOrgUnitCode().intValue() == (Integer) selectedLocation.get("value"))
+                            .filter(loc -> selectedLocationId.equals(loc.getOrgUnitCode()))
                             .toList();
+
                     if (validLocation.isEmpty()) {
                         return Mono.error(new SPRuntimeError(
                                 "Invalid location selected. [SUB-003]", HttpStatus.BAD_REQUEST,txnLog.getTxnId()));
@@ -206,16 +211,7 @@ public class FormService {
                         ex -> handleWebClientError(ex, txnLog.getTxnId()));
     }
 
-    private Mono<ServerResponse> handleSuccessfulResponse(
-            String responseBody,
-            ServiceMeta service,
-            UserSessionObject user,
-            ServerHttpRequest request,
-            TempTransactionLogs txnLog,
-            String appId,
-            ServerRequest reactiveRequestObject,
-            ApplicationFlowStatusEntity flowStatus,
-			String appData,boolean newEntityFlag) {
+    private Mono<ServerResponse> handleSuccessfulResponse(String responseBody, ServiceMeta service, UserSessionObject user, ServerHttpRequest request, TempTransactionLogs txnLog, String appId, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus, String appData, boolean newEntityFlag) {
 
 		Map<String, Object> responseJson;
 
@@ -232,16 +228,216 @@ public class FormService {
 		}
 
 		String dataId = (String) responseJson.getOrDefault("dataId", "");
-		String actionCode = (String) responseJson.getOrDefault("actionCode", "");
 
-        return preProcessingFacade.getFormDataAndSaveTxn(service, user, request, txnLog, appId, dataId, "FS",newEntityFlag,flowStatus)
-				.flatMap(txn ->  eventDecider.proceedToNext(dataId, service, user, txn, txn.getApplicationId(),
-								actionCode, "FS", reactiveRequestObject, flowStatus)
-						)
-				.onErrorResume(Exception.class, ex -> returnError(ex, txnLog.getTxnId(), applicationFlowLogs));
+        return validateWorkflowSelection(responseJson, service, user, txnLog.getTxnId())
+                .then(
+                        preProcessingFacade.getFormDataAndSaveTxn(
+                                service,
+                                user,
+                                request,
+                                txnLog,
+                                appId,
+                                dataId,
+                                "FS",
+                                newEntityFlag,
+                                flowStatus
+                        )
+                )
+                .flatMap(txn -> {
+
+                    String actionCode = "";
+                    service.setWorkflowElementData(null);
+
+                    if (service.getSelectedWorkflowElementData() != null
+                            && service.getSelectedWorkflowElementData().getActionAttribute() != null
+                            && !service.getSelectedWorkflowElementData().getActionAttribute().isEmpty()) {
+
+                        actionCode = service.getSelectedWorkflowElementData()
+                                .getActionAttribute()
+                                .getFirst()
+                                .getKey();
+                    }
+
+                    return eventDecider.proceedToNext(
+                            dataId,
+                            service,
+                            user,
+                            txn,
+                            txn.getApplicationId(),
+                            actionCode,
+                            "FS",
+                            reactiveRequestObject,
+                            flowStatus);
+                });
 		// applicationGenerationService.executeApplicationProcessing(dataId, service,
 		// user, txn, appId,actionCode));
 	}
+
+
+    @SuppressWarnings("unchecked")
+    private Mono<Void> validateWorkflowSelection(Map<String, Object> responseJson,
+                                                 ServiceMeta service,
+                                                 UserSessionObject user,
+                                                 String txnId) {
+
+        if (service.getWorkflowElementData() == null) {
+            applicationFlowLogs.info("TxnId : {} | Workflow metadata not present. Skipping workflow validation.", txnId);
+            return Mono.empty();
+        }
+
+        applicationFlowLogs.info(responseJson);
+
+        ServiceProcessFlowDTO.Data.WorkflowElementData workflow = service.getWorkflowElementData();
+
+        List<Map<String, Object>> selectedActions =
+                (List<Map<String, Object>>) responseJson.getOrDefault("action", Collections.emptyList());
+
+        List<Map<String, Object>> selectedTasks =
+                (List<Map<String, Object>>) responseJson.getOrDefault("task", Collections.emptyList());
+
+        Map<String, List<Map<String, Object>>> selectedUsers =
+                responseJson.get("user") == null
+                        ? Collections.emptyMap()
+                        : (Map<String, List<Map<String, Object>>>) responseJson.get("user");
+
+        ServiceProcessFlowDTO.Data.ActionAttribute selectedAction = null;
+
+        if (!selectedActions.isEmpty() && workflow.getActionAttribute() != null) {
+
+            String actionCode = (String) selectedActions.getFirst().get("key");
+
+            selectedAction = workflow.getActionAttribute().stream()
+                    .filter(a -> actionCode.equals(a.getKey()))
+                    .findFirst()
+                    .orElseThrow(() -> new SPRuntimeError(
+                            "Invalid action selected.",
+                            HttpStatus.BAD_REQUEST,
+                            txnId));
+
+            applicationFlowLogs.info("TxnId : {} | Action Validated : {}", txnId, actionCode);
+        }
+
+        List<String> selectedTaskIds = new ArrayList<>();
+        List<ServiceProcessFlowDTO.Data.TaskNode> selectedTaskNodes = new ArrayList<>();
+
+        if (!selectedTasks.isEmpty()) {
+
+            selectedTaskIds = selectedTasks.stream().map(t -> (String) t.get("key")).toList();
+
+            Map<String, ServiceProcessFlowDTO.Data.TaskNode> allowedTaskMap =
+                    workflow.getTaskAttribute().getTaskNodes().stream()
+                            .collect(Collectors.toMap(
+                                    ServiceProcessFlowDTO.Data.TaskNode::getTaskId,
+                                    Function.identity()));
+
+            for (String taskId : selectedTaskIds) {
+
+                ServiceProcessFlowDTO.Data.TaskNode node = allowedTaskMap.get(taskId);
+
+                if (node == null) {
+                    throw new SPRuntimeError("Invalid task selected.", HttpStatus.BAD_REQUEST, txnId);
+                }
+
+                selectedTaskNodes.add(node);
+            }
+
+            applicationFlowLogs.info("TxnId : {} | Tasks Validated : {}", txnId, selectedTaskIds);
+        }
+
+        List<ServiceProcessFlowDTO.Data.UserNode> selectedUserNodes = new ArrayList<>();
+
+        Mono<Void> userValidation = Mono.empty();
+
+        if (!selectedTaskIds.isEmpty() && !selectedUsers.isEmpty()) {
+
+            userValidation = Flux.fromIterable(selectedTaskIds)
+
+                    .flatMap(taskId ->
+
+                            reactiveApiClient.fetchTaskHolders(
+                                            service.getServiceId(),
+                                            taskId,
+                                            user,
+                                            txnId)
+
+                                    .flatMap(holderResponse -> {
+
+                                        List<FetchTaskHolders.UserNode> allowedUsers =
+                                                holderResponse.getNode()
+                                                        .getOrDefault(taskId, Collections.emptyList());
+
+                                        Map<String, FetchTaskHolders.UserNode> allowedUserMap =
+                                                allowedUsers.stream()
+                                                        .collect(Collectors.toMap(
+                                                                FetchTaskHolders.UserNode::getHolderId,
+                                                                Function.identity()));
+
+                                        List<Map<String, Object>> taskUsers =
+                                                selectedUsers.getOrDefault(taskId, Collections.emptyList());
+
+                                        for (Map<String, Object> selectedUser : taskUsers) {
+
+                                            String holderId = (String) selectedUser.get("key");
+
+                                            FetchTaskHolders.UserNode holder = allowedUserMap.get(holderId);
+
+                                            if (holder == null) {
+                                                return Mono.error(new SPRuntimeError("Invalid user selected.", HttpStatus.BAD_REQUEST, txnId));
+                                            }
+
+                                            ServiceProcessFlowDTO.Data.UserNode node = new ServiceProcessFlowDTO.Data.UserNode();
+
+                                            node.setTaskId(taskId);
+                                            node.setHolderId(holder.getHolderId());
+                                            node.setHolderName(holder.getName());
+                                            node.setLocationId(holder.getLocationId());
+
+                                            selectedUserNodes.add(node);
+                                        }
+
+                                        return Mono.empty();
+                                    }))
+
+                    .then();
+        }
+
+        ServiceProcessFlowDTO.Data.ActionAttribute finalSelectedAction = selectedAction;
+
+        return userValidation.then(Mono.fromRunnable(() -> {
+
+            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow = new ServiceProcessFlowDTO.Data.WorkflowElementData();
+
+            if (finalSelectedAction != null) {
+                selectedWorkflow.setActionAttribute(List.of(finalSelectedAction));
+            }
+
+            if (!selectedTaskNodes.isEmpty()) {
+
+                ServiceProcessFlowDTO.Data.TaskAttribute taskAttribute = new ServiceProcessFlowDTO.Data.TaskAttribute();
+
+                taskAttribute.setSelectionType(workflow.getTaskAttribute().getSelectionType());
+                taskAttribute.setGatewayType(workflow.getTaskAttribute().getGatewayType());
+                taskAttribute.setTaskNodes(selectedTaskNodes);
+
+                selectedWorkflow.setTaskAttribute(taskAttribute);
+            }
+
+            if (!selectedUserNodes.isEmpty()) {
+
+                ServiceProcessFlowDTO.Data.UserAttribute userAttribute =
+                        new ServiceProcessFlowDTO.Data.UserAttribute();
+
+                userAttribute.setSelectionType("MANUAL");
+                userAttribute.setUserNodes(selectedUserNodes);
+
+                selectedWorkflow.setUserAttribute(userAttribute);
+            }
+
+            service.setSelectedWorkflowElementData(selectedWorkflow);
+
+            applicationFlowLogs.info("TxnId : {} | Selected Workflow Prepared Successfully", txnId);
+        }));
+    }
 
     public Mono<ServerResponse> fetchFormData(String dataId, String formId, UserSessionObject user, String txnId, String applId, String serviceId, ServiceMeta service) {
         return reactiveApiClient.fetchApplicantData(dataId,formId,user,txnId,applId);
