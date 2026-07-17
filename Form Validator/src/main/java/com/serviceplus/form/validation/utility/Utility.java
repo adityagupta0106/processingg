@@ -7,8 +7,11 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,6 +24,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,7 +45,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
-import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLY_METADATA_ENC_KEY;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
 import static com.serviceplus.form.validation.utility.CryptoUtil.HMACSHA256;
 import static com.serviceplus.form.validation.utility.KeyGenerator.generatePassKey;
 
@@ -167,75 +171,141 @@ public class Utility {
 	}
 
     public static String encryptServiceKeys(ServiceMeta service) {
-        ObjectMapper mapper = new ObjectMapper();
 
         try {
-            String locationsJson = mapper.writeValueAsString(service.getLocations());
+            service.setBaseServiceId(service.getServiceId()/10000);
+            Map<String, Object> payload = new HashMap<>();
 
-            StringBuilder sb = new StringBuilder();
-            String plain = sb.append(service.getServiceId()).append("~")
-                    .append(service.getFormId()).append("~")
-                    .append(service.getTaskId()).append("~")
-                    .append(service.getTaskType()).append("~")
-                    .append(locationsJson).append("~")
-                    .append(service.getServiceName())
-                    .toString();
+            payload.put("service", service);
+            payload.put("issuedAt", Instant.now().toEpochMilli());
+            payload.put("expiresAt", Instant.now().plus(60, ChronoUnit.MINUTES).toEpochMilli());
 
-            String secretKey = APPLY_METADATA_ENC_KEY;
+            String plain = entityToString(payload);
 
-            String aesEncrypt = AESEncrypt(plain, secretKey);
+            String encrypted = AESEncrypt(plain, APPLY_METADATA_AES_KEY);
+            String signature = HMACSHA256(encrypted, APPLY_METADATA_HMAC_KEY);
 
-            String signature = HMACSHA256(aesEncrypt, secretKey);
-            return aesEncrypt.concat(".").concat(signature);
+            return encrypted.concat(".").concat(signature);
 
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static ServiceMeta decryptServiceKeys(String serviceKey) {
-        if (serviceKey.contains("%2B")) {
-            serviceKey = serviceKey.replace("%2B", "+");
-        }
-        if (serviceKey.contains(" ")) {
-            serviceKey = serviceKey.replaceAll(" ", "+");
-        }
-
-
-        String[] parts = serviceKey.split("\\.");
-        String encrypted = parts[0];
-        String signature = parts[1];
-
-        String secretKey = APPLY_METADATA_ENC_KEY;
-
-        if (!HMACSHA256(encrypted, secretKey).equals(signature)) {
-            throw new RuntimeException("Invalid token signature");
-        }
-
-        String decrypt = AESDecrypt(encrypted, secretKey);
-        String[] applyData = decrypt.split("~");
-
-        ServiceMeta service = new ServiceMeta();
-        service.setServiceId(Integer.parseInt(applyData[0]));
-        service.setBaseServiceId(Integer.parseInt(applyData[0]) / 10000);
-        service.setFormId(applyData[1]);
-        service.setTaskId(applyData[2]);
-        service.setTaskType(applyData[3]);
-        service.setServiceName(applyData[5]);
-        service.setServiceKey(serviceKey);
-
-        String locationsJson = applyData[4];
-        ObjectMapper mapper = new ObjectMapper();
+    public static String encryptWorkflowKey(String txnId,
+                                            ServiceMeta serviceMeta) {
 
         try {
-            List<ServiceMeta.AvailableApplyLocations> locations =
-                    mapper.readValue(locationsJson, new TypeReference<>() {});
-            service.setLocations(locations);
-        } catch (JsonProcessingException e) {
+
+            ObjectMapper mapper = new ObjectMapper();
+
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("txnId", txnId);
+            payload.put("serviceId",serviceMeta.getServiceId());
+            payload.put("workflowElementData", serviceMeta.getWorkflowElementData());
+            payload.put("issuedAt", Instant.now().toEpochMilli());
+            payload.put("expiresAt", Instant.now().plus(60, ChronoUnit.MINUTES).toEpochMilli());
+
+            String plain = entityToString(payload);
+
+            String encrypted = AESEncrypt(plain, APPLY_METADATA_AES_KEY);
+
+            String signature = HMACSHA256(encrypted, APPLY_METADATA_HMAC_KEY);
+
+            return encrypted.concat(".").concat(signature);
+
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
 
-        return service;
+    @SuppressWarnings("unchecked")
+    public static ServiceProcessFlowDTO.Data.WorkflowElementData decryptWorkflowKey(String workflowKey) {
+
+        try {
+
+            if (workflowKey.contains("%2B")) {
+                workflowKey = workflowKey.replace("%2B", "+");
+            }
+
+            if (workflowKey.contains(" ")) {
+                workflowKey = workflowKey.replace(" ", "+");
+            }
+
+            String[] parts = workflowKey.split("\\.");
+
+            if (parts.length != 2) {
+                throw new RuntimeException("Invalid Workflow Key");
+            }
+
+            String encrypted = parts[0];
+            String signature = parts[1];
+
+            if (!HMACSHA256(encrypted, APPLY_METADATA_HMAC_KEY).equals(signature)) {
+                throw new RuntimeException("Invalid Workflow Key Signature");
+            }
+
+            String plain = AESDecrypt(encrypted, APPLY_METADATA_AES_KEY);
+            Map<String, Object> payload = (Map<String, Object>) stringToEntity(plain,Map.class);
+
+            Number expiresAt = (Number) payload.get("expiresAt");
+
+            if (Instant.now().toEpochMilli() > expiresAt.longValue()) {
+                throw new RuntimeException("Workflow Key Expired");
+            }
+
+            return (ServiceProcessFlowDTO.Data.WorkflowElementData) stringToEntity(
+                    entityToString(payload.get("workflowElementData")),
+                    ServiceProcessFlowDTO.Data.WorkflowElementData.class);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid Workflow Key", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public static ServiceMeta decryptServiceKeys(String serviceKey) {
+
+        try {
+
+            if (serviceKey.contains("%2B")) {
+                serviceKey = serviceKey.replace("%2B", "+");
+            }
+
+            if (serviceKey.contains(" ")) {
+                serviceKey = serviceKey.replace(" ", "+");
+            }
+
+            String[] parts = serviceKey.split("\\.");
+
+            if (parts.length != 2) {
+                throw new RuntimeException("Invalid Service Key");
+            }
+
+            String encrypted = parts[0];
+            String signature = parts[1];
+
+            if (!HMACSHA256(encrypted, APPLY_METADATA_HMAC_KEY).equals(signature)) {
+                throw new RuntimeException("Invalid Service Key Signature");
+            }
+
+            String plain = AESDecrypt(encrypted, APPLY_METADATA_AES_KEY);
+
+            Map<String, Object> payload = (Map<String, Object>) stringToEntity(plain, Map.class);
+
+            Number expiresAt = (Number) payload.get("expiresAt");
+
+            if (Instant.now().toEpochMilli() > expiresAt.longValue()) {
+                throw new RuntimeException("Workflow Key Expired");
+            }
+
+            return (ServiceMeta) stringToEntity(
+                    entityToString(payload.get("service")),
+                    ServiceMeta.class);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid Service Key", e);
+        }
     }
 
 

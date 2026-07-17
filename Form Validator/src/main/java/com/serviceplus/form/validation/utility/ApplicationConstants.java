@@ -34,10 +34,12 @@ public class ApplicationConstants {
             11,"D"
     );
 
-    public static final String APPLY_METADATA_ENC_KEY = "OJPJth1qdkCB8zWr";
+    public static final String APPLY_METADATA_AES_KEY  = "vN7$kP2!Qx9@Lm5R";
+    public static final String APPLY_METADATA_HMAC_KEY = "cR8!Ty5@Wm2#Qs9X";
     public static final String ACTIVITY_FORM_STATUS_KEY = "FS";
     public static final String ACTIVITY_ENCLOSURE_STATUS_KEY = "ES";
     public static final String APPLICATION_STATUS_DRAFT = "S";
-
+    public static final Integer ACTION_DELIVER = 11;
+    public static final Integer ACTION_REJECT = 10;
 
 }

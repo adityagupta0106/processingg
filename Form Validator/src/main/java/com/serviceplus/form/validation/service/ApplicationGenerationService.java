@@ -4,11 +4,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.time.ZoneId;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import com.serviceplus.form.validation.dto.HandlerResponse;
-import com.serviceplus.form.validation.dto.InboxKafka;
+import com.serviceplus.form.validation.dto.*;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
@@ -22,8 +23,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
 import com.serviceplus.form.validation.kafka.KafkaProducer;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
@@ -148,16 +147,67 @@ public class ApplicationGenerationService {
                         createCurrentProcess(ad,service,user)
                 )
                 .flatMap(cp -> {
-                    cp.setActionCode(appStatus);
                     cp.setActionTaken("Y");
                     cp.setActionOn(LocalDateTime.now());
                     cp.setDataId(dataId);
-                    cp.setUserId(user.getUserID().longValue());
+                    cp.setUserId(user.getUserID());
                     cp.setFormId(service.getFormId());
+
+                    ServiceProcessFlowDTO.Data.ActionAttribute action =
+                            service.getSelectedWorkflowElementData()
+                                    .getActionAttribute()
+                                    .getFirst();
+
+                    boolean logicalClosure = Boolean.TRUE.equals(action.getLogicalClosure());
+                    boolean completeClosure = Boolean.TRUE.equals(action.getCompleteClosure());
+
+                    if (completeClosure) {
+                        return transactionalDBExecutor
+                                .execute(savedLog.getTxnId(), cp, ad, savedLog)
+                                .then(sendCurrentProcessToTracking(cp, ad, service, user));
+                    }
+
                     return workflowService.generateNextWorkflow(ad,savedLog,service,user,cp).
                             flatMap(inboxKafka -> persistWorkflow(ad, (InboxKafka) inboxKafka, savedLog)
                                     .doOnSuccess(_ -> sendToInboxService((InboxKafka) inboxKafka,ad,service)));
                 });
+    }
+
+    private Mono<Void> sendCurrentProcessToTracking(CurrentProcess currentProcess,
+                                                    ApplicationDetails application,
+                                                    ServiceMeta service,
+                                                    UserSessionObject user) {
+
+        InboxKafka inboxKafka = new InboxKafka();
+
+        inboxKafka.setProcessList(List.of(currentProcess));
+        inboxKafka.setOfficeDetails(Collections.emptyList());
+
+        inboxKafka.setServiceName(service.getServiceName());
+        inboxKafka.setApplicationRefNo(application.getReferenceNo());
+
+        inboxKafka.setAppliedBy(application.getBeneficiaryId());
+        inboxKafka.setBeneficiaryName(application.getBeneficiaryName());
+        inboxKafka.setApplyDate(application.getApplyDate());
+
+        inboxKafka.setLoggedInUserId(user.getUserID());
+        inboxKafka.setLoggedInUserLocation(user.getLocationId());
+
+        String key = application.getApplicationId()
+                .concat("_")
+                .concat(UUID.randomUUID().toString());
+
+        kafkaProducer.sendMessage(
+                PUSH_FORM_SUBMISSION_DATA_INBOX_TOPIC,
+                key,
+                entityToString(inboxKafka));
+
+        applicationFlowLogs.info(
+                "Terminal action. Current process pushed to tracking. applicationId={}, processId={}",
+                application.getApplicationId(),
+                currentProcess.getProcessId());
+
+        return Mono.empty();
     }
 
     private Mono<? extends CurrentProcess> createCurrentProcess(ApplicationDetails ad, ServiceMeta service, UserSessionObject user) {
