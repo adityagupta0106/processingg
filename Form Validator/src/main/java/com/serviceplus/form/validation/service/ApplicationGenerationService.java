@@ -153,18 +153,22 @@ public class ApplicationGenerationService {
                     cp.setUserId(user.getUserID());
                     cp.setFormId(service.getFormId());
 
-                    ServiceProcessFlowDTO.Data.ActionAttribute action =
-                            service.getSelectedWorkflowElementData()
-                                    .getActionAttribute()
-                                    .getFirst();
+                    if (service.getSelectedWorkflowElementData() != null
+                          && service.getSelectedWorkflowElementData().getActionAttribute() != null) {
 
-                    boolean logicalClosure = Boolean.TRUE.equals(action.getLogicalClosure());
-                    boolean completeClosure = Boolean.TRUE.equals(action.getCompleteClosure());
+                        ServiceProcessFlowDTO.Data.ActionAttribute action =
+                                service.getSelectedWorkflowElementData()
+                                        .getActionAttribute()
+                                        .getFirst();
 
-                    if (completeClosure) {
-                        return transactionalDBExecutor
-                                .execute(savedLog.getTxnId(), cp, ad, savedLog)
-                                .then(sendCurrentProcessToTracking(cp, ad, service, user));
+                        boolean logicalClosure = Boolean.TRUE.equals(action.getLogicalClosure());
+                        boolean completeClosure = Boolean.TRUE.equals(action.getCompleteClosure());
+
+                        if (completeClosure) {
+                            return transactionalDBExecutor
+                                    .execute(savedLog.getTxnId(), cp, ad, savedLog)
+                                    .then(sendCurrentProcessToTracking(cp, ad, service, user));
+                        }
                     }
 
                     return workflowService.generateNextWorkflow(ad,savedLog,service,user,cp).
