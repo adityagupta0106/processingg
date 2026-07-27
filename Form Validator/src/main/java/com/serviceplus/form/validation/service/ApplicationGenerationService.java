@@ -62,6 +62,12 @@ public class ApplicationGenerationService {
 
     @Autowired
     private KafkaProducer kafkaProducer;
+    
+    @Autowired
+    private AssociatedTaskService associatedTaskService;
+    
+    @Autowired
+    private WorkflowWebServiceTaskExecutor workflowWebServiceTaskExecutor;
 
     @Value("${push.form.submission.data.inbox.topic}")
     private String PUSH_FORM_SUBMISSION_DATA_INBOX_TOPIC;
@@ -172,12 +178,12 @@ public class ApplicationGenerationService {
                     }
 
                     return workflowService.generateNextWorkflow(ad,savedLog,service,user,cp).
-                            flatMap(inboxKafka -> persistWorkflow(ad, (InboxKafka) inboxKafka, savedLog)
+                            flatMap(inboxKafka -> persistWorkflow(ad, (InboxKafka) inboxKafka, savedLog,user)
                                     .doOnSuccess(_ -> sendToInboxService((InboxKafka) inboxKafka,ad,service)));
                 });
     }
 
-    private Mono<Void> sendCurrentProcessToTracking(CurrentProcess currentProcess,
+    public Mono<Void> sendCurrentProcessToTracking(CurrentProcess currentProcess,
                                                     ApplicationDetails application,
                                                     ServiceMeta service,
                                                     UserSessionObject user) {
@@ -232,16 +238,26 @@ public class ApplicationGenerationService {
         return Mono.just(currentProcess);
     }
 
-    private Mono<Void> persistWorkflow(
+    public Mono<Void> persistWorkflow(
             ApplicationDetails ad,
             InboxKafka inboxKafka,
-            ProcessingTxn txn) {
+            ProcessingTxn txn,
+            UserSessionObject user) {
 
-        return transactionalDBExecutor.execute(txn.getTxnId(),inboxKafka.getProcessList(), ad, txn);
+        return transactionalDBExecutor.execute(txn.getTxnId(),inboxKafka.getProcessList(), ad, txn)
+        		.then(Mono.fromRunnable(() ->
+                associatedTaskService.executeAssociatedTasks(
+                        inboxKafka.getProcessList(),
+                        ad,
+                        user)))
+        .then(workflowWebServiceTaskExecutor.execute(
+                inboxKafka.getProcessList(),
+                ad,
+                user)).then();
     }
 
 
-    private Mono<Object> sendToInboxService(InboxKafka inboxKafka, ApplicationDetails appDetails,ServiceMeta service) {
+    public Mono<Object> sendToInboxService(InboxKafka inboxKafka, ApplicationDetails appDetails,ServiceMeta service) {
         String key = appDetails.getApplicationId().concat("_").concat(UUID.randomUUID().toString());
         inboxKafka.setApplicationRefNo(appDetails.getReferenceNo());
         kafkaProducer.sendMessage(PUSH_FORM_SUBMISSION_DATA_INBOX_TOPIC,key,entityToString(inboxKafka));

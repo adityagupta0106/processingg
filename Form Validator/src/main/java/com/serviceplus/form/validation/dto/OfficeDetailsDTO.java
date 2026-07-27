@@ -16,6 +16,8 @@ public class OfficeDetailsDTO {
 		private Integer orgUnitCode;
 		
 		private String orgUnitName;
+		
+		private List<String> holderIds;
 
 		public Integer getOrgUnitCode() {
 			return orgUnitCode;
@@ -31,8 +33,15 @@ public class OfficeDetailsDTO {
 
 		public void setOrgUnitName(String orgUnitName) {
 			this.orgUnitName = orgUnitName;
-		}		
-		
+		}
+
+		public List<String> getHolderIds() {
+			return holderIds;
+		}
+
+		public void setHolderIds(List<String> holderIds) {
+			this.holderIds = holderIds;
+		}				
 	}
 
 	public String getTaskId() {

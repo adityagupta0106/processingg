@@ -275,7 +275,7 @@ public class FormService {
 
 
     @SuppressWarnings("unchecked")
-    private Mono<Void> validateWorkflowSelection(Map<String, Object> responseJson,
+    public Mono<Void> validateWorkflowSelection(Map<String, Object> responseJson,
                                                  ServiceMeta service,
                                                  UserSessionObject user,
                                                  String txnId) {

@@ -171,7 +171,7 @@ public class TaskAssignmentService {
     }
 
     public Mono<Void> executeAfterTaskMvel(ServiceMeta service, ApplicationDetails applicationDetails, ProcessingTxn txn, String appData,
-                                            CurrentProcess currentActionProcess, String taskId, Map<String, Map<String,List<String>>> taskLocationUserHolderMap
+                                            CurrentProcess currentActionProcess, String taskId, Map<String, Map<String,List<String>>> taskLocationUserHolderMap, Map<String, Date> timerDueDate
     ) {
 
         return apiClient.fetchMvelDetails(service.getServiceId())
@@ -198,6 +198,10 @@ public class TaskAssignmentService {
                             if (response.getTaskLocationUserHolderMap() != null) {
                                 taskLocationUserHolderMap.clear();
                                 taskLocationUserHolderMap.putAll(response.getTaskLocationUserHolderMap());
+                            }
+                            if (response.getTimerDueDate()!=null && !response.getTimerDueDate().isEmpty()) {
+                            	timerDueDate.clear();
+                            	timerDueDate.putAll(response.getTimerDueDate());
                             }
                             return Mono.empty();
                         }))

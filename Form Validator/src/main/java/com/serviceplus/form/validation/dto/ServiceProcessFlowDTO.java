@@ -1,14 +1,39 @@
 package com.serviceplus.form.validation.dto;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import com.serviceplus.form.validation.dto.OfficeDetailsDTO.OfficeUnitData;
+import com.serviceplus.form.validation.dto.WebServiceDetails.FormDetail;
 
 public class ServiceProcessFlowDTO {
     private Integer serviceId;
     private List<Data> data;
     private List<AssociatedActivity> associatedActivities;
+    private Map<String, TaskRelationDTO> taskRelation;
+    
+    public static class TaskRelationDTO {
 
+	    private List<String> previousTask = new ArrayList<>();
+	    private List<String> nextTask = new ArrayList<>();
+
+	    public List<String> getPreviousTask() {
+	        return previousTask;
+	    }
+
+	    public void setPreviousTask(List<String> previousTask) {
+	        this.previousTask = previousTask;
+	    }
+
+	    public List<String> getNextTask() {
+	        return nextTask;
+	    }
+
+	    public void setNextTask(List<String> nextTask) {
+	        this.nextTask = nextTask;
+	    }
+	}
     public static class Data {
 
         private Nodes node;
@@ -262,6 +287,7 @@ public class ServiceProcessFlowDTO {
         public static class Nodes {
             private String id;
             private String type;
+            private Integer taskType;
             private String name;
             private String behaviour;
             private String formId;
@@ -281,6 +307,14 @@ public class ServiceProcessFlowDTO {
             public void setType(String type) {
                 this.type = type;
             }
+            
+        	public Integer getTaskType() {
+				return taskType;
+			}
+
+			public void setTaskType(Integer taskType) {
+				this.taskType = taskType;
+			}
 
             public String getName() {
                 return name;
@@ -349,11 +383,15 @@ public class ServiceProcessFlowDTO {
 
         private String sourceTaskId;
 
-        private String targetTaskId;
-
         private String edgeId;
 
-        private String triggerPoint;
+        private List<String> triggerPoint;
+
+	    private List<String> triggerOnAction;
+
+	    private List<String> executionTasks;
+	    
+	    private FormDetail formDetail;
 
         private OfficialIntimation officialIntimation;
 
@@ -383,14 +421,6 @@ public class ServiceProcessFlowDTO {
             this.sourceTaskId = sourceTaskId;
         }
 
-        public String getTargetTaskId() {
-            return targetTaskId;
-        }
-
-        public void setTargetTaskId(String targetTaskId) {
-            this.targetTaskId = targetTaskId;
-        }
-
         public String getEdgeId() {
             return edgeId;
         }
@@ -399,15 +429,40 @@ public class ServiceProcessFlowDTO {
             this.edgeId = edgeId;
         }
 
-        public String getTriggerPoint() {
-            return triggerPoint;
-        }
+        public List<String> getTriggerPoint() {
+			return triggerPoint;
+		}
 
-        public void setTriggerPoint(String triggerPoint) {
-            this.triggerPoint = triggerPoint;
-        }
+		public void setTriggerPoint(List<String> triggerPoint) {
+			this.triggerPoint = triggerPoint;
+		}
+		
 
-        public OfficialIntimation getOfficialIntimation() {
+		public List<String> getTriggerOnAction() {
+			return triggerOnAction;
+		}
+
+		public void setTriggerOnAction(List<String> triggerOnAction) {
+			this.triggerOnAction = triggerOnAction;
+		}
+
+		public List<String> getExecutionTasks() {
+			return executionTasks;
+		}
+
+		public void setExecutionTasks(List<String> executionTasks) {
+			this.executionTasks = executionTasks;
+		}
+		
+		public FormDetail getFormDetail() {
+			return formDetail;
+		}
+
+		public void setFormDetail(FormDetail formDetail) {
+			this.formDetail = formDetail;
+		}
+
+		public OfficialIntimation getOfficialIntimation() {
             return officialIntimation;
         }
 
@@ -490,4 +545,13 @@ public class ServiceProcessFlowDTO {
     public void setAssociatedActivities(List<AssociatedActivity> associatedActivities) {
         this.associatedActivities = associatedActivities;
     }
+
+	public Map<String, TaskRelationDTO> getTaskRelation() {
+		return taskRelation;
+	}
+
+	public void setTaskRelation(Map<String, TaskRelationDTO> taskRelation) {
+		this.taskRelation = taskRelation;
+	}
+    
 }

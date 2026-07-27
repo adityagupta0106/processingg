@@ -19,6 +19,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -46,7 +47,7 @@ public class GatewayService {
         this.currentProcessBuilder = currentProcessBuilder;
     }
 
-    public Mono<CurrentProcess> processGateway(
+    public Flux<CurrentProcess> processGateway(
             ServiceProcessFlowDTO.Data.Nodes node,
             ServiceProcessFlowDTO.Data.Nodes gatewayNode,
             List<ServiceProcessFlowDTO.Data> wf,
@@ -59,7 +60,7 @@ public class GatewayService {
             CurrentProcess baseProcess,
             List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
             Map<String, Map<String,List<String>>> taskLocationUserHolderMap,
-            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow){
+            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow, Map<String, Date> timerDueDate){
 
 
             applicationFlowLogs.info(
@@ -99,7 +100,7 @@ public class GatewayService {
 
                             return executeGatewayMvel(service, ad, txn, "",
                                     currentActionProcess, gatewayNode.getId(),
-                                    nextToGateway, taskLocationUserHolderMap)
+                                    nextToGateway, taskLocationUserHolderMap,timerDueDate)
 
                                     .map(mvelTasks -> {
 
@@ -193,7 +194,7 @@ public class GatewayService {
                             return currentProcessBuilder.buildGatewayNextProcess(baseProcess, gatewayNode,
                                     filteredTask.getNode(), service, ad, user, now,
                                     taskAvailableOfficeLocations, wf, txn);
-                        }).next();
+                        });
             }
 
             if (workflowHelper.isConvergentGateway(behaviour)) {
@@ -211,13 +212,12 @@ public class GatewayService {
                         "Convergent Gateway produced process for nodeId={}",
                         nextNode.getId());
 
-                return Mono.just(cp);
+                return Flux.just(cp);
             }
 
-        applicationFlowLogs.info("Returning normal base process for taskId={}",
-                gatewayNode.getId());
+            applicationFlowLogs.info("Returning normal base process for taskId={}",gatewayNode.getId());
 
-        return Mono.just(baseProcess);
+            return Flux.just(baseProcess);
     }
 
     private Mono<List<ServiceProcessFlowDTO.Data.MappedTask>> executeGatewayMvel(
@@ -229,7 +229,8 @@ public class GatewayService {
             CurrentProcess currentActionProcess,
             String gatewayId,
             List<ServiceProcessFlowDTO.Data.MappedTask> nextToGateway,
-            Map<String, Map<String, List<String>>> taskLocationUserHolderMap
+            Map<String, Map<String, List<String>>> taskLocationUserHolderMap,
+            Map<String, Date> timerDueDate
 
     ) {
 
@@ -315,6 +316,11 @@ public class GatewayService {
                                         applicationFlowLogs.info(
                                                 "Updated taskLocationUserHolderMap={}",
                                                 taskLocationUserHolderMap);
+                                    }
+                                    
+                                    if (response.getTimerDueDate()!=null && !response.getTimerDueDate().isEmpty()) {
+                                    	timerDueDate.clear();
+                                    	timerDueDate.putAll(response.getTimerDueDate());
                                     }
 
                                     List<String> filteredNodeIds =

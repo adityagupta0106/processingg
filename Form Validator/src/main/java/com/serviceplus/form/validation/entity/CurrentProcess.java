@@ -18,7 +18,9 @@ public class CurrentProcess implements Persistable<String> {
     private Integer serviceId;
 
     private String currentTask;
-
+    
+    private Integer currentTaskType;
+    
     private String currentTaskName;
 
     private String previousTask;
@@ -106,8 +108,16 @@ public class CurrentProcess implements Persistable<String> {
     public void setCurrentTask(String currentTask) {
         this.currentTask = currentTask;
     }
+    
+    public Integer getCurrentTaskType() {
+		return currentTaskType;
+	}
 
-    public String getCurrentTaskName() {
+	public void setCurrentTaskType(Integer currentTaskType) {
+		this.currentTaskType = currentTaskType;
+	}
+
+	public String getCurrentTaskName() {
         return currentTaskName;
     }
 
