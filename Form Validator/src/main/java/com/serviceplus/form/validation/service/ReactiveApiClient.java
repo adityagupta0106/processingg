@@ -355,10 +355,10 @@ public class ReactiveApiClient {
 //                ;
 //    }
 	
-	public Mono<ServiceProcessFlowDTO> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId,
+	public Mono<ServiceJSONDTO> fetchProcessFlow(Integer baseServiceId, UserSessionObject user, String appId,
 			String taskId, Integer serviceId, String txnId) {
 
-		return fetchServiceMetadata(user, serviceId, txnId).map(ServiceJSONDTO::getProcessFlowMap);
+		return fetchServiceMetadata(user, serviceId, txnId);
 	}
 
     public Mono<ServerResponse> fetchApplicantData(String dataId, String formId,UserSessionObject user,String txnId,String applicationId) {
@@ -615,6 +615,40 @@ public class ReactiveApiClient {
 
         }).onErrorResume(WebClientResponseException.class,
                 ex -> handleWebClientError(ex, txnId));
+    }
+
+    public Mono<EscalationMvelResponse> executeEscalationMvel(
+            EscalationMvelRequest request) {
+        String url = MVEL_EXECUTION_SERVICE.concat("execute-escalation");
+        Map<String, String> headers = new HashMap<>();
+        return AsynchronousApiExecutor.callExternalEndpoint(
+                EscalationMvelResponse.class,
+                HttpMethod.POST,
+                headers,
+                Map.of(),
+                url,
+                entityToString(request),
+                MediaType.APPLICATION_JSON
+        )
+        .map(ResponseEntity::getBody)
+        .flatMap(body -> {
+            try {
+                EscalationMvelResponse response =mapper.readValue(body, EscalationMvelResponse.class);
+                if (response == null) {
+                    return Mono.error(new RuntimeException("Escalation MVEL response is null"));
+                }
+                return Mono.just(response);
+            } catch (Exception e) {
+                return Mono.error(
+                        new RuntimeException("Failed to parse Escalation MVEL response", e));
+            }
+        })
+        .onErrorResume(ex -> {
+            EscalationMvelResponse errorResponse = new EscalationMvelResponse();
+            errorResponse.setSuccess(false);
+            errorResponse.setError(ex.getMessage());
+            return Mono.just(errorResponse);
+        });
     }
 }
 

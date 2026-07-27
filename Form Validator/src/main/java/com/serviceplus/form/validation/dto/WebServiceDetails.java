@@ -5,141 +5,324 @@ import java.util.List;
 
 public class WebServiceDetails {
 
-    private String id;
+    private WsCall wsCall;
 
-    private String tenantId;
+    private List<Entities> entities;
 
-    private String templateName;
-    private String description;
-    private String method;
-    private String endpoint;
+    private Definition definition;
 
-    private Boolean storeResponse;
-    private String callType;
-    private Boolean serverValidation;
+    private LabelValue wsSelected;
 
-    private List<Header> headers;
-    private List<Param> params;
+    private Boolean unsubscribe;
 
-    private Body body;
-    private Authorization authorization;
-
-    private List<DataMapping> dataMapping;
-
+    private List<LabelValue> applicationStatus;
     
-    public String getId() {
-		return id;
+    private FormDetail formDetail;
+    	    
+    public WsCall getWsCall() {
+		return wsCall;
+	}
+	public void setWsCall(WsCall wsCall) {
+		this.wsCall = wsCall;
+	}
+	public List<Entities> getEntities() {
+		return entities;
+	}
+	public void setEntities(List<Entities> entities) {
+		this.entities = entities;
+	}
+	public Definition getDefinition() {
+		return definition;
+	}
+	public void setDefinition(Definition definition) {
+		this.definition = definition;
+	}
+	public LabelValue getWsSelected() {
+		return wsSelected;
+	}
+	public void setWsSelected(LabelValue wsSelected) {
+		this.wsSelected = wsSelected;
+	}
+	public Boolean getUnsubscribe() {
+		return unsubscribe;
+	}
+	public void setUnsubscribe(Boolean unsubscribe) {
+		this.unsubscribe = unsubscribe;
+	}
+	public List<LabelValue> getApplicationStatus() {
+		return applicationStatus;
+	}
+	public void setApplicationStatus(List<LabelValue> applicationStatus) {
+		this.applicationStatus = applicationStatus;
+	}
+	
+	public FormDetail getFormDetail() {
+		return formDetail;
+	}
+	public void setFormDetail(FormDetail formDetail) {
+		this.formDetail = formDetail;
 	}
 
-	public void setId(String id) {
-		this.id = id;
-	}
+	public static class FormDetail {
+		private String formId;
+		private String holderId;
+		private Boolean isSubscribed;
+		private String subscriptionMode;
+		private String parentForm;
+		private String templateName;
+		private Boolean defaultFormEncryptionRequired;
+		private Boolean encryptDataInTransit;
+		private Boolean encryptDataAtRest;
+		private Boolean standalone;
 
-	public String getTenantId() {
-		return tenantId;
-	}
+		public String getFormId() {
+			return formId;
+		}
 
-	public void setTenantId(String tenantId) {
-		this.tenantId = tenantId;
-	}
+		public void setFormId(String formId) {
+			this.formId = formId;
+		}
 
-	public String getTemplateName() {
-		return templateName;
-	}
+		public String getHolderId() {
+			return holderId;
+		}
 
-	public void setTemplateName(String templateName) {
-		this.templateName = templateName;
-	}
+		public void setHolderId(String holderId) {
+			this.holderId = holderId;
+		}
 
-	public String getDescription() {
-		return description;
-	}
+		public Boolean getIsSubscribed() {
+			return isSubscribed;
+		}
 
-	public void setDescription(String description) {
-		this.description = description;
-	}
+		public void setIsSubscribed(Boolean isSubscribed) {
+			this.isSubscribed = isSubscribed;
+		}
 
-	public String getMethod() {
-		return method;
-	}
+		public String getSubscriptionMode() {
+			return subscriptionMode;
+		}
 
-	public void setMethod(String method) {
-		this.method = method;
-	}
+		public void setSubscriptionMode(String subscriptionMode) {
+			this.subscriptionMode = subscriptionMode;
+		}
 
-	public String getEndpoint() {
-		return endpoint;
-	}
+		public String getParentForm() {
+			return parentForm;
+		}
 
-	public void setEndpoint(String endpoint) {
-		this.endpoint = endpoint;
-	}
+		public void setParentForm(String parentForm) {
+			this.parentForm = parentForm;
+		}
 
-	public Boolean getStoreResponse() {
-		return storeResponse;
-	}
+		public String getTemplateName() {
+			return templateName;
+		}
 
-	public void setStoreResponse(Boolean storeResponse) {
-		this.storeResponse = storeResponse;
-	}
+		public void setTemplateName(String templateName) {
+			this.templateName = templateName;
+		}
 
-	public String getCallType() {
-		return callType;
-	}
+		public Boolean getDefaultFormEncryptionRequired() {
+			return defaultFormEncryptionRequired;
+		}
 
-	public void setCallType(String callType) {
-		this.callType = callType;
-	}
+		public void setDefaultFormEncryptionRequired(Boolean defaultFormEncryptionRequired) {
+			this.defaultFormEncryptionRequired = defaultFormEncryptionRequired;
+		}
 
-	public Boolean getServerValidation() {
-		return serverValidation;
-	}
+		public Boolean getEncryptDataInTransit() {
+			return encryptDataInTransit;
+		}
 
-	public void setServerValidation(Boolean serverValidation) {
-		this.serverValidation = serverValidation;
-	}
+		public void setEncryptDataInTransit(Boolean encryptDataInTransit) {
+			this.encryptDataInTransit = encryptDataInTransit;
+		}
 
-	public List<Header> getHeaders() {
-		return headers;
-	}
+		public Boolean getEncryptDataAtRest() {
+			return encryptDataAtRest;
+		}
 
-	public void setHeaders(List<Header> headers) {
-		this.headers = headers;
-	}
+		public void setEncryptDataAtRest(Boolean encryptDataAtRest) {
+			this.encryptDataAtRest = encryptDataAtRest;
+		}
 
-	public List<Param> getParams() {
-		return params;
-	}
+		public Boolean getStandalone() {
+			return standalone;
+		}
 
-	public void setParams(List<Param> params) {
-		this.params = params;
+		public void setStandalone(Boolean standalone) {
+			this.standalone = standalone;
+		}
 	}
+	public static class WsCall {
 
-	public Body getBody() {
-		return body;
-	}
+        private String wsCallInterval;
 
-	public void setBody(Body body) {
-		this.body = body;
-	}
+        private String wsCallFrequency;
 
-	public Authorization getAuthorization() {
-		return authorization;
-	}
+        private LabelValue wsCallIntervalUnit;
 
-	public void setAuthorization(Authorization authorization) {
-		this.authorization = authorization;
-	}
+		public String getWsCallInterval() {
+			return wsCallInterval;
+		}
 
-	public List<DataMapping> getDataMapping() {
-		return dataMapping;
-	}
+		public void setWsCallInterval(String wsCallInterval) {
+			this.wsCallInterval = wsCallInterval;
+		}
 
-	public void setDataMapping(List<DataMapping> dataMapping) {
-		this.dataMapping = dataMapping;
-	}
+		public String getWsCallFrequency() {
+			return wsCallFrequency;
+		}
 
-	public static class Header {
+		public void setWsCallFrequency(String wsCallFrequency) {
+			this.wsCallFrequency = wsCallFrequency;
+		}
+
+		public LabelValue getWsCallIntervalUnit() {
+			return wsCallIntervalUnit;
+		}
+
+		public void setWsCallIntervalUnit(LabelValue wsCallIntervalUnit) {
+			this.wsCallIntervalUnit = wsCallIntervalUnit;
+		}
+        
+    }
+    public static class Definition {
+
+        private String id;
+
+        private String templateName;
+
+        private String description;
+
+        private String endpoint;
+
+        private String method;
+
+        private String callType;
+
+        private Boolean storeResponse;
+
+        private Boolean serverValidation;
+
+        private Body body;
+
+        private List<Header> headers;
+
+        private List<Param> params;
+
+        private Authorization authorization;
+
+        private List<DataMapping> dataMapping;
+
+		public String getId() {
+			return id;
+		}
+
+		public void setId(String id) {
+			this.id = id;
+		}
+
+		public String getTemplateName() {
+			return templateName;
+		}
+
+		public void setTemplateName(String templateName) {
+			this.templateName = templateName;
+		}
+
+		public String getDescription() {
+			return description;
+		}
+
+		public void setDescription(String description) {
+			this.description = description;
+		}
+
+		public String getEndpoint() {
+			return endpoint;
+		}
+
+		public void setEndpoint(String endpoint) {
+			this.endpoint = endpoint;
+		}
+
+		public String getMethod() {
+			return method;
+		}
+
+		public void setMethod(String method) {
+			this.method = method;
+		}
+
+		public String getCallType() {
+			return callType;
+		}
+
+		public void setCallType(String callType) {
+			this.callType = callType;
+		}
+
+		public Boolean getStoreResponse() {
+			return storeResponse;
+		}
+
+		public void setStoreResponse(Boolean storeResponse) {
+			this.storeResponse = storeResponse;
+		}
+
+		public Boolean getServerValidation() {
+			return serverValidation;
+		}
+
+		public void setServerValidation(Boolean serverValidation) {
+			this.serverValidation = serverValidation;
+		}
+
+		public Body getBody() {
+			return body;
+		}
+
+		public void setBody(Body body) {
+			this.body = body;
+		}
+
+		public List<Header> getHeaders() {
+			return headers;
+		}
+
+		public void setHeaders(List<Header> headers) {
+			this.headers = headers;
+		}
+
+		public List<Param> getParams() {
+			return params;
+		}
+
+		public void setParams(List<Param> params) {
+			this.params = params;
+		}
+
+		public Authorization getAuthorization() {
+			return authorization;
+		}
+
+		public void setAuthorization(Authorization authorization) {
+			this.authorization = authorization;
+		}
+
+		public List<DataMapping> getDataMapping() {
+			return dataMapping;
+		}
+
+		public void setDataMapping(List<DataMapping> dataMapping) {
+			this.dataMapping = dataMapping;
+		}
+        
+    }
+    
+    public static class Header {
         private String label;
         private String value;
         private String fieldValue;
@@ -161,11 +344,7 @@ public class WebServiceDetails {
 		public void setFieldValue(String fieldValue) {
 			this.fieldValue = fieldValue;
 		}
-        
-        
     }
-
-    
     public static class Param {
         private String label;
         private String value;
@@ -188,10 +367,7 @@ public class WebServiceDetails {
 		public void setFieldValue(String fieldValue) {
 			this.fieldValue = fieldValue;
 		}
-        
-        
     }
-
     
     public static class Body {
 
@@ -238,11 +414,8 @@ public class WebServiceDetails {
 		public void setRawJson(List<FormData> rawJson) {
 			this.rawJson = rawJson;
 		}
-        
-        
     }
 
-    
     public static class FormData {
         private String label;
         private String value;
@@ -265,11 +438,8 @@ public class WebServiceDetails {
 		public void setFieldValue(String fieldValue) {
 			this.fieldValue = fieldValue;
 		}
-        
-        
     }
 
-    
     public static class UrlEncoded {
         private String label;
         private String value;
@@ -292,10 +462,8 @@ public class WebServiceDetails {
 		public void setFieldValue(String fieldValue) {
 			this.fieldValue = fieldValue;
 		}
-        
-        
     }
-
+    
     public static class Authorization {
 
         private String type;
@@ -359,18 +527,13 @@ public class WebServiceDetails {
     
     public static class Bearer {
         private String token;
-
 		public String getToken() {
 			return token;
 		}
-
 		public void setToken(String token) {
 			this.token = token;
 		}
-        
     }
-
-    
     public static class Basic {
         private String username;
         private String password;
@@ -388,8 +551,6 @@ public class WebServiceDetails {
 		}
         
     }
-
-   
     public static class DataMapping {
 
         private String targetType;
@@ -441,8 +602,65 @@ public class WebServiceDetails {
 		public void setMapWith(String mapWith) {
 			this.mapWith = mapWith;
 		}
-        
-        
     }
+    
+    public static class Entities {
+		private String type;
+		private LabelValue entity;
+		private LabelValue category;
+		private LabelValue clcDetail;
+		private LabelValue entityLevel;
+		private List<Designation> designations;
+		
+		public String getType() {
+			return type;
+		}
+		public void setType(String type) {
+			this.type = type;
+		}
+		public LabelValue getEntity() {
+			return entity;
+		}
+		public void setEntity(LabelValue entity) {
+			this.entity = entity;
+		}
+		public LabelValue getClcDetail() {
+			return clcDetail;
+		}
+		public void setClcDetail(LabelValue clcDetail) {
+			this.clcDetail = clcDetail;
+		}
+		public LabelValue getEntityLevel() {
+			return entityLevel;
+		}
+		public void setEntityLevel(LabelValue entityLevel) {
+			this.entityLevel = entityLevel;
+		}
+		public LabelValue getCategory() {
+			return category;
+		}
+		public void setCategory(LabelValue category) {
+			this.category = category;
+		}
+		public List<Designation> getDesignations() {
+			return designations;
+		}
+		public void setDesignations(List<Designation> designations) {
+			this.designations = designations;
+		}
+		
+	}
 
+	public static class Designation {
+		private LabelValue designation;
+
+		public LabelValue getDesignation() {
+			return designation;
+		}
+
+		public void setDesignation(LabelValue designation) {
+			this.designation = designation;
+		}
+	}
+   
 }

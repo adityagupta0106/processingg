@@ -9,4 +9,6 @@ import reactor.core.publisher.Mono;
 public interface CurrentProcessRepository extends ReactiveCrudRepository<CurrentProcess, String> {
 
     Mono<CurrentProcess> findByServiceIdAndApplicationIdAndCurrentTaskAndActionTakenAndTenantId(Integer serviceId,String applicationId,String taskId,String actionTaken,String tenantId);
+
+	Mono<CurrentProcess> findByIdAndActionTaken(String id, String actionTaken);
 }

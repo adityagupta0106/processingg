@@ -35,6 +35,7 @@ public class CurrentProcessBuilder {
 
         cp.setPreviousProcessId(currentActionProcess.getProcessId());
         cp.setCurrentTask(currentTask.getId());
+        cp.setCurrentTaskType(currentTask.getTaskType());
         cp.setCurrentTaskName(currentTask.getName());
         cp.setPreviousTask(currentNode.getId());
         cp.setPreviousTaskName(currentNode.getName());
@@ -75,6 +76,7 @@ public class CurrentProcessBuilder {
 
         cp.setPreviousProcessId(parent.getProcessId());
         cp.setCurrentTask(nextNode.getId());
+        cp.setCurrentTaskType(nextNode.getTaskType());
         cp.setCurrentTaskName(nextNode.getName());
         cp.setPreviousTask(gatewayNode.getId());
         cp.setPreviousTaskName(gatewayNode.getName());

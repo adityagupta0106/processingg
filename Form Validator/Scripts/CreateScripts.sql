@@ -88,3 +88,62 @@ alter table schm_sp.application_flow_status add column service_id integer;
 alter table schm_sp.application_flow_status add column task_id character varying;
 alter table schm_sp.current_process add column base_service_id integer;
 alter table schm_sp.application_details add column service_name character varying;
+ALTER TABLE IF EXISTS schm_sp.current_process ADD COLUMN current_task_type integer;
+
+CREATE TABLE IF NOT EXISTS schm_sp.timer_task_execution
+(
+    id bigserial,
+    application_id character varying COLLATE pg_catalog."default",
+    current_process_id character varying COLLATE pg_catalog."default",
+    service_id integer,
+    base_service_id integer,
+    task_id character varying COLLATE pg_catalog."default",
+    due_date timestamp with time zone,
+    status character varying COLLATE pg_catalog."default",
+    action_taken character varying COLLATE pg_catalog."default",
+    created_on timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    executed_on timestamp with time zone,
+    CONSTRAINT timer_task_execution_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE IF NOT EXISTS schm_sp.workflow_escalation
+(
+    id bigint NOT NULL DEFAULT nextval('schm_sp.workflow_escalation_id_seq'::regclass),
+    application_id character varying COLLATE pg_catalog."default",
+    service_id integer,
+    current_process_id character varying COLLATE pg_catalog."default",
+    task_id character varying COLLATE pg_catalog."default",
+    execute_on timestamp with time zone,
+    status character varying COLLATE pg_catalog."default",
+    retry_count integer,
+    action character varying COLLATE pg_catalog."default",
+    mvel_expression character varying COLLATE pg_catalog."default",
+    escalation_json character varying COLLATE pg_catalog."default",
+    created_on timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    modified_on timestamp with time zone,
+    CONSTRAINT workflow_escalation_pkey PRIMARY KEY (id)
+);
+CREATE TABLE IF NOT EXISTS schm_sp.workflow_webservice_execution
+(
+    execution_id bigserial,
+    application_id character varying COLLATE pg_catalog."default",
+    service_id integer,
+    base_service_id integer,
+    current_process_id character varying COLLATE pg_catalog."default",
+    current_task_id character varying COLLATE pg_catalog."default",
+    api_id character varying COLLATE pg_catalog."default",
+    status character varying COLLATE pg_catalog."default",
+    attempt_count integer,
+    max_attempt integer,
+    retry_interval integer,
+    retry_interval_unit character varying COLLATE pg_catalog."default",
+    next_retry_time timestamp with time zone,
+    api_response character varying COLLATE pg_catalog."default",
+    normalized_response character varying COLLATE pg_catalog."default",
+    validation_token character varying COLLATE pg_catalog."default",
+    form_data_id character varying COLLATE pg_catalog."default",
+    error_message character varying COLLATE pg_catalog."default",
+    created_on timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    modified_on timestamp with time zone,
+    CONSTRAINT workflow_webservice_execution_pkey PRIMARY KEY (execution_id)
+);

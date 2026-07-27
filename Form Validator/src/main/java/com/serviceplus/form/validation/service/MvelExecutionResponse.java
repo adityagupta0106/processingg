@@ -1,6 +1,7 @@
 package com.serviceplus.form.validation.service;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,7 @@ public class MvelExecutionResponse {
     private List<Map<String,Object>> attributeResponse=new ArrayList<Map<String,Object>>();
     private Map<String, Map<String,List<String>>> taskLocationUserHolderMap;
     private List<String> nextNodeList=new ArrayList<String>();
+    private Map<String, Date> timerDueDate=new HashMap<String, Date>(); 
 	public boolean isSuccess() {
 		return success;
 	}
@@ -49,6 +51,12 @@ public class MvelExecutionResponse {
 	}
 	public void setNextNodeList(List<String> nextNodeList) {
 		this.nextNodeList = nextNodeList;
+	}
+	public Map<String, Date> getTimerDueDate() {
+		return timerDueDate;
+	}
+	public void setTimerDueDate(Map<String, Date> timerDueDate) {
+		this.timerDueDate = timerDueDate;
 	}
     
 	

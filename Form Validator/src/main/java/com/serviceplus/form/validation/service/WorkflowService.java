@@ -1,24 +1,16 @@
 package com.serviceplus.form.validation.service;
 
-import static com.serviceplus.form.validation.utility.ApplicationConstants.FALLBACK_ACTION_NO;
-import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT;
-import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_INCLUSIVE_DIVERGENT;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_WORKFLOW_REDIS_KEY_APPENDER;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_GATEWAY;
-import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
-import com.serviceplus.form.validation.Helpers.CurrentProcessBuilder;
-import com.serviceplus.form.validation.Helpers.WorkflowHelper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,16 +19,23 @@ import org.springframework.stereotype.Service;
 
 import com.google.gson.reflect.TypeToken;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.Helpers.CurrentProcessBuilder;
+import com.serviceplus.form.validation.Helpers.WorkflowHelper;
 import com.serviceplus.form.validation.dto.InboxKafka;
-import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
+import com.serviceplus.form.validation.dto.ServiceJSONDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
 import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
+import com.serviceplus.form.validation.dto.TimerTaskDTO;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
+import com.serviceplus.form.validation.entity.TimerTaskExecution;
+import com.serviceplus.form.validation.enums.TaskType;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
+import com.serviceplus.form.validation.repository.TimerTaskExecutionRepository;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -64,6 +63,9 @@ public class WorkflowService {
 
     @Autowired
     private GatewayService gatewayService;
+    
+    @Autowired
+    private TimerTaskExecutionRepository timerTaskExecutionRepository;
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
@@ -72,27 +74,21 @@ public class WorkflowService {
     }
 
     public Mono<?> generateNextWorkflow(ApplicationDetails ad, ProcessingTxn savedLog, ServiceMeta service, UserSessionObject user, CurrentProcess cp) {
-        final String REDIS_KEY =SERVICE_WORKFLOW_REDIS_KEY_APPENDER.concat("_").concat(service.getServiceId().toString());
+        return apiClient
+				.fetchProcessFlow(service.getBaseServiceId(), user, savedLog.getApplicationId(), service.getTaskId(),
+						service.getServiceId(), savedLog.getTxnId())
+				.switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]",
+						HttpStatus.FAILED_DEPENDENCY, savedLog.getTxnId())))
+				.flatMap(serviceJson -> generate(serviceJson.getProcessFlowMap(), serviceJson.getTimerTaskDetails(), ad,
+						savedLog, service, user, cp))
+				.onErrorResume(ex -> {
+					ex.printStackTrace();
+					return Mono.error(new SPRuntimeError("Workflow Error [ERR -01]", HttpStatus.INTERNAL_SERVER_ERROR,
+							savedLog.getTxnId()));
+				});
+	}
 
-        Mono<Object> redisData = redis.fetch(
-                REDIS_KEY, new TypeToken<ServiceProcessFlowDTO>(){}.getType()
-        );
-
-        return redisData
-                .switchIfEmpty(
-                        apiClient.fetchProcessFlow(service.getBaseServiceId(), user,
-                                        savedLog.getApplicationId(), service.getTaskId(), service.getServiceId(),savedLog.getTxnId())
-                                .switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]", HttpStatus.FAILED_DEPENDENCY,savedLog.getTxnId())))
-                                .flatMap(Mono::just)
-                )
-                .flatMap(response -> generate((ServiceProcessFlowDTO) response, ad, savedLog, service, user,cp))
-                .onErrorResume(ex -> {
-                    ex.printStackTrace();
-                    return Mono.error(new SPRuntimeError("Workflow Error [ERR -01]",HttpStatus.INTERNAL_SERVER_ERROR,savedLog.getTxnId()));
-                });
-    }
-
-    private Mono<?> generate(ServiceProcessFlowDTO response, ApplicationDetails ad, ProcessingTxn savedLog,
+    private Mono<?> generate(ServiceProcessFlowDTO response, List<TimerTaskDTO> timerTaskDetails,ApplicationDetails ad, ProcessingTxn savedLog,
                              ServiceMeta service, UserSessionObject user, CurrentProcess cp) {
         List<ServiceProcessFlowDTO.Data> wf =  response.getData();
         String currentTask = service.getTaskId();
@@ -105,7 +101,7 @@ public class WorkflowService {
             applicationFlowLogs.info("Generating workflow for txnId {} currentTask {} nextNode {}"
                     ,savedLog.getTxnId(),currentTask,data.toString());
 
-            return calculateNextWorkflow(data.getNode(), data, service, ad, savedLog, user, wf,cp);
+            return calculateNextWorkflow(data.getNode(), data, service, ad, savedLog, user, wf,cp,timerTaskDetails,response.getTaskRelation());
         }
 
         return Mono.empty();
@@ -113,7 +109,7 @@ public class WorkflowService {
 
     private Mono<InboxKafka> calculateNextWorkflow(ServiceProcessFlowDTO.Data.Nodes node, ServiceProcessFlowDTO.Data data,
                                                    ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
-                                                   List<ServiceProcessFlowDTO.Data> wf, CurrentProcess currentActionProcess) {
+                                                   List<ServiceProcessFlowDTO.Data> wf, CurrentProcess currentActionProcess,List<TimerTaskDTO> timerTaskDetails, Map<String, TaskRelationDTO> taskRelationMap) {
 
         ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow = service.getSelectedWorkflowElementData();
 
@@ -123,6 +119,7 @@ public class WorkflowService {
         List<CurrentProcess> pList = new ArrayList<>();
 
         Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
+        Map<String, Date> timerDueDate=new HashMap<String, Date>();
 
         applicationFlowLogs.info("calculateNextWorkflow started txnId={}, currentNode={}, mappedTasks={}",
                 txn.getTxnId(), node.getId(), data.getMappedTasks().size());
@@ -139,7 +136,7 @@ public class WorkflowService {
                     return taskAssignmentService.nextAllowedOfficeLocation(wf, next, txn.getTxnId(), service.getServiceId(), user,
                             taskLocationUserHolderMap,service)
 
-                            .flatMap(nextAllowedOfficeLocation -> {
+                            .flatMapMany(nextAllowedOfficeLocation -> {
 
                                 applicationFlowLogs.info("nextAllowedOfficeLocation resolved for taskId={} : {}",
                                         next.getId(), nextAllowedOfficeLocation);
@@ -150,9 +147,9 @@ public class WorkflowService {
                                         next.getId(), taskLocationUserHolderMap);
 
                                 return taskAssignmentService.executeAfterTaskMvel(service, ad, txn, "", currentActionProcess, next.getId(),
-                                        taskLocationUserHolderMap)
+                                        taskLocationUserHolderMap,timerDueDate)
 
-                                        .then(Mono.defer(() -> {
+                                        .thenMany(Flux.defer(() -> {
 
                                             applicationFlowLogs.info(
                                                     "After Task MVEL completed for taskId={}, updatedMap={}",
@@ -188,10 +185,11 @@ public class WorkflowService {
                                                         baseProcess,
                                                         taskAvailableOfficeLocations,
                                                         taskLocationUserHolderMap,
-                                                        selectedWorkflow);
+                                                        selectedWorkflow,timerDueDate
+                                                        );
                                             }
 
-                                            return Mono.just(baseProcess);
+                                            return Flux.just(baseProcess);
                                         }));
                             });
 
@@ -205,11 +203,14 @@ public class WorkflowService {
                             processList.size());
 
                     processList.add(currentActionProcess);
-
-//                    if (!pList.isEmpty()) {
-//                        processList.add(pList.getFirst());
-//                    }
-
+                    //To add gateway process in current process by checking current action process task having multiple next task
+                    TaskRelationDTO taskRelationDTO = taskRelationMap.get(currentActionProcess.getCurrentTask());
+                    taskRelationDTO.getNextTask().size();
+                    if (taskRelationDTO.getNextTask().size()>1 && !pList.isEmpty()) {
+                        processList.add(pList.getFirst());
+                    }
+                    //
+                    saveTimerTaskExecution(processList,timerDueDate,timerTaskDetails);
                     InboxKafka inboxKafkaDto = new InboxKafka();
                     inboxKafkaDto.setProcessList(processList);
                     inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
@@ -234,5 +235,65 @@ public class WorkflowService {
                 .doOnError(
                         ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
     }
+    
+	private void saveTimerTaskExecution(List<CurrentProcess> processList,
+			Map<String, Date> timerDueDate,List<TimerTaskDTO> timerTaskDetails) {
+
+		if (processList == null || processList.isEmpty()) {
+			return;
+		}
+
+		List<TimerTaskExecution> timerExecutionList = new ArrayList<>();
+
+		for (CurrentProcess process : processList) {
+			
+			if(!TaskType.TIMER_TASK.getType().equals(process.getCurrentTaskType())) {
+				continue;
+			}
+			TimerTaskDTO timerTask = timerTaskDetails.stream()
+					.filter(t -> t.getTaskId().equals(process.getCurrentTask())).findFirst().orElse(null);
+
+			if (timerTask == null) {
+				continue;
+			}
+
+			TimerTaskExecution execution = new TimerTaskExecution();
+
+			execution.setApplicationId(process.getApplicationId());
+			execution.setCurrentProcessId(process.getProcessId());
+			execution.setServiceId(process.getServiceId());
+			execution.setBaseServiceId(process.getBaseServiceId());
+			execution.setTaskId(process.getCurrentTask());
+			execution.setStatus("PENDING");
+			execution.setActionTaken("N");
+			execution.setCreatedOn(new Date());
+
+			Date dueDate = null;
+
+
+			if (Integer.valueOf(2).equals(timerTask.getBehaviour())) {
+				Calendar calendar = Calendar.getInstance();
+				if ("Minute".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
+					calendar.add(Calendar.MINUTE, timerTask.getExecutionPeriod());
+				} else if ("Hour".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
+					calendar.add(Calendar.HOUR, timerTask.getExecutionPeriod());
+				} else if ("Day".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
+					calendar.add(Calendar.DATE, timerTask.getExecutionPeriod());
+				}
+
+				dueDate = calendar.getTime();
+			} else {
+				dueDate = timerDueDate.get(process.getCurrentTask());
+			}
+
+			execution.setDueDate(dueDate);
+
+			timerExecutionList.add(execution);
+		}
+
+		if (!timerExecutionList.isEmpty()) {
+			timerTaskExecutionRepository.saveAll(timerExecutionList);
+		}
+	}
 
 }
