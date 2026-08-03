@@ -147,3 +147,55 @@ CREATE TABLE IF NOT EXISTS schm_sp.workflow_webservice_execution
     modified_on timestamp with time zone,
     CONSTRAINT workflow_webservice_execution_pkey PRIMARY KEY (execution_id)
 );
+
+-------------------NEXT-------------------
+
+CREATE TABLE schm_sp.application_document_log
+(
+    id                  character varying PRIMARY KEY,
+    application_id      character varying NOT NULL,
+    txn_id              character varying NOT NULL,
+    service_id          integer NOT NULL,
+    task_id             character varying NOT NULL,
+    reference_id        character varying NOT NULL,
+    document_name       character varying,
+    source_type         character varying,
+    upload_id           character varying,
+    status              character varying,
+    created_by          bigint,
+    created_on          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE schm_sp.application_document_merge
+(
+    id                      character varying PRIMARY KEY,
+    application_id          character varying NOT NULL,
+    txn_id              character varying NOT NULL,
+    task_id                 character varying NOT NULL,
+    reference_id            character varying NOT NULL,
+    merged_upload_id        character varying,
+    merged_preview_url      character varying,
+    signed_upload_id        character varying,
+    status                  character varying,
+    created_by              bigint,
+    created_on              timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by              integer,
+    updated_on              timestamp with time zone
+);
+
+CREATE TABLE schm_sp.application_document_submission
+(
+    id                  character varying PRIMARY KEY,
+    txn_id              character varying NOT NULL,
+    application_id      character varying NOT NULL,
+    service_id          integer NOT NULL,
+    task_id             character varying NOT NULL,
+    reference_id        character varying NOT NULL,
+    document_name       character varying,
+    upload_id           character varying,
+    signed_upload_id    character varying,
+    merged             boolean DEFAULT false,
+    status              character varying,
+    created_by          bigint,
+    created_on          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

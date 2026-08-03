@@ -1,11 +1,7 @@
 package com.serviceplus.form.validation.service;
 
 import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.serviceplus.form.validation.dto.*;
@@ -32,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.reflect.TypeToken;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
@@ -50,11 +47,19 @@ public class ReactiveApiClient {
 
     @Value("${formmgmt.service}")
     private String FORM_MANAGEMENT_SERVICE;
+
+    @Value("${document.generation.service}")
+    private String DOCUMENT_GENERATION_SERVICE;
     
     @Value("${mvel.execution.service}")
     private String MVEL_EXECUTION_SERVICE;
+
+    @Value("${file.management.service}")
+    private String FILE_MANAGEMENT_SERVICE;
+
     @Value("${tracking.service}")
     private String TRACKING_SERVICE;
+
     @Autowired
     private ObjectMapper mapper;
 
@@ -219,14 +224,15 @@ public class ReactiveApiClient {
 				HttpMethod.POST, headers, Map.of("serviceId", serviceId), url, "", MediaType.APPLICATION_JSON);
 
 		return response.flatMap(apiResponse -> {
-
 			ServiceJSONDTO metadata = (ServiceJSONDTO) stringToEntityUsingType(apiResponse.getBody(),
 					new TypeToken<ServiceJSONDTO>() {
 					}.getType());
 
+            applicationFlowLogs.info("Cache miss for service metadata for serviceId {} txnId {} , response {}",serviceId,txnId,entityToString(metadata));
+
 			redis.add(metadata, "ServiceMetaData_" + serviceId, true, 5*60).subscribe();
 
-			return Mono.just(metadata);
+			return Mono.just(Objects.requireNonNull(metadata));
 
 		}).onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex, txnId));
 	}
@@ -649,6 +655,149 @@ public class ReactiveApiClient {
             errorResponse.setError(ex.getMessage());
             return Mono.just(errorResponse);
         });
+    }
+
+    public Mono<Map<String, Object>> fetchWorkflowAttributes(UserSessionObject user, String formId, String dataId,String txnId) {
+
+        String url = FORM_MANAGEMENT_SERVICE.concat("b/workflow/attributes");
+
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+        Map<String, Object> request = Map.of("formId", formId, "dataId", dataId);
+
+        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
+                                                                    String.class,
+                                                                    HttpMethod.POST,
+                                                                    headers,
+                                                                    Collections.emptyMap(),
+                                                                    url,
+                                                                    entityToString(request),
+                                                                    MediaType.APPLICATION_JSON);
+
+        return callExternalEndpoint.flatMap(apiResponse -> {
+
+            String body = apiResponse.getBody();
+
+            if (body == null || body.isBlank()) {
+                return Mono.error(new SPRuntimeError("Unable to fetch workflow attributes", HttpStatus.FAILED_DEPENDENCY, txnId));
+            }
+
+            try {
+
+                Map<String, Object> response = mapper.readValue(body, new TypeReference<Map<String, Object>>() {
+                });
+
+                return Mono.just(response);
+
+            } catch (JsonProcessingException e) {
+
+                applicationFlowLogs.error("Failed to parse workflow attributes response", e);
+                return Mono.error(new SPRuntimeError("Issue while processing workflow attributes response", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
+            }
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    public Mono<GenerateDocDResDTO> generateDocument(UserSessionObject user,
+                                                     Integer serviceId,
+                                                     Integer outputFormatId,
+                                                     String applicationId,
+                                                     boolean async,
+                                                     String txnId) {
+
+        String url = DOCUMENT_GENERATION_SERVICE.concat("doc/generate");
+
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("serviceId", serviceId);
+        request.put("outputFormatId", outputFormatId);
+        request.put("applicationIdList", List.of(applicationId));
+        request.put("async", async);
+
+        return AsynchronousApiExecutor.callExternalEndpoint(
+                        String.class,
+                        HttpMethod.POST,
+                        headers,
+                        Collections.emptyMap(),
+                        url,
+                        entityToString(request),
+                        MediaType.APPLICATION_JSON)
+                .flatMap(response -> {
+
+                    List<GenerateDocDResDTO> result =
+                            (List<GenerateDocDResDTO>) stringToEntityUsingType(response.getBody(), new TypeToken<List<GenerateDocDResDTO>>() {
+                            }.getType());
+
+                    if (result == null || result.isEmpty()) {
+                        return Mono.error(new SPRuntimeError("Document generation failed.", HttpStatus.INTERNAL_SERVER_ERROR, txnId));
+                    }
+
+                    return Mono.just(result.getFirst());
+                });
+    }
+
+    public Mono<FileViewResponse> getFileView(UserSessionObject user,
+                                              List<String> uploadIds,
+                                              String txnId) {
+
+        String url = FILE_MANAGEMENT_SERVICE.concat("b/view/batch");
+
+        Map<String, String> headers = Map.of(
+                "USER-DETAILS", entityToString(user)
+        );
+
+        CommitRequest request = new CommitRequest();
+        request.setUploadIds(uploadIds);
+
+        return AsynchronousApiExecutor.callExternalEndpoint(
+                        String.class,
+                        HttpMethod.POST,
+                        headers,
+                        Collections.emptyMap(),
+                        url,
+                        entityToString(request),
+                        MediaType.APPLICATION_JSON)
+                .flatMap(response -> {
+
+                    FileViewResponse result =  (FileViewResponse) stringToEntityUsingType(
+                                                        response.getBody(),
+                                                        new TypeToken<FileViewResponse>() {}.getType());
+
+                    return Mono.just(Objects.requireNonNull(result));
+                });
+    }
+
+    public Mono<CreateUploadSessionsResponse> createUploadSession(UserSessionObject user, CreateUploadSessionsRequest request, String txnId) {
+
+        String url = FILE_MANAGEMENT_SERVICE.concat("b/upload-sessions");
+
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+        return AsynchronousApiExecutor.callExternalEndpoint(
+                        String.class,
+                        HttpMethod.POST,
+                        headers,
+                        Collections.emptyMap(),
+                        url,
+                        entityToString(request),
+                        MediaType.APPLICATION_JSON)
+                .flatMap(response -> {
+
+                    CreateUploadSessionsResponse result =
+                            (CreateUploadSessionsResponse) stringToEntityUsingType(
+                                    response.getBody(),
+                                    new TypeToken<CreateUploadSessionsResponse>() {}.getType());
+
+                    return Mono.just(Objects.requireNonNull(result));
+                });
+    }
+
+    public Mono<byte[]> downloadFromPresignedUrl(String previewUrl) {
+        return WebClient.create()
+                .get()
+                .uri(previewUrl)
+                .retrieve()
+                .bodyToMono(byte[].class);
     }
 }
 

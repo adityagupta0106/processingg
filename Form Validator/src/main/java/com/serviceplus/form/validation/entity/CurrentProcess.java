@@ -1,11 +1,13 @@
 package com.serviceplus.form.validation.entity;
 
+import com.serviceplus.form.validation.dto.TrackingDocument;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
 
@@ -65,6 +67,9 @@ public class CurrentProcess implements Persistable<String> {
 
     @Transient
     private String actionName;
+
+    @Transient
+    private List<TrackingDocument> documents;
 
     @Override
     @Transient
@@ -267,6 +272,14 @@ public class CurrentProcess implements Persistable<String> {
 
     public void setActionName(String actionName) {
         this.actionName = actionName;
+    }
+
+    public List<TrackingDocument> getDocuments() {
+        return documents;
+    }
+
+    public void setDocuments(List<TrackingDocument> documents) {
+        this.documents = documents;
     }
 }
 

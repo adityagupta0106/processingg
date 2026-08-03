@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 import static com.serviceplus.form.validation.utility.Utility.*;
@@ -31,6 +32,11 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
 
     @Autowired
     private ProcessingTxnRepository txnRepository;
+
+    @Override
+    public String getActivityType() {
+        return ACTIVITY_FORM_STATUS_KEY;
+    }
 
     @SuppressWarnings("unchecked")
     @Override

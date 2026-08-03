@@ -41,6 +41,18 @@ public class ServiceMeta {
 
     private ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflowElementData;
 
+    private DocumentGenerationDetails documentGenerationDetails;
+
+    private Object previousHandlerData;
+
+    public DocumentGenerationDetails getDocumentGenerationDetails() {
+        return documentGenerationDetails;
+    }
+
+    public void setDocumentGenerationDetails(DocumentGenerationDetails documentGenerationDetails) {
+        this.documentGenerationDetails = documentGenerationDetails;
+    }
+
     private Long issuedAt;
 
     private Long expiry;
@@ -227,5 +239,13 @@ public class ServiceMeta {
 
     public void setSelectedWorkflowElementData(ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflowElementData) {
         this.selectedWorkflowElementData = selectedWorkflowElementData;
+    }
+
+    public Object getPreviousHandlerData() {
+        return previousHandlerData;
+    }
+
+    public void setPreviousHandlerData(Object previousHandlerData) {
+        this.previousHandlerData = previousHandlerData;
     }
 }

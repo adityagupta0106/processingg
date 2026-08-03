@@ -411,4 +411,25 @@ public class Utility {
         return Mono.error(new SPRuntimeError("Internal server error [SUB-500]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
     }
 
+    public static final Map<String, String> MIME_TYPE_MAP = Map.ofEntries(
+            Map.entry("pdf", "application/pdf"),
+            Map.entry("jpg", "image/jpeg"),
+            Map.entry("jpeg", "image/jpeg"),
+            Map.entry("png", "image/png"),
+            Map.entry("gif", "image/gif"),
+            Map.entry("bmp", "image/bmp"),
+            Map.entry("webp", "image/webp"),
+            Map.entry("tif", "image/tiff"),
+            Map.entry("tiff", "image/tiff"),
+            Map.entry("doc", "application/msword"),
+            Map.entry("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            Map.entry("xls", "application/vnd.ms-excel"),
+            Map.entry("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            Map.entry("ppt", "application/vnd.ms-powerpoint"),
+            Map.entry("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            Map.entry("txt", "text/plain"),
+            Map.entry("csv", "text/csv"),
+            Map.entry("zip", "application/zip")
+    );
+
 }

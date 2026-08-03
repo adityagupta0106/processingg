@@ -36,6 +36,8 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
 
     private String tenantId;
 
+    @Transient
+    private Boolean userSubmissionRequired;
 
     @Transient
     private boolean newEntity = false;
@@ -142,6 +144,14 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
 
     public Integer getCompleted() {
         return completed;
+    }
+
+    public Boolean getUserSubmissionRequired() {
+        return userSubmissionRequired;
+    }
+
+    public void setUserSubmissionRequired(Boolean userSubmissionRequired) {
+        this.userSubmissionRequired = userSubmissionRequired;
     }
 }
 

@@ -8,7 +8,7 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class HandlerResponse {
 
-    private Map<String,Object> data;
+    private Map<String,Object> response;
 
     private String txnId;
     private String applicationId;
@@ -123,12 +123,12 @@ public class HandlerResponse {
         }
     }
 
-    public Map<String, Object> getData() {
-        return data;
+    public Map<String,Object> getData() {
+        return response;
     }
 
-    public void setData(Map<String, Object> data) {
-        this.data = data;
+    public void setData(Map<String,Object> data) {
+        this.response = data;
     }
 
     public String getTxnId() {
