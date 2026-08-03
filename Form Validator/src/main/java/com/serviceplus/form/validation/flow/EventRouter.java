@@ -11,6 +11,7 @@ import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepositor
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 import com.serviceplus.form.validation.service.TempTransactionLogService;
 import com.serviceplus.form.validation.service.TransactionGeneration;
+import com.serviceplus.form.validation.utility.HandlerMapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +22,6 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
-import static com.serviceplus.form.validation.utility.HandlerMapping.HANDLERS;
 import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 import static java.util.Objects.isNull;
@@ -32,17 +32,20 @@ public class EventRouter {
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
-    @Autowired
-    private ApplicationFlowRouterRepository applicationFlowRouterRepository;
+    private final ApplicationFlowRouterRepository applicationFlowRouterRepository;
 
-    @Autowired
-    private TempTransactionLogService tempTransactionLogService;
+    private final TempTransactionLogService tempTransactionLogService;
 
-    @Autowired
-    private TransactionGeneration transactionGeneration;
+    private final TransactionGeneration transactionGeneration;
 
-    @Autowired
-    private ProcessingTxnRepository processingTxnRepository;
+    private final ProcessingTxnRepository processingTxnRepository;
+
+    public EventRouter(ApplicationFlowRouterRepository applicationFlowRouterRepository, TempTransactionLogService tempTransactionLogService, TransactionGeneration transactionGeneration, ProcessingTxnRepository processingTxnRepository) {
+        this.applicationFlowRouterRepository = applicationFlowRouterRepository;
+        this.tempTransactionLogService = tempTransactionLogService;
+        this.transactionGeneration = transactionGeneration;
+        this.processingTxnRepository = processingTxnRepository;
+    }
 
     public Mono<ServerResponse> route(String statusKey, String applicationId, ServerRequest request, String txnId,
                                       ServiceMeta services, boolean fromDraft) {
@@ -80,7 +83,7 @@ public class EventRouter {
 
     public Mono<ServerResponse> generate(String statusKey, String applicationId, ServerRequest request, String txnId, Mono<TempTransactionLogs> fetch,
                                          ApplicationFlowStatusEntity flow, ServiceMeta service, boolean cache, boolean fromDraft, Long userId) {
-        ApplicationFlowHandler handler = HANDLERS.get(statusKey);
+        ApplicationFlowHandler handler = HandlerMapper.getHandler(statusKey);
 
         if (handler != null) {
             applicationFlowLogs.info("handler processed for applicationId {} txnId {} cache {} draft {} ,statusKey{},class {}",
@@ -109,12 +112,12 @@ public class EventRouter {
     public Mono<ServerResponse> next(String statusKey, String applicationId, ServerRequest request, Mono<TempTransactionLogs> fetch,
                                      ApplicationFlowStatusEntity flow, ServiceMeta service, String txnId, boolean fromDraft, Long userId) {
 
-        ApplicationFlowHandler handler = HANDLERS.get(statusKey);
+        ApplicationFlowHandler handler = HandlerMapper.getHandler(statusKey);
 
         UserSessionObject user = getUserSessionDetails(request.exchange().getRequest());
 
         if(isNull(user) || !userId.equals(user.getUserID())){
-            return Mono.error(new SPRuntimeError("Unauthorized application access",HttpStatus.FORBIDDEN,txnId));
+            return Mono.error(new SPRuntimeError("Unauthorized application access",HttpStatus.UNAUTHORIZED,txnId));
         }
 
         if(fromDraft){

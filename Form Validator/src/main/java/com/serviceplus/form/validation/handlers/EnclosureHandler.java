@@ -18,6 +18,11 @@ import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIV
 public class EnclosureHandler implements ApplicationFlowHandler{
 
     @Override
+    public String getActivityType() {
+        return ACTIVITY_ENCLOSURE_STATUS_KEY;
+    }
+
+    @Override
     public Mono<ServerResponse> process(String applicationId, ServerRequest request, String statusKey, String txnId, Mono<TempTransactionLogs> fetch
                                     , ApplicationFlowStatusEntity flow, ServiceMeta service, boolean fromDraft) {
         HandlerResponse hr = new HandlerResponse();

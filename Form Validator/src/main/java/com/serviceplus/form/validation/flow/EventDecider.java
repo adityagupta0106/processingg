@@ -31,29 +31,26 @@ import static java.util.Objects.isNull;
 @Service
 public class EventDecider {
 
-    @Autowired
-    private RedisService redis;
+    private final EventRouter router;
 
-    @Autowired
-    private EventRouter router;
+    private final ApplicationFlowRouterRepository applicationFlowRouterRepository;
 
-    @Autowired
-    private ApplicationFlowRouterRepository applicationFlowRouterRepository;
+    private final ApplicationGenerationService applicationGenerationService;
 
-    @Autowired
-    private ApplicationGenerationService applicationGenerationService;
+    private final TransactionGeneration transactionGeneration;
 
-    @Autowired
-    private ReactiveApiClient reactiveApiClient;
+    private final TransactionalDBExecutor transactionalDBExecutor;
 
-    @Autowired
-    private TransactionGeneration transactionGeneration;
+    private final ActivityMapService activityMapService;
 
-    @Autowired
-    private ProcessingTxnRepository processingTxn;
-
-    @Autowired
-    private TransactionalDBExecutor transactionalDBExecutor;
+    public EventDecider(EventRouter router, ApplicationFlowRouterRepository applicationFlowRouterRepository, ApplicationGenerationService applicationGenerationService, TransactionGeneration transactionGeneration, TransactionalDBExecutor transactionalDBExecutor, ActivityMapService activityMapService) {
+        this.router = router;
+        this.applicationFlowRouterRepository = applicationFlowRouterRepository;
+        this.applicationGenerationService = applicationGenerationService;
+        this.transactionGeneration = transactionGeneration;
+        this.transactionalDBExecutor = transactionalDBExecutor;
+        this.activityMapService = activityMapService;
+    }
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
@@ -112,19 +109,12 @@ public class EventDecider {
 
     private Mono<ServerResponse> process(String dataId, ServiceMeta service, UserSessionObject user, ProcessingTxn txnLog, String appId
             , String actionCode, String from, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus) {
-        Mono<Object> fetch = redis.fetch(SERVICE_ACTIVITY_REDIS_KEY_APPENDER.concat("_")
-                        .concat(service.getServiceId().toString().concat("_").concat(service.getTaskId()))
-                , ActivityMapDTO.class);
 
-        return fetch
-                .switchIfEmpty(
-                        reactiveApiClient.fetchServiceKey(service.getBaseServiceId(), user, appId, service.getTaskId(), service.getServiceId())
-                                .switchIfEmpty(Mono.error(new SPRuntimeError("Execution error [EX - 02]", HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId())))
-                                .flatMap(response -> Mono.just(response.getActivityMap()))
-                )
+        return activityMapService
+                .getActivityMap(service, user, appId, txnLog.getTxnId())
                 .flatMap(activityMap -> {
-                	ActivityMapDTO activity = (ActivityMapDTO) activityMap;
-                	ActivityMapDTO.ActivityData nextActivity = findNext(from, service.getTaskId(), activity);
+
+                    ActivityMapDTO.ActivityData nextActivity = activityMapService.findNextActivity(from, activityMap);
 
                     if (isNull(nextActivity)) {
                         return Mono.error(new SPRuntimeError("Execution error [EX - 03]", HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()));
@@ -133,7 +123,7 @@ public class EventDecider {
                         applicationFlowLogs.info("Next activity for txnId {} applicationId {} is {}", txnLog.getTxnId(), appId, nextActivity.toString());
 
                         if (nextActivity.getActivityType().equals("NA")) {
-                            return applicationGenerationService.executeApplicationProcessing(dataId, service, user, txnLog, appId, actionCode)
+                            return applicationGenerationService.executeApplicationProcessing(dataId, service, user, txnLog, appId, actionCode,from)
                                     .flatMap(
                                             res -> markActivityAsDone(flowStatus).thenReturn(res)
                                     );
@@ -143,10 +133,27 @@ public class EventDecider {
                             ).flatMap(generatedTxn ->
                                             markActivityAsDone(flowStatus)
                                                     .thenReturn(generatedTxn))
-                            .flatMap(
-                                    generatedTxn -> router.route(nextActivity.getActivityType(), appId,
-                                                                        reactiveRequestObject, generatedTxn.getTxnId(), service, false)
-                            );
+                                    .flatMap(generatedTxn ->
+                                            router.route(
+                                                            nextActivity.getActivityType(),
+                                                            appId,
+                                                            reactiveRequestObject,
+                                                            generatedTxn.getTxnId(),
+                                                            service,
+                                                            false)
+                                                    .onErrorMap(ex -> {
+
+                                                        ex.printStackTrace();
+                                                        Throwable actual = Exceptions.unwrap(ex);
+
+                                                        if (actual instanceof SPRuntimeError spr) {
+                                                            spr.setTxnId(generatedTxn.getTxnId());
+                                                            return spr;
+                                                        }
+
+                                                        return new SPRuntimeError("Something went wrong", HttpStatus.INTERNAL_SERVER_ERROR, generatedTxn.getTxnId());
+                                                    })
+                                    );
                         }
                     }
                 });
@@ -155,20 +162,4 @@ public class EventDecider {
     private Mono<Void> markActivityAsDone(ApplicationFlowStatusEntity flowStatus) {
         return transactionalDBExecutor.execute(flowStatus.getTxnId(),flowStatus);
     }
-
-    private ActivityMapDTO.ActivityData findNext(String from, String taskId, ActivityMapDTO map){
-        List<ActivityMapDTO.ActivityData> data = map.getData();
-        for(ActivityMapDTO.ActivityData activity : data){
-            if(activity.getActivityType().equals(from)){
-                    if(activity.getLast()) {
-                        //return new TaskActivity.ActivityData("ES");
-                        return new ActivityMapDTO.ActivityData("NA");
-                    }
-                    else{
-                        return data.get(activity.getIndex() + 1);
-                    }
-            }
-          }
-        return null;
-        }
 }

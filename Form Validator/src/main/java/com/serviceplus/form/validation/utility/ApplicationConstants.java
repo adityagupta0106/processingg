@@ -41,5 +41,6 @@ public class ApplicationConstants {
     public static final String APPLICATION_STATUS_DRAFT = "S";
     public static final Integer ACTION_DELIVER = 11;
     public static final Integer ACTION_REJECT = 10;
+    public static final String ACTIVITY_DOCUMENT_GENERATION = "DG";
 
 }

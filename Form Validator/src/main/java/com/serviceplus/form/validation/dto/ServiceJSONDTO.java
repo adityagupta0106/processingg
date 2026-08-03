@@ -56,6 +56,16 @@ public class ServiceJSONDTO {
 	
 	private List<TimerTaskDTO> timerTaskDetails;
 
+    private List<DocumentGenerationDetails> documentGenerationDetails;
+
+    public List<DocumentGenerationDetails> getDocumentGenerationDetails() {
+        return documentGenerationDetails;
+    }
+
+    public void setDocumentGenerationDetails(List<DocumentGenerationDetails> documentGenerationDetails) {
+        this.documentGenerationDetails = documentGenerationDetails;
+    }
+
 	public List<EscalationDetailsDTO> getEscalationDetails() {
 	    return escalationDetails;
 	}

@@ -17,6 +17,8 @@ public class ActivityMapDTO {
 		
 		private Boolean isLast;
 
+        private Boolean userSubmissionRequired;
+
 		public ActivityData(String activityType) {
 			this.activityType=activityType;
 		}
@@ -51,8 +53,20 @@ public class ActivityMapDTO {
 
 		public void setIsLast(Boolean isLast) {
 			this.isLast = isLast;
-		}	
-	}
+		}
+
+        public void setLast(Boolean last) {
+            isLast = last;
+        }
+
+        public Boolean getUserSubmissionRequired() {
+            return userSubmissionRequired;
+        }
+
+        public void setUserSubmissionRequired(Boolean userSubmissionRequired) {
+            this.userSubmissionRequired = userSubmissionRequired;
+        }
+    }
 
 	public String getTaskId() {
 		return taskId;
