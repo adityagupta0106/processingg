@@ -121,14 +121,14 @@ public class DocumentProcessService {
                                                         (List<Map<String, Object>>) workflowData.get("action");
 
                                                 if (selectedActions == null || selectedActions.isEmpty()) {
-                                                    //return Mono.error(new SPRuntimeError("No action selected.", HttpStatus.BAD_REQUEST, flow.getTxnId()));
+                                                    return Mono.error(new SPRuntimeError("No action selected.", HttpStatus.BAD_REQUEST, flow.getTxnId()));
                                                 }
 
                                                 if (service.getDocumentGenerationDetails() == null || service.getDocumentGenerationDetails().getDocumentMapping() == null) {
                                                     return Mono.error(new SPRuntimeError("Document generation configuration not found.", HttpStatus.BAD_REQUEST, flow.getTxnId()));
                                                 }
 
-                                                String actionCode = "9";// String.valueOf(selectedActions.getFirst().get("key"));
+                                                String actionCode =  String.valueOf(selectedActions.getFirst().get("key"));
 
                                                 List<DocumentGenerationDetails.DocMappingDTO> applicableMappings =
                                                         service.getDocumentGenerationDetails()
@@ -261,6 +261,7 @@ public class DocumentProcessService {
 
                                     if ("fileUpload".equalsIgnoreCase(document.getSourceType())) {
 
+                                        String processId = isNull(flow.getCurrentProcess()) ? null : flow.getCurrentProcess().getProcessId();
                                         ApplicationDocumentLogEntity log = new ApplicationDocumentLogEntity();
 
                                         log.setNewEntity(Boolean.TRUE);
@@ -269,6 +270,7 @@ public class DocumentProcessService {
                                         log.setApplicationId(applicationId);
                                         log.setServiceId(service.getServiceId());
                                         log.setTaskId(service.getTaskId());
+                                        log.setProcessId(processId);
 
                                         log.setReferenceId(document.getReferenceId());
                                         log.setDocumentName(document.getDocumentName());
@@ -302,6 +304,7 @@ public class DocumentProcessService {
 
                                         entity.setReferenceId(log.getReferenceId());
                                         entity.setDocumentName(log.getDocumentName());
+                                        entity.setProcessId(log.getProcessId());
 
                                         entity.setUploadId(log.getUploadId());
                                         entity.setSignedUploadId("");

@@ -17,6 +17,8 @@ public class ApplicationDocumentSubmissionEntity implements Persistable<String> 
 
     private String txnId;
 
+    private String processId;
+
     private String applicationId;
 
     private Integer serviceId;
@@ -155,5 +157,13 @@ public class ApplicationDocumentSubmissionEntity implements Persistable<String> 
 
     public void setCreatedOn(LocalDateTime createdOn) {
         this.createdOn = createdOn;
+    }
+
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
     }
 }

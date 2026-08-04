@@ -40,6 +40,17 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
     private Boolean userSubmissionRequired;
 
     @Transient
+    private CurrentProcess currentProcess;
+
+    public CurrentProcess getCurrentProcess() {
+        return currentProcess;
+    }
+
+    public void setCurrentProcess(CurrentProcess currentProcess) {
+        this.currentProcess = currentProcess;
+    }
+
+    @Transient
     private boolean newEntity = false;
 
     @Override

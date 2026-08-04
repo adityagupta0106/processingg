@@ -8,6 +8,7 @@ import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.handlers.ApplicationFlowHandler;
 import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepository;
+import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 import com.serviceplus.form.validation.service.TempTransactionLogService;
 import com.serviceplus.form.validation.service.TransactionGeneration;
@@ -40,11 +41,14 @@ public class EventRouter {
 
     private final ProcessingTxnRepository processingTxnRepository;
 
-    public EventRouter(ApplicationFlowRouterRepository applicationFlowRouterRepository, TempTransactionLogService tempTransactionLogService, TransactionGeneration transactionGeneration, ProcessingTxnRepository processingTxnRepository) {
+    private final CurrentProcessRepository currentProcessRepository;
+
+    public EventRouter(ApplicationFlowRouterRepository applicationFlowRouterRepository, TempTransactionLogService tempTransactionLogService, TransactionGeneration transactionGeneration, ProcessingTxnRepository processingTxnRepository, CurrentProcessRepository currentProcessRepository) {
         this.applicationFlowRouterRepository = applicationFlowRouterRepository;
         this.tempTransactionLogService = tempTransactionLogService;
         this.transactionGeneration = transactionGeneration;
         this.processingTxnRepository = processingTxnRepository;
+        this.currentProcessRepository = currentProcessRepository;
     }
 
     public Mono<ServerResponse> route(String statusKey, String applicationId, ServerRequest request, String txnId,
@@ -81,32 +85,67 @@ public class EventRouter {
 
     }
 
-    public Mono<ServerResponse> generate(String statusKey, String applicationId, ServerRequest request, String txnId, Mono<TempTransactionLogs> fetch,
-                                         ApplicationFlowStatusEntity flow, ServiceMeta service, boolean cache, boolean fromDraft, Long userId) {
+    public Mono<ServerResponse> generate(String statusKey, String applicationId, ServerRequest request, String txnId, Mono<TempTransactionLogs> fetch, ApplicationFlowStatusEntity flow, ServiceMeta service, boolean cache, boolean fromDraft, Long userId) {
+
         ApplicationFlowHandler handler = HandlerMapper.getHandler(statusKey);
 
-        if (handler != null) {
-            applicationFlowLogs.info("handler processed for applicationId {} txnId {} cache {} draft {} ,statusKey{},class {}",
-                                                applicationId, txnId,cache,fromDraft, statusKey, handler.getClass());
-
-                if(cache){
-                    return next(statusKey, applicationId, request, fetch, flow, service, txnId, fromDraft, userId);
-                }
-                else if (fromDraft) {
-                    return transactionGeneration.createNewTransactionAndUpdateInFlow(service, flow, request.exchange().getRequest())
-                            .flatMap(processingTxn -> next(statusKey, applicationId, request, fetch, flow, service, processingTxn.getTxnId(), true, processingTxn.getUserId()));
-                } else {
-                    return processingTxnRepository.findById(txnId)
-                            .switchIfEmpty(
-                                    Mono.error(new SPRuntimeError("Invalid txnId",HttpStatus.BAD_REQUEST,txnId))
-                            )
-                            .flatMap(
-                                    _txn -> next(statusKey, applicationId, request, fetch, flow, service, txnId, false, _txn.getUserId())
-                            );
-                }
-        } else {
-            throw new IllegalArgumentException("No handler found for status: ".concat(statusKey));
+        if (handler == null) {
+            throw new IllegalArgumentException("No handler found for status: " + statusKey);
         }
+
+        applicationFlowLogs.info("handler processed for applicationId {} txnId {} cache {} draft {} statusKey {} class {}", applicationId, txnId, cache, fromDraft, statusKey, handler.getClass());
+
+        Mono<ApplicationFlowStatusEntity> flowMono;
+
+        if (cache) {
+            flowMono = Mono.just(flow);
+        } else {
+
+            flowMono = currentProcessRepository
+                    .findByApplicationIdAndCurrentTaskAndActionTaken(
+                            applicationId,
+                            service.getTaskId(),
+                            "N")
+                    .map(currentProcess -> {
+                        flow.setCurrentProcess(currentProcess);
+                        return flow;
+                    })
+                    .switchIfEmpty(Mono.fromSupplier(() -> {
+                        // First applicant task - CurrentProcess does not exist yet
+                        flow.setCurrentProcess(null);
+                        return flow;
+                    }));
+        }
+
+        return flowMono.flatMap(updatedFlow -> {
+
+            if (cache) {
+
+                return next(statusKey, applicationId, request, fetch, updatedFlow, service, txnId, fromDraft, userId);
+
+            } else if (fromDraft) {
+
+                return transactionGeneration
+                        .createNewTransactionAndUpdateInFlow(
+                                service,
+                                updatedFlow,
+                                request.exchange().getRequest())
+                        .flatMap(processingTxn ->
+                                next(statusKey, applicationId, request, fetch, updatedFlow, service, processingTxn.getTxnId(), true, processingTxn.getUserId())
+                        );
+
+            } else {
+
+                return processingTxnRepository
+                        .findById(txnId)
+                        .switchIfEmpty(Mono.error(
+                                new SPRuntimeError("Invalid txnId", HttpStatus.BAD_REQUEST, txnId))
+                        )
+                        .flatMap(_txn ->
+                                next(statusKey, applicationId, request, fetch, updatedFlow, service, txnId, false, _txn.getUserId())
+                        );
+            }
+        });
     }
 
     public Mono<ServerResponse> next(String statusKey, String applicationId, ServerRequest request, Mono<TempTransactionLogs> fetch,

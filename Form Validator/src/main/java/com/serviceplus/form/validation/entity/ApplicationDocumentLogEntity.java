@@ -19,6 +19,8 @@ public class ApplicationDocumentLogEntity implements Persistable<String> {
 
     private String txnId;
 
+    private String processId;
+
     private Integer serviceId;
 
     private String taskId;
@@ -159,5 +161,13 @@ public class ApplicationDocumentLogEntity implements Persistable<String> {
 
     public void setPreviewUrl(String previewUrl) {
         this.previewUrl = previewUrl;
+    }
+
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
     }
 }

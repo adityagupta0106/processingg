@@ -11,4 +11,6 @@ public interface CurrentProcessRepository extends ReactiveCrudRepository<Current
     Mono<CurrentProcess> findByServiceIdAndApplicationIdAndCurrentTaskAndActionTakenAndTenantId(Integer serviceId,String applicationId,String taskId,String actionTaken,String tenantId);
 
 	Mono<CurrentProcess> findByIdAndActionTaken(String id, String actionTaken);
+
+    Mono<CurrentProcess> findByApplicationIdAndCurrentTaskAndActionTaken(String applicationId, String taskId, String action);
 }
