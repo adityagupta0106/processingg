@@ -4,7 +4,9 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.*;
 import com.serviceplus.form.validation.entity.ApplicationDocumentLogEntity;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
+import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.repository.ApplicationDocumentLogRepository;
+import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.service.ReactiveApiClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -17,6 +19,7 @@ import java.util.Base64;
 import java.util.List;
 
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+import static java.util.Objects.isNull;
 
 @Service
 public class SystemGeneratedDocumentResolver {
@@ -40,32 +43,42 @@ public class SystemGeneratedDocumentResolver {
                                                 DocumentGenerationDetails.DocMappingDTO mapping,
                                                 String txnId) {
 
-        return applicationDocumentRepository
-                .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
-                        flow.getApplicationId(),
-                        flow.getTxnId(),
-                        service.getTaskId(),
-                        mapping.getReferenceId(),
-                        SYSTEM_GENERATED
-                        )
+        Mono<ApplicationDocumentLogEntity> documentMono;
+
+        if (flow.getCurrentProcess() != null) {
+
+            documentMono = applicationDocumentRepository
+                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                            flow.getApplicationId(),
+                            flow.getCurrentProcess().getProcessId(),
+                            mapping.getReferenceId(),
+                            SYSTEM_GENERATED);
+
+        } else {
+
+            documentMono = applicationDocumentRepository
+                    .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                            flow.getApplicationId(),
+                            service.getTaskId(),
+                            mapping.getReferenceId(),
+                            SYSTEM_GENERATED);
+        }
+
+        return documentMono
                 .flatMap(existing ->
-
-                        buildResolvedDocument(existing, mapping, user, flow.getTxnId())
-                )
+                        buildResolvedDocument(existing, mapping, user, flow.getTxnId()))
                 .switchIfEmpty(
-
-                        generateDocument(user, flow, service, mapping, txnId))
-
+                        generateDocument(user, flow, service, mapping, txnId)
+                )
                 .doOnError(ex ->
-                        applicationFlowLogs.error("Failed to generate system document for ApplicationId: {}, txnId: {}", flow.getApplicationId(), txnId, ex)
+                        applicationFlowLogs.error("Failed to resolve system document. ApplicationId: {}, txnId: {}", flow.getApplicationId(), txnId, ex)
                 );
     }
 
     private Mono<List<ResolvedDocument>> generateDocument(UserSessionObject user,
                                                           ApplicationFlowStatusEntity flow,
                                                           ServiceMeta service,
-                                                          DocumentGenerationDetails.DocMappingDTO mapping,
-                                                          String txnId) {
+                                                          DocumentGenerationDetails.DocMappingDTO mapping, String txnId) {
 
         Integer outputFormatId = mapping.getSystemGeneratedDocument().getValue();
 
@@ -82,6 +95,8 @@ public class SystemGeneratedDocumentResolver {
 
                     applicationFlowLogs.info("Document generated successfully. UploadId: {}, Status: {}, txnId: {}", response.getUploadId(), response.getStatus(), flow.getTxnId());
 
+                    String processId = isNull(flow.getCurrentProcess()) ? null : flow.getCurrentProcess().getProcessId();
+
                     ApplicationDocumentLogEntity entity = new ApplicationDocumentLogEntity();
                     entity.setNewEntity(Boolean.TRUE);
                     entity.setId(createUniqueId());
@@ -89,6 +104,7 @@ public class SystemGeneratedDocumentResolver {
                     entity.setTxnId(flow.getTxnId());
                     entity.setServiceId(service.getServiceId());
                     entity.setTaskId(flow.getTaskId());
+                    entity.setProcessId(processId);
 
                     entity.setReferenceId(mapping.getReferenceId());
                     entity.setDocumentName(mapping.getDocumentName());

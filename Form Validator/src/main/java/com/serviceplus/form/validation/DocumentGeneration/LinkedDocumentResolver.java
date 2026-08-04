@@ -17,6 +17,7 @@ import java.util.Base64;
 import java.util.List;
 
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+import static java.util.Objects.isNull;
 
 @Service
 public class LinkedDocumentResolver {
@@ -141,12 +142,15 @@ public class LinkedDocumentResolver {
 
                     ApplicationDocumentLogEntity log = new ApplicationDocumentLogEntity();
 
+                    String processId = isNull(flow.getCurrentProcess()) ? null : flow.getCurrentProcess().getProcessId();
+
                     log.setNewEntity(Boolean.TRUE);
                     log.setId(createUniqueId());
                     log.setTxnId(flow.getTxnId());
                     log.setApplicationId(flow.getApplicationId());
                     log.setServiceId(service.getServiceId());
                     log.setTaskId(service.getTaskId());
+                    log.setProcessId(processId);
 
                     log.setReferenceId(document.getReferenceId());
                     log.setDocumentName(entity.getDocumentName());

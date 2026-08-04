@@ -155,6 +155,7 @@ CREATE TABLE schm_sp.application_document_log
     id                  character varying PRIMARY KEY,
     application_id      character varying NOT NULL,
     txn_id              character varying NOT NULL,
+	process_id              character varying,
     service_id          integer NOT NULL,
     task_id             character varying NOT NULL,
     reference_id        character varying NOT NULL,
@@ -171,6 +172,7 @@ CREATE TABLE schm_sp.application_document_merge
     id                      character varying PRIMARY KEY,
     application_id          character varying NOT NULL,
     txn_id              character varying NOT NULL,
+	process_id              character varying,
     task_id                 character varying NOT NULL,
     reference_id            character varying NOT NULL,
     merged_upload_id        character varying,
@@ -183,10 +185,12 @@ CREATE TABLE schm_sp.application_document_merge
     updated_on              timestamp with time zone
 );
 
+
 CREATE TABLE schm_sp.application_document_submission
 (
     id                  character varying PRIMARY KEY,
     txn_id              character varying NOT NULL,
+	process_id              character varying,
     application_id      character varying NOT NULL,
     service_id          integer NOT NULL,
     task_id             character varying NOT NULL,

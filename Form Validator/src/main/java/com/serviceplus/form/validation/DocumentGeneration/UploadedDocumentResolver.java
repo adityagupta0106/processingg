@@ -5,6 +5,7 @@ import com.serviceplus.form.validation.dto.*;
 import com.serviceplus.form.validation.entity.ApplicationDocumentLogEntity;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.repository.ApplicationDocumentLogRepository;
+import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.service.ReactiveApiClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,26 +40,42 @@ public class UploadedDocumentResolver {
                                                 String txnId) {
 
         if (mapping.getFileType() == null || mapping.getFileType().isEmpty()) {
-            return Mono.error(new SPRuntimeError("No file type configured for uploaded document.", HttpStatus.INTERNAL_SERVER_ERROR, flow.getTxnId()
-            ));
+            return Mono.error(new SPRuntimeError("No file type configured for uploaded document.", HttpStatus.INTERNAL_SERVER_ERROR, flow.getTxnId()));
         }
 
-        return applicationDocumentRepository
-                .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
-                        flow.getApplicationId(),
-                        flow.getTxnId(),
-                        flow.getTaskId(),
-                        mapping.getReferenceId(),
-                        FILE_UPLOAD
+        Mono<ApplicationDocumentLogEntity> documentMono;
+
+        if (flow.getCurrentProcess() != null) {
+
+            documentMono = applicationDocumentRepository
+                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                            flow.getApplicationId(),
+                            flow.getCurrentProcess().getProcessId(),
+                            mapping.getReferenceId(),
+                            FILE_UPLOAD);
+
+        } else {
+
+            documentMono = applicationDocumentRepository
+                    .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                            flow.getApplicationId(),
+                            flow.getTaskId(),
+                            mapping.getReferenceId(),
+                            FILE_UPLOAD);
+        }
+
+        return documentMono
+                .flatMap(entity ->
+                        buildResolvedDocument(entity, user, flow.getTxnId())
                 )
-                .flatMap(entity -> buildResolvedDocument(entity, user, flow.getTxnId()))
                 .switchIfEmpty(Mono.defer(() -> {
 
                     applicationFlowLogs.info(
-                            "Uploaded document not found. ApplicationId: {}, ReferenceId: {}, txnId: {}",
+                            "Uploaded document not found. ApplicationId: {}, TaskId: {}, ProcessId: {}, ReferenceId: {}",
                             flow.getApplicationId(),
-                            mapping.getReferenceId(),
-                            flow.getTxnId());
+                            flow.getTaskId(),
+                            flow.getCurrentProcess() != null ? flow.getCurrentProcess().getProcessId() : null,
+                            mapping.getReferenceId());
 
                     ResolvedDocument document = new ResolvedDocument();
 
@@ -66,7 +83,6 @@ public class UploadedDocumentResolver {
                     document.setReferenceId(mapping.getReferenceId());
                     document.setDocumentName(mapping.getDocumentName());
                     document.setSourceType(FILE_UPLOAD);
-
                     document.setStatus("PENDING");
 
                     document.setPreviewUrl(null);
@@ -78,37 +94,32 @@ public class UploadedDocumentResolver {
                     document.setFileUploadOptional(mapping.getIsFileUploadOptional());
 
                     CreateUploadSessionsRequest uploadRequest = new CreateUploadSessionsRequest();
-
                     uploadRequest.setUserId(user.getUserID());
                     uploadRequest.setSourceService("FORM_VALIDATION");
 
-                    CreateUploadSessionsRequest.FileUploadRequest file = new CreateUploadSessionsRequest.FileUploadRequest();
+                    CreateUploadSessionsRequest.FileUploadRequest file =
+                            new CreateUploadSessionsRequest.FileUploadRequest();
 
                     file.setReferenceId(mapping.getReferenceId());
                     file.setCategory(mapping.getDocumentName());
 
                     file.setAllowedMime(
-                            mapping.getFileType()
-                                    .stream()
+                            mapping.getFileType().stream()
                                     .map(DocumentGenerationDetails.DocMappingDTO.LabelValueDTO::getValue)
                                     .map(String::toLowerCase)
                                     .map(ext -> MIME_TYPE_MAP.getOrDefault(ext, ext))
-                                    .toList()
-                    );
+                                    .toList());
 
                     file.setMaxFileSize(52428800L);
-
                     file.setChunkedUpload(Boolean.TRUE);
                     file.setExpiresInMinutes(30);
+                    file.setFunctionality("document-generation");
 
                     uploadRequest.setFiles(List.of(file));
 
                     return reactiveApiClient
                             .createUploadSession(user, uploadRequest, txnId)
                             .map(session -> {
-
-                                document.setFileTypes(mapping.getFileType());
-                                document.setFileUploadOptional(mapping.getIsFileUploadOptional());
 
                                 document.setUploadSession(session.getUploads().getFirst());
 

@@ -19,6 +19,8 @@ public class ApplicationDocumentMergeEntity implements Persistable<String> {
 
     private String txnId;
 
+    private String processId;
+
     private String taskId;
 
     private String referenceId;
@@ -155,5 +157,13 @@ public class ApplicationDocumentMergeEntity implements Persistable<String> {
 
     public void setTxnId(String txnId) {
         this.txnId = txnId;
+    }
+
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
     }
 }
