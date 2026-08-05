@@ -98,7 +98,7 @@ public class GatewayService {
                             applicationFlowLogs.info("Executing Gateway MVEL gatewayId={}, map={}", gatewayNode.getId(), taskLocationUserHolderMap);
 
 
-                            return executeGatewayMvel(service, ad, txn, "",
+                            return executeGatewayMvel(user,service, ad, txn, "",
                                     currentActionProcess, gatewayNode.getId(),
                                     nextToGateway, taskLocationUserHolderMap,timerDueDate)
 
@@ -221,7 +221,7 @@ public class GatewayService {
     }
 
     private Mono<List<ServiceProcessFlowDTO.Data.MappedTask>> executeGatewayMvel(
-
+    		UserSessionObject user,
             ServiceMeta service,
             ApplicationDetails applicationDetails,
             ProcessingTxn txn,
@@ -243,7 +243,7 @@ public class GatewayService {
                 nextNodeIds,
                 taskLocationUserHolderMap);
 
-        return apiClient.fetchMvelDetails(service.getServiceId())
+        return apiClient.fetchMvelDetails(user,service.getServiceId(),txn.getTxnId())
                 .flatMapMany(Flux::fromIterable)
 
                 .filter(m -> "GW".equalsIgnoreCase(m.getValue()))

@@ -155,47 +155,12 @@ public class ReactiveApiClient {
 	}
     //CHECK CIRCUIT BREAKER AND ADD LOGS
 	public Mono<String> fetchReferenceAbbrviation(Integer serviceId, UserSessionObject user, String txnId) {
-        String url = METADATA_SERVICE.concat("serviceAbbreviation");
-
-        Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(
-											                String.class,
-											                HttpMethod.GET,
-											                Map.of("USER-DETAILS", entityToString(user)),
-											                Map.of("serviceId", serviceId),
-											                url,
-											                null,
-											                MediaType.APPLICATION_JSON);
-        
-       return callExternalEndpoint.flatMap(apiResponse -> {
-                String body = apiResponse.getBody();
-                
-                Map<String, String> responseJson;
-                try {
-                    responseJson = mapper.readValue(body, new TypeReference<>() {
-                    });
-                } catch (JsonProcessingException e) {
-                    e.printStackTrace();
-                    return Mono.error(new SPRuntimeError(
-                        "Issue while processing the request [SUB - 004]", HttpStatus.FAILED_DEPENDENCY,txnId));
-                }
-
-                String message = responseJson.getOrDefault("errorMessage", "");
-                
-                if(apiResponse.getStatusCode().is4xxClientError()) {
-                	return Mono.error(new SPRuntimeError(
-                			message.concat(" - issue while processing [SUB - 005]"),
-                       HttpStatus.BAD_REQUEST,txnId));
-                }
-                else if(!apiResponse.getStatusCode().is2xxSuccessful()){
-                    return Mono.error(new SPRuntimeError(
-                    		message.concat(" - issue while processing [SUB - 006]"),
-                        HttpStatus.UNPROCESSABLE_ENTITY,txnId));
-                }
-                
+       return fetchServiceMetadata(user, serviceId, txnId)
+               .flatMap(metadata -> {
+                String body = metadata.getServiceAbbrevation();
                 if (body == null) {
                     return Mono.error(new SPRuntimeError("Unable to process your request [SUB - 007]", HttpStatus.FAILED_DEPENDENCY,txnId));
                 }
-                
                 return Mono.just(body);
             });
     }
@@ -407,31 +372,9 @@ public class ReactiveApiClient {
         });
 
     }
-    public Mono<List<MvelDetailsDTO>> fetchMvelDetails(Integer serviceId) {
-
-        Map<String, String> headers = Map.of();
-
-        String url = METADATA_SERVICE.concat("apply/mvelDetails?");
-
-        Mono<ResponseEntity<String>> call = AsynchronousApiExecutor.callExternalEndpoint(
-                String.class,
-                HttpMethod.POST,
-                headers,
-                Map.of("serviceId", serviceId),
-                url,
-                null,
-                MediaType.APPLICATION_JSON
-        );
-
-        return call.flatMap(res -> {
-
-            String body = res.getBody();
-
-            Type type = new TypeToken<List<MvelDetailsDTO>>() {}.getType();
-
-            List<MvelDetailsDTO> list =
-                    (List<MvelDetailsDTO>) stringToEntityUsingType(body, type);
-
+    public Mono<List<MvelDetailsDTO>> fetchMvelDetails(UserSessionObject user, Integer serviceId, String txnId) {
+        return fetchServiceMetadata(user, serviceId, txnId).flatMap(metadata -> {
+            List<MvelDetailsDTO> list =metadata.getMvelDetailsDTO();
             return Mono.just(list);
         });
     }

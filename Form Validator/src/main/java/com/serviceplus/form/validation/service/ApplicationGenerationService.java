@@ -88,19 +88,12 @@ public class ApplicationGenerationService {
                 return reactiveApiClient.fetchReferenceAbbrviation(service.getServiceId(),user,txnLog.getTxnId())
                         .flatMap(data -> {
                             try {
-                                JSONObject json = new JSONObject(data);
-                                String abbr = json.getString("abbr");
-
+                                String abbr = data;
                                 applicationFlowLogs.info("Abbreviation for txnId {} is {} ",txnLog.getTxnId(),abbr);
-
                                 String referenceNo = abbr.concat("/").concat(String.valueOf(Year.now().getValue())).concat("/").concat(txnLog.getTxnId());
-
                                 return saveTxn(txnLog,dataId,service,user,referenceNo,appId,txnLog.getTxnId(),"","",appStatus,from);
-
                             } catch (Exception e) {
-
                                 e.printStackTrace();
-
                                 return Mono.error(new SPRuntimeError(
                                         "Issue while processing the request [SUB - 009]",
                                         HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()
