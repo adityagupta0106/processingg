@@ -146,7 +146,7 @@ public class WorkflowService {
                                 applicationFlowLogs.info("Executing After Task MVEL for taskId={}, currentMap={}",
                                         next.getId(), taskLocationUserHolderMap);
 
-                                return taskAssignmentService.executeAfterTaskMvel(service, ad, txn, "", currentActionProcess, next.getId(),
+                                return taskAssignmentService.executeAfterTaskMvel(user,service, ad, txn, "", currentActionProcess, next.getId(),
                                         taskLocationUserHolderMap,timerDueDate)
 
                                         .thenMany(Flux.defer(() -> {

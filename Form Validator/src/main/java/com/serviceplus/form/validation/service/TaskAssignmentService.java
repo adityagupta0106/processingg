@@ -170,11 +170,11 @@ public class TaskAssignmentService {
         return location;
     }
 
-    public Mono<Void> executeAfterTaskMvel(ServiceMeta service, ApplicationDetails applicationDetails, ProcessingTxn txn, String appData,
+    public Mono<Void> executeAfterTaskMvel(UserSessionObject user,ServiceMeta service, ApplicationDetails applicationDetails, ProcessingTxn txn, String appData,
                                             CurrentProcess currentActionProcess, String taskId, Map<String, Map<String,List<String>>> taskLocationUserHolderMap, Map<String, Date> timerDueDate
     ) {
 
-        return apiClient.fetchMvelDetails(service.getServiceId())
+        return apiClient.fetchMvelDetails(user,service.getServiceId(),txn.getTxnId())
                 .flatMapMany(Flux::fromIterable)
                 .filter(m -> "AT".equalsIgnoreCase(m.getValue())).filter(m -> taskId.equals(m.getNodeId()))
                 .flatMap(m ->
