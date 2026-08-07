@@ -211,7 +211,7 @@ public class ApplicationGenerationService {
                                                 savedLog.getTxnId(), currentProcess, ad, savedLog
                                         )
                                         .then(sendCurrentProcessToTracking(
-                                                currentProcess, ad, service, user)
+                                                currentProcess, ad, service, user,completeClosure)
                                         );
                             }
                         }
@@ -235,7 +235,7 @@ public class ApplicationGenerationService {
     public Mono<Void> sendCurrentProcessToTracking(CurrentProcess currentProcess,
                                                     ApplicationDetails application,
                                                     ServiceMeta service,
-                                                    UserSessionObject user) {
+                                                    UserSessionObject user, boolean completeClosure) {
 
         InboxKafka inboxKafka = new InboxKafka();
 
@@ -251,6 +251,8 @@ public class ApplicationGenerationService {
 
         inboxKafka.setLoggedInUserId(user.getUserID());
         inboxKafka.setLoggedInUserLocation(user.getLocationId());
+        
+        inboxKafka.setCompleteClosure(completeClosure);
 
         String key = application.getApplicationId()
                 .concat("_")
@@ -283,6 +285,7 @@ public class ApplicationGenerationService {
         currentProcess.setBaseServiceId(service.getBaseServiceId());
         currentProcess.setInitiatedOn(LocalDateTime.now());
         currentProcess.setApplicantTask(Boolean.TRUE);
+        currentProcess.setActionCode(FALLBACK_ACTION_NO);
 
         return Mono.just(currentProcess);
     }
