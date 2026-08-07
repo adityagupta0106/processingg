@@ -289,11 +289,29 @@ public class FormService {
 
         ServiceProcessFlowDTO.Data.WorkflowElementData workflow = service.getWorkflowElementData();
 
-        List<Map<String, Object>> selectedActions =
-                (List<Map<String, Object>>) responseJson.getOrDefault("action", Collections.emptyList());
+        Object actionObj = responseJson.get("action");
 
-        List<Map<String, Object>> selectedTasks =
-                (List<Map<String, Object>>) responseJson.getOrDefault("task", Collections.emptyList());
+        List<Map<String, Object>> selectedActions;
+
+        if (actionObj instanceof List<?> list) {
+            selectedActions = (List<Map<String, Object>>) list;
+        } else if (actionObj instanceof Map<?, ?> map) {
+            selectedActions = List.of((Map<String, Object>) map);
+        } else {
+            selectedActions = Collections.emptyList();
+        }
+
+        Object taskObj = responseJson.get("task");
+
+        List<Map<String, Object>> selectedTasks;
+
+        if (taskObj instanceof List<?> list) {
+            selectedTasks = (List<Map<String, Object>>) list;
+        } else if (taskObj instanceof Map<?, ?> map) {
+            selectedTasks = List.of((Map<String, Object>) map);
+        } else {
+            selectedTasks = Collections.emptyList();
+        }
 
         Map<String, List<Map<String, Object>>> selectedUsers =
                 responseJson.get("user") == null
@@ -304,7 +322,7 @@ public class FormService {
 
         if (!selectedActions.isEmpty() && workflow.getActionAttribute() != null) {
 
-            String actionCode = (String) selectedActions.getFirst().get("key");
+            String actionCode = (String) selectedActions.getFirst().get("value");
 
             selectedAction = workflow.getActionAttribute().stream()
                     .filter(a -> actionCode.equals(a.getKey()))
@@ -322,7 +340,7 @@ public class FormService {
 
         if (!selectedTasks.isEmpty()) {
 
-            selectedTaskIds = selectedTasks.stream().map(t -> (String) t.get("key")).toList();
+            selectedTaskIds = selectedTasks.stream().map(t -> (String) t.get("value")).toList();
 
             Map<String, ServiceProcessFlowDTO.Data.TaskNode> allowedTaskMap =
                     workflow.getTaskAttribute().getTaskNodes().stream()
@@ -377,7 +395,7 @@ public class FormService {
 
                                         for (Map<String, Object> selectedUser : taskUsers) {
 
-                                            String holderId = (String) selectedUser.get("key");
+                                            String holderId = (String) selectedUser.get("value");
 
                                             FetchTaskHolders.UserNode holder = allowedUserMap.get(holderId);
 
