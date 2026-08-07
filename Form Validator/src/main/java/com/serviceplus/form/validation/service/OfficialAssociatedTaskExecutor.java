@@ -99,7 +99,7 @@ public class OfficialAssociatedTaskExecutor implements AssociatedTaskExecutor {
 
 		dto.setServiceId(process.getServiceId());
 		dto.setBaseServiceId(process.getBaseServiceId());
-		dto.setServiceName(process.getCurrentTaskName());
+		dto.setServiceName(application.getServiceName());
 
 		dto.setCurrentProcessId(process.getProcessId());
 		dto.setCurrentTaskId(process.getCurrentTask());
