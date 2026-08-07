@@ -87,9 +87,9 @@ public class HandlerController {
                                 , service, true)
                 )
                 .onErrorResume(Exception.class, ex -> {
-                    ex.printStackTrace();
+
                     Throwable actual = Exceptions.unwrap(ex);
-                    applicationFlowLogs.error("Error occurred for txnId {} applicationId {} is {}", txnIdOpt.get(), appIdOpt.get(), ex.getMessage());
+                    applicationFlowLogs.error("Error occurred for txnId {} applicationId {} is {}", txnIdOpt.get(), appIdOpt.get(), ex);
 
                     return Mono.error(
                             actual instanceof SPRuntimeError spr
