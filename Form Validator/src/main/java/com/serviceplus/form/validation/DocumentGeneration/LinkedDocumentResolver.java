@@ -159,6 +159,7 @@ public class LinkedDocumentResolver {
                     log.setUploadId(entity.getUploadId());
                     log.setStatus("COMPLETED");
                     log.setCreatedOn(LocalDateTime.now());
+                    log.setTenantId(user.getTenantId());
 
                     return applicationDocumentLogRepository
                             .save(log)

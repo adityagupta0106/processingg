@@ -10,10 +10,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -175,6 +172,8 @@ public class Utility {
         try {
             service.setBaseServiceId(service.getServiceId()/10000);
             Map<String, Object> payload = new HashMap<>();
+            List<ServiceMeta.AvailableApplyLocations> locations = service.getLocations();
+            service.setLocations(Collections.emptyList());
 
             payload.put("service", service);
             payload.put("issuedAt", Instant.now().toEpochMilli());
@@ -184,6 +183,8 @@ public class Utility {
 
             String encrypted = AESEncrypt(plain, APPLY_METADATA_AES_KEY);
             String signature = HMACSHA256(encrypted, APPLY_METADATA_HMAC_KEY);
+
+            service.setLocations(locations);
 
             return encrypted.concat(".").concat(signature);
 
@@ -299,9 +300,7 @@ public class Utility {
                 throw new RuntimeException("Workflow Key Expired");
             }
 
-            return (ServiceMeta) stringToEntity(
-                    entityToString(payload.get("service")),
-                    ServiceMeta.class);
+            return (ServiceMeta) stringToEntity(entityToString(payload.get("service")), ServiceMeta.class);
 
         } catch (Exception e) {
             throw new RuntimeException("Invalid Service Key", e);

@@ -3,7 +3,6 @@ package com.serviceplus.form.validation.service;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_SUBMISSION_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
 import static com.serviceplus.form.validation.utility.Utility.handleWebClientError;
-import static com.serviceplus.form.validation.utility.Utility.returnError;
 import static java.util.Objects.isNull;
 
 import java.util.*;
@@ -125,8 +124,8 @@ public class FormService {
         return Mono.just(tempTransactionLogs);
     }
 
-    @SuppressWarnings("unchecked")
     private Mono<ServiceMeta> validateTransaction(UserSessionObject user, TempTransactionLogs txnLog, ServiceMeta service, String appData, ApplicationFlowStatusEntity flowStatus) {
+
         if (!service.getServiceId().equals(txnLog.getService().getServiceId()) ||
                 !service.getFormId().equals(txnLog.getService().getFormId()) ||
                   !service.getTaskId().equals(txnLog.getService().getTaskId())) {
@@ -135,43 +134,65 @@ public class FormService {
         }
 
         try {
-            Map<String,Object> formData =  objectMapper.readValue(appData,Map.class);
-            List<ServiceMeta.AvailableApplyLocations> locations = service.getLocations();
 
-            Map<String,Object> selectedLocation = (Map<String,Object>) formData.get("location");
+            Map<String, Object> formData = objectMapper.readValue(appData, Map.class);
 
-            if(service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)) {
+            Map<String, Object> selectedLocation = (Map<String, Object>) formData.get("location");
 
-                if (isNull(selectedLocation) || selectedLocation.isEmpty()) {
-                    if (locations.size() == 1) {
-                        service.setSelectedLocationByUser(locations.getFirst().getOrgUnitCode());
-                        service.setSelectedLocationNameByUser(locations.getFirst().getOrgUnitName());
-                    } else {
-                        return Mono.error(new SPRuntimeError(
-                                "Kindly select a location. [VAL - 002]", HttpStatus.BAD_REQUEST,txnLog.getTxnId()));
-                    }
-                } else {
-                    Long selectedLocationId = ((Number) selectedLocation.get("value")).longValue();
+            if (service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)) {
 
-                    List<ServiceMeta.AvailableApplyLocations> validLocation = locations.stream()
-                            .filter(loc -> selectedLocationId.equals(loc.getOrgUnitCode()))
-                            .toList();
+                return reactiveApiClient
+                        .fetchServiceKey(
+                                service.getBaseServiceId(),
+                                user,
+                                "",
+                                service.getTaskId(),
+                                service.getServiceId())
+                        .flatMap(metadataService -> {
 
-                    if (validLocation.isEmpty()) {
-                        return Mono.error(new SPRuntimeError(
-                                "Invalid location selected. [SUB-003]", HttpStatus.BAD_REQUEST,txnLog.getTxnId()));
-                    }
+                            List<ServiceMeta.AvailableApplyLocations> locations = metadataService.getLocations();
 
-                    service.setSelectedLocationNameByUser(validLocation.getFirst().getOrgUnitName());
-                    service.setSelectedLocationByUser(validLocation.getFirst().getOrgUnitCode());
-                }
+                            if (locations == null || locations.isEmpty()) {
+                                return Mono.error(new SPRuntimeError("No locations configured for this task.", HttpStatus.BAD_REQUEST, txnLog.getTxnId()));
+                            }
+
+                            if (isNull(selectedLocation) || selectedLocation.isEmpty()) {
+
+                                if (locations.size() == 1) {
+
+                                    service.setSelectedLocationByUser(locations.getFirst().getOrgUnitCode());
+                                    service.setSelectedLocationNameByUser(locations.getFirst().getOrgUnitName());
+
+                                } else {
+                                    return Mono.error(new SPRuntimeError("Kindly select a location. [VAL - 002]", HttpStatus.BAD_REQUEST, txnLog.getTxnId()));
+                                }
+
+                            } else {
+
+                                Long selectedLocationId = ((Number) selectedLocation.get("value")).longValue();
+
+                                List<ServiceMeta.AvailableApplyLocations> validLocation = locations.stream()
+                                                                                            .filter(loc -> selectedLocationId.equals(loc.getOrgUnitCode()))
+                                                                                            .toList();
+
+                                if (validLocation.isEmpty()) {
+                                    return Mono.error(new SPRuntimeError("Invalid location selected. [SUB-003]", HttpStatus.BAD_REQUEST, txnLog.getTxnId()));
+                                }
+
+                                service.setSelectedLocationNameByUser(validLocation.getFirst().getOrgUnitName());
+                                service.setSelectedLocationByUser(validLocation.getFirst().getOrgUnitCode());
+                            }
+
+                            return Mono.just(service);
+                        });
             }
 
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        }
+            return Mono.just(service);
 
-        return Mono.just(service);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+            return Mono.error(new SPRuntimeError("Invalid application data.", HttpStatus.BAD_REQUEST, txnLog.getTxnId()));
+        }
     }
 
     private Mono<ServerResponse> executeTransaction( String txnId,
@@ -181,9 +202,10 @@ public class FormService {
                                         boolean draft,
                                         ServerHttpRequest request, ServerRequest reactiveRequestObject, ApplicationFlowStatusEntity flowStatus,
                                         TempTransactionLogs txnLog,boolean newEntityFlag){
+
     	return executeFormSubmissionMvel(user, service, txnLog, appData, flowStatus)
     	        .then(validateTransaction(user,txnLog, service, appData,flowStatus)
-                    .flatMap(serviceModified ->                    	
+                    .flatMap(serviceModified ->
                         reactiveApiClient.saveFormData(
                                         txnId,
                                         serviceModified,

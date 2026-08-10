@@ -24,8 +24,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.FALLBACK_ACTION_NO;
@@ -132,14 +132,30 @@ public class DocumentProcessService {
 
                                                     List<DocumentGenerationDetails.DocMappingDTO> mappings = service.getDocumentGenerationDetails().getDocumentMapping();
 
-                                                    if (mappings.size() == 1) {
+                                                    Set<String> configuredActionCodes = mappings.stream()
+                                                                                        .filter(mapping -> mapping.getAction() != null)
+                                                                                        .flatMap(mapping -> mapping.getAction().stream())
+                                                                                        .map(DocumentGenerationDetails.DocMappingDTO.LabelValueDTO::getValue)
+                                                                                        .filter(Objects::nonNull)
+                                                                                        .collect(Collectors.toSet());
 
-                                                        applicableMappings = mappings;
-                                                        applicationFlowLogs.info("TxnId : {} | No action selected. Single document mapping found, proceeding automatically.", flow.getTxnId());
+                                                    if (configuredActionCodes.size() == 1) {
+
+                                                        actionCode = configuredActionCodes.iterator().next();
+
+                                                        applicableMappings = mappings.stream().filter(mapping ->
+                                                                                                    mapping.getAction() != null &&
+                                                                                                    mapping.getAction().stream().anyMatch(
+                                                                                                            action ->
+                                                                                                                            configuredActionCodes.iterator().next().equals(action.getValue())))
+                                                                                                    .toList();
+
+                                                        applicationFlowLogs.info("TxnId : {} | No action selected. Using configured actionCode={}", flow.getTxnId(), actionCode);
 
                                                     } else {
                                                         return Mono.error(new SPRuntimeError("No action selected.", HttpStatus.BAD_REQUEST, flow.getTxnId()));
                                                     }
+
 
                                                 } else {
 
@@ -298,6 +314,7 @@ public class DocumentProcessService {
                                         log.setUploadId(document.getUploadId());
                                         log.setStatus("P");
                                         log.setCreatedOn(LocalDateTime.now());
+                                        log.setTenantId(user.getTenantId());
 
                                         logMono = applicationDocumentLogRepository.save(log);
 
@@ -333,6 +350,7 @@ public class DocumentProcessService {
                                         entity.setCreatedBy(user.getUserID());
                                         entity.setCreatedOn(LocalDateTime.now());
                                         entity.setNew(Boolean.TRUE);
+                                        entity.setTenantId(user.getTenantId());
 
                                         return entity;
                                     });
