@@ -163,15 +163,34 @@ public class AssociatedTaskService {
 					&& "N".equalsIgnoreCase(process.getActionTaken());
 		}
 
-		if (activity.getTriggerPoint().stream().anyMatch(tp -> "after".equalsIgnoreCase(tp))) {
+		if (activity.getTriggerPoint().stream()
+				.anyMatch(tp -> "after".equalsIgnoreCase(tp))) {
 
-			// Associated task executes only on configured execution task
-			if (activity.getExecutionTasks() == null
-					|| !activity.getExecutionTasks().contains(process.getCurrentTask())) {
+			// Case 1 : No execution task configured
+			// Execute immediately after source task completion.
+			if (activity.getExecutionTasks() == null || activity.getExecutionTasks().isEmpty()) {
+				
+				if (!Objects.equals(activity.getSourceTaskId(), process.getCurrentTask())) {
+					return false;
+				}
+
+				if (!"Y".equalsIgnoreCase(process.getActionTaken())) {
+					return false;
+				}
+
+				if (activity.getTriggerOnAction() == null || activity.getTriggerOnAction().isEmpty()) {
+					return true;
+				}
+
+				return activity.getTriggerOnAction().stream()
+						.anyMatch(action -> Objects.equals(action, "action_" + process.getActionCode()));
+			}
+
+			// Case 2 : Execute on configured execution task
+			if (!activity.getExecutionTasks().contains(process.getCurrentTask())) {
 				return false;
 			}
 
-			// Find the source task execution in history
 			CurrentProcess sourceProcess = processList.stream()
 					.filter(p -> Objects.equals(p.getCurrentTask(), activity.getSourceTaskId()))
 					.filter(p -> "Y".equalsIgnoreCase(p.getActionTaken())).findFirst().orElse(null);

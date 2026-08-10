@@ -88,19 +88,12 @@ public class ApplicationGenerationService {
                 return reactiveApiClient.fetchReferenceAbbrviation(service.getServiceId(),user,txnLog.getTxnId())
                         .flatMap(data -> {
                             try {
-                                JSONObject json = new JSONObject(data);
-                                String abbr = json.getString("abbr");
-
+                                String abbr = data;
                                 applicationFlowLogs.info("Abbreviation for txnId {} is {} ",txnLog.getTxnId(),abbr);
-
                                 String referenceNo = abbr.concat("/").concat(String.valueOf(Year.now().getValue())).concat("/").concat(txnLog.getTxnId());
-
                                 return saveTxn(txnLog,dataId,service,user,referenceNo,appId,txnLog.getTxnId(),"","",appStatus,from);
-
                             } catch (Exception e) {
-
                                 e.printStackTrace();
-
                                 return Mono.error(new SPRuntimeError(
                                         "Issue while processing the request [SUB - 009]",
                                         HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()
@@ -218,7 +211,7 @@ public class ApplicationGenerationService {
                                                 savedLog.getTxnId(), currentProcess, ad, savedLog
                                         )
                                         .then(sendCurrentProcessToTracking(
-                                                currentProcess, ad, service, user)
+                                                currentProcess, ad, service, user,completeClosure)
                                         );
                             }
                         }
@@ -242,7 +235,7 @@ public class ApplicationGenerationService {
     public Mono<Void> sendCurrentProcessToTracking(CurrentProcess currentProcess,
                                                     ApplicationDetails application,
                                                     ServiceMeta service,
-                                                    UserSessionObject user) {
+                                                    UserSessionObject user, boolean completeClosure) {
 
         InboxKafka inboxKafka = new InboxKafka();
 
@@ -258,6 +251,8 @@ public class ApplicationGenerationService {
 
         inboxKafka.setLoggedInUserId(user.getUserID());
         inboxKafka.setLoggedInUserLocation(user.getLocationId());
+        
+        inboxKafka.setCompleteClosure(completeClosure);
 
         String key = application.getApplicationId()
                 .concat("_")
@@ -290,6 +285,7 @@ public class ApplicationGenerationService {
         currentProcess.setBaseServiceId(service.getBaseServiceId());
         currentProcess.setInitiatedOn(LocalDateTime.now());
         currentProcess.setApplicantTask(Boolean.TRUE);
+        currentProcess.setActionCode(FALLBACK_ACTION_NO);
 
         return Mono.just(currentProcess);
     }

@@ -20,6 +20,7 @@ public class InboxKafka {
 
     private List<TaskAvailableOfficeLocation> officeDetails;
     private List<CurrentProcess> processList;
+    private boolean completeClosure=false;
 
     public String getLocationName() {
         return locationName;
@@ -108,4 +109,12 @@ public class InboxKafka {
     public void setLoggedInUserId(Long loggedInUserId) {
         this.loggedInUserId = loggedInUserId;
     }
+
+	public boolean isCompleteClosure() {
+		return completeClosure;
+	}
+
+	public void setCompleteClosure(boolean completeClosure) {
+		this.completeClosure = completeClosure;
+	}
 }
