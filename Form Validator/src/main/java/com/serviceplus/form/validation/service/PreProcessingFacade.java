@@ -7,7 +7,10 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.*;
@@ -15,6 +18,7 @@ import com.serviceplus.form.validation.entity.*;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.json.HTTP;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -94,6 +98,39 @@ public class PreProcessingFacade {
                                 String workflowKey = encryptWorkflowKey(
                                         data.getTxnId(),
                                         service);
+
+                                Optional<ServiceProcessFlowDTO.Data> task = metadata.getProcessFlowMap()
+                                                                                      .getData()
+                                                                                      .stream()
+                                                                                      .filter(p -> p.getNode().getId().equals(service.getTaskId()))
+                                                                                      .findFirst();
+
+                                if(task.isEmpty()){
+                                   return Mono.error(new SPRuntimeError("Internal processing error [REN - 05]", HttpStatus.INTERNAL_SERVER_ERROR,data.getTxnId()));
+                                }
+
+                                List<OfficeDetailsDTO.OfficeUnitData> allowedOffices = task.get().getAllowedOffices();
+
+                                List<ServiceMeta.AvailableApplyLocations> locations = allowedOffices
+                                                                                        .stream()
+                                                                                        .map(office -> {
+                                                                                            ServiceMeta.AvailableApplyLocations location =
+                                                                                                    new ServiceMeta.AvailableApplyLocations();
+                                                                                            location.setOrgUnitCode(office.getOrgUnitCode() != null
+                                                                                                    ? office.getOrgUnitCode().longValue()
+                                                                                                    : null);
+                                                                                            location.setOrgUnitName(
+                                                                                                    office.getOrgUnitName());
+
+                                                                                            location.setHolderIds(new ArrayList<>());
+
+                                                                                            return location;
+
+                                                                                        })
+                                                                                        .collect(Collectors.toList());
+
+                                service.setLocations(locations);
+
 
                                 return reactiveApiClient
                                         .fetchFormData(data.getTxnId(), service, user)

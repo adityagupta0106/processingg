@@ -41,6 +41,8 @@ public class ApplicationDocumentMergeEntity implements Persistable<String> {
 
     private LocalDateTime updatedOn;
 
+    private String tenantId;
+
     @Transient
     private boolean isNew = true;
 
@@ -165,5 +167,13 @@ public class ApplicationDocumentMergeEntity implements Persistable<String> {
 
     public void setProcessId(String processId) {
         this.processId = processId;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 }

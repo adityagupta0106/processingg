@@ -203,3 +203,8 @@ CREATE TABLE schm_sp.application_document_submission
     created_by          bigint,
     created_on          timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+
+alter table schm_sp.application_document_log add column tenant_id character varying;
+alter table schm_sp.application_document_merge add column tenant_id character varying;
+alter table schm_sp.application_document_submission add column tenant_id character varying;

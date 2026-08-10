@@ -114,6 +114,7 @@ public class SystemGeneratedDocumentResolver {
                     entity.setPreviewUrl(response.getPreviewUrl());
                     entity.setStatus(response.getStatus());
                     entity.setCreatedOn(LocalDateTime.now());
+                    entity.setTenantId(user.getTenantId());
 
                     return applicationDocumentRepository
                             .save(entity)

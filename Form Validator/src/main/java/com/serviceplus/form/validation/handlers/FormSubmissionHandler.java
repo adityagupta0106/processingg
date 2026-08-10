@@ -8,6 +8,7 @@ import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 import com.serviceplus.form.validation.service.FormService;
+import com.serviceplus.form.validation.service.ReactiveApiClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,9 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
 
     @Autowired
     private ProcessingTxnRepository txnRepository;
+
+    @Autowired
+    private ReactiveApiClient reactiveApiClient;
 
     @Override
     public String getActivityType() {
@@ -77,18 +81,30 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
 
                             String formData = entityToString(requestBody);
 
-                            return formService.applicationSubmission(
-                                    request.exchange().getRequest(),
-                                    txnId,
-                                    formData,
-                                    applId,
-                                    fromDraft,
-                                    request,
-                                    flowStatus,
-                                    serviceIdOpt.get(),
-                                    service,
-                                    newEntityFlag
-                            );
+                            return reactiveApiClient
+                                    .fetchServiceKey(
+                                            service.getBaseServiceId(),
+                                            getUserSessionDetails(request.exchange().getRequest()),
+                                            applicationId,
+                                            service.getTaskId(),
+                                            service.getServiceId())
+                                    .flatMap(metadataService -> {
+
+                                        service.setLocations(metadataService.getLocations());
+
+                                        return formService.applicationSubmission(
+                                                request.exchange().getRequest(),
+                                                txnId,
+                                                formData,
+                                                applId,
+                                                fromDraft,
+                                                request,
+                                                flowStatus,
+                                                serviceIdOpt.get(),
+                                                service,
+                                                newEntityFlag
+                                        );
+                                    });
                         });
 
                     } else {

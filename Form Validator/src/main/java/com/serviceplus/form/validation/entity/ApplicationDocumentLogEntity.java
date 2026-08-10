@@ -39,6 +39,8 @@ public class ApplicationDocumentLogEntity implements Persistable<String> {
 
     private LocalDateTime createdOn;
 
+    private String tenantId;
+
     @Transient
     transient private String previewUrl;
 
@@ -169,5 +171,13 @@ public class ApplicationDocumentLogEntity implements Persistable<String> {
 
     public void setProcessId(String processId) {
         this.processId = processId;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 }
