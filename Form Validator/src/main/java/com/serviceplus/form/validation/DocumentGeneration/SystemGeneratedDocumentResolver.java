@@ -203,7 +203,6 @@ public class SystemGeneratedDocumentResolver {
                 .flatMap(entity -> {
 
                     if (!flow.getApplicationId().equals(entity.getApplicationId())
-                            || !flow.getTxnId().equals(entity.getTxnId())
                             || !service.getTaskId().equals(entity.getTaskId())
                             || !mapping.getReferenceId().equals(entity.getReferenceId())
                             || !SYSTEM_GENERATED.equalsIgnoreCase(entity.getSourceType())) {
