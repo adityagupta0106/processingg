@@ -104,4 +104,19 @@ public class ActivityMapService {
                     return Boolean.TRUE.equals(currentActivity.getUserSubmissionRequired());
                 });
     }
+    public Mono<Long> activityConfigId(ServiceMeta service,
+    		UserSessionObject user,
+    		String applicationId,
+    		String txnId,
+    		String activityType) {
+    	
+    	return getActivityMap(service, user, applicationId, txnId)
+    			.map(activityMap -> {
+    				ActivityMapDTO.ActivityData currentActivity = findCurrentActivity(service.getTaskId(),activityType, activityMap);
+    				if (currentActivity == null) {
+    					throw new SPRuntimeError("Current activity not found in activity map.", HttpStatus.INTERNAL_SERVER_ERROR, txnId);
+    				}
+    				return currentActivity.getActivityConfigId();
+    			});
+    }
 }

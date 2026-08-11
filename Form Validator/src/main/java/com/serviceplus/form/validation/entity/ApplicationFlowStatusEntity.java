@@ -38,6 +38,9 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
 
     @Transient
     private Boolean userSubmissionRequired;
+    
+    @Transient
+    private Long activityConfigId;
 
     @Transient
     private CurrentProcess currentProcess;
@@ -164,5 +167,14 @@ public class ApplicationFlowStatusEntity implements Persistable<String> {
     public void setUserSubmissionRequired(Boolean userSubmissionRequired) {
         this.userSubmissionRequired = userSubmissionRequired;
     }
+
+	public Long getActivityConfigId() {
+		return activityConfigId;
+	}
+
+	public void setActivityConfigId(Long activityConfigId) {
+		this.activityConfigId = activityConfigId;
+	}
+    
 }
 

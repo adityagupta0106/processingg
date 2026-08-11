@@ -29,6 +29,7 @@ import com.google.gson.reflect.TypeToken;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
@@ -59,6 +60,9 @@ public class ReactiveApiClient {
 
     @Value("${tracking.service}")
     private String TRACKING_SERVICE;
+    
+    @Value("${notification.service}")
+    private String NOTIFICATION_SERVICE;
 
     @Autowired
     private ObjectMapper mapper;
@@ -762,5 +766,32 @@ public class ReactiveApiClient {
                 .retrieve()
                 .bodyToMono(byte[].class);
     }
+    
+    public Mono<ServerResponse> sendNotification(String applicationId, Integer serviceId, Long activityConfigId,
+			String txnId, ServerRequest request) {
+
+		String url = NOTIFICATION_SERVICE.concat("/trigger");
+
+		Map<String, String> headers = Map.of("USER-DETAILS", request.headers().firstHeader("USER-DETAILS"));
+
+		Map<String, Object> requestBody = new HashMap<>();
+		requestBody.put("applicationId", applicationId);
+		requestBody.put("serviceId", serviceId);
+		requestBody.put("notificationId", activityConfigId);
+
+		return AsynchronousApiExecutor.callExternalEndpoint(String.class, HttpMethod.POST, headers,
+				Collections.emptyMap(), url, entityToString(requestBody), MediaType.APPLICATION_JSON)
+				.flatMap(response -> {
+
+					if (response.getBody() == null || response.getBody().isBlank()) {
+
+						return Mono.error(new SPRuntimeError("Notification generation failed.",
+								HttpStatus.FAILED_DEPENDENCY, txnId));
+					}
+
+					return ServerResponse.status(response.getStatusCode()).contentType(MediaType.APPLICATION_JSON)
+							.bodyValue(response.getBody());
+				}).onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex, txnId));
+	}
 }
 

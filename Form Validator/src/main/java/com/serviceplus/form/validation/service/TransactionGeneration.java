@@ -72,7 +72,7 @@ public class TransactionGeneration {
         flowStatusEntity.setDataId(dataId);
 
         flowStatusEntity.setUserSubmissionRequired(nextActivity.getUserSubmissionRequired());
-
+        flowStatusEntity.setActivityConfigId(nextActivity.getActivityConfigId());
         return merge(txnLog,flowStatusEntity);
 
     }
