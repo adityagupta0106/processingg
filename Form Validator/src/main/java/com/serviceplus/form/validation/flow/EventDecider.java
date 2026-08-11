@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 import static com.serviceplus.form.validation.utility.Utility.populateActionAndLocation;
 import static java.util.Objects.isNull;
@@ -178,37 +179,46 @@ public class EventDecider {
                 service.getTaskId()
         );
 
-        return reactiveApiClient
-                .fetchWorkflowAttributes(
-                        user, service.getFormId(), dataId, txnId
-                )
-                .doOnNext(workflowData ->
-                        applicationFlowLogs.info("TxnId : {} | Workflow attributes fetched: {}", txnId, workflowData)
-                )
-                .flatMap(workflowData ->
-                        resolveWorkFlowAttributes(workflowData, service, txnId, user)
-                )
-                .flatMap(actionCode -> {
+        return applicationFlowRouterRepository
+                .findFirstByApplicationIdAndTaskIdAndActivityTypeAndCompletedOrderByIdDesc(
+                        flowStatus.getApplicationId(),
+                        flowStatus.getTaskId(),
+                        ACTIVITY_FORM_STATUS_KEY,
+                        1)
+                .switchIfEmpty(Mono.error(new SPRuntimeError("Completed Form Submission activity not found.", HttpStatus.BAD_REQUEST, flowStatus.getTxnId())))
+                .flatMap(fsFlow ->
 
-                    applicationFlowLogs.info("TxnId : {} | Final actionCode resolved as {}", txnId, actionCode);
+                        reactiveApiClient
+                        .fetchWorkflowAttributes(
+                                user, service.getFormId(), dataId, txnId
+                        )
+                        .doOnNext(workflowData ->
+                                applicationFlowLogs.info("TxnId : {} | Workflow attributes fetched: {}", txnId, workflowData)
+                        )
+                        .flatMap(workflowData ->
+                                resolveWorkFlowAttributes(workflowData, service, txnId, user)
+                        )
+                        .flatMap(actionCode -> {
 
-                    return applicationGenerationService
-                            .executeApplicationProcessing(
-                                    dataId,
-                                    service,
-                                    user,
-                                    txnLog,
-                                    appId,
-                                    actionCode,
-                                    from
-                            )
-                            .flatMap(response ->
-                                    markActivityAsDone(flowStatus).thenReturn(response)
-                            );
-                })
-                .doOnError(ex ->
-                        applicationFlowLogs.error("TxnId : {} | Error during final processing", txnId, ex)
-                );
+                            applicationFlowLogs.info("TxnId : {} | Final actionCode resolved as {}", txnId, actionCode);
+
+                            return applicationGenerationService
+                                    .executeApplicationProcessing(
+                                            dataId,
+                                            service,
+                                            user,
+                                            txnLog,
+                                            appId,
+                                            actionCode,
+                                            from
+                                    )
+                                    .flatMap(response ->
+                                            markActivityAsDone(flowStatus).thenReturn(response)
+                                    );
+                        })
+                        .doOnError(ex ->
+                                applicationFlowLogs.error("TxnId : {} | Error during final processing", txnId, ex)
+                        ));
     }
 
     @SuppressWarnings("unchecked")
