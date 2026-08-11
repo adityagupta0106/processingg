@@ -23,6 +23,7 @@ import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_GATEWAY;
+import static java.util.Objects.isNull;
 
 @Service
 public class TaskAssignmentService {
@@ -59,7 +60,7 @@ public class TaskAssignmentService {
                                                                     : serviceMeta.getSelectedWorkflowElementData().getUserAttribute().getUserNodes();
 
 
-        if (!userNodes.isEmpty() && !next.getType().equals(TYPE_GATEWAY)) {
+        if (!isNull(userNodes) && !userNodes.isEmpty() && !next.getType().equals(TYPE_GATEWAY)) {
 
             applicationFlowLogs.info("Using holderIds from workflow metadata for txnId={}, taskId={}", txnId, next.getId());
 

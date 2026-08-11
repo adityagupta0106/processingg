@@ -215,14 +215,30 @@ public class ReactiveApiClient {
 			service.setBaseServiceId(baseServiceId);
 
 			if (taskId == null || taskId.isBlank()) {
-				service.setTaskType("A");
+				service.setTaskType(APPLICATION_SUBMISSION_TASK_FLAG);
 				service.setTaskId(metadata.getApplSubmissionTaskId());
 				service.setFormId(metadata.getApplFormId());
 			} else {
-				service.setTaskType("O");
+				service.setTaskType(OFFICIAL_TASK_FLAG);
 				service.setTaskId(taskId);
 				service.setFormId(metadata.getTaskFormMapping().get(taskId));
 			}
+
+            List<WorkFlowDataDTO.WorkFlowAction> availableActions = metadata.getWorkFlowDetails()
+                                                        .stream()
+                                                        .filter(workflow ->
+                                                                service.getTaskId().equals(workflow.getTaskId())
+                                                        )
+                                                        .filter(workflow ->
+                                                                workflow.getAllowedAction() != null
+                                                        )
+                                                        .flatMap(workflow ->
+                                                                workflow.getAllowedAction().stream()
+                                                        )
+                                                        .filter(Objects::nonNull)
+                                                        .toList();
+
+            service.setAvailableActions(availableActions);
 
 			metadata.getActivityMap()
             .stream()
@@ -237,34 +253,38 @@ public class ReactiveApiClient {
                 service.setServiceKey(encryptServiceKeys(service));
             });
 
-    // Resolve Office Locations
-		    metadata.getOfficeDetails()
-		            .stream()
-		            .filter(o -> service.getTaskId().equals(o.getTaskId()))
-		            .findFirst()
-		            .ifPresent(o -> {
+            // Resolve Office Locations
 
-		                List<ServiceMeta.AvailableApplyLocations> locations =
-		                        o.getAllowedOffices()
-		                                .stream()
-		                                .map(office -> {
-		                                    ServiceMeta.AvailableApplyLocations location =
-		                                    		new ServiceMeta.AvailableApplyLocations();
-		                                    location.setOrgUnitCode(office.getOrgUnitCode() != null
-		                                                    ? office.getOrgUnitCode().longValue()
-		                                                    : null);
-		                                    location.setOrgUnitName(
-		                                            office.getOrgUnitName());
+            if(service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)) {
 
-		                                    location.setHolderIds(new ArrayList<>());
+                metadata.getOfficeDetails()
+                        .stream()
+                        .filter(o -> service.getTaskId().equals(o.getTaskId()))
+                        .findFirst()
+                        .ifPresent(o -> {
 
-		                                    return location;
+                            List<ServiceMeta.AvailableApplyLocations> locations =
+                                    o.getAllowedOffices()
+                                            .stream()
+                                            .map(office -> {
+                                                ServiceMeta.AvailableApplyLocations location =
+                                                        new ServiceMeta.AvailableApplyLocations();
+                                                location.setOrgUnitCode(office.getOrgUnitCode() != null
+                                                        ? office.getOrgUnitCode().longValue()
+                                                        : null);
+                                                location.setOrgUnitName(
+                                                        office.getOrgUnitName());
 
-		                                })
-		                                .collect(Collectors.toList());
+                                                location.setHolderIds(new ArrayList<>());
 
-		                service.setLocations(locations);
-		            });
+                                                return location;
+
+                                            })
+                                            .collect(Collectors.toList());
+
+                            service.setLocations(locations);
+                        });
+            }
 
 			return service;
 		});
@@ -332,7 +352,7 @@ public class ReactiveApiClient {
 		return fetchServiceMetadata(user, serviceId, txnId);
 	}
 
-    public Mono<ServerResponse> fetchApplicantData(String dataId, String formId,UserSessionObject user,String txnId,String applicationId) {
+    public Mono<HandlerResponse> fetchApplicantData(String dataId, String formId,UserSessionObject user,String txnId,String applicationId) {
         String url = FORM_MANAGEMENT_SERVICE.concat("getApplicationData?");
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
 
@@ -368,7 +388,7 @@ public class ReactiveApiClient {
             hr.setData(responseJson);
             hr.setTxnId(txnId);
             hr.setApplicationId(applicationId);
-            return ServerResponse.ok().bodyValue(hr);
+            return Mono.just(hr);
         });
 
     }

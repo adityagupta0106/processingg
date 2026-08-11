@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
@@ -17,6 +18,7 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @SanitizeRequest
@@ -40,8 +42,21 @@ public class PreProcessingService {
         }
     }
 
-    public Mono<ServerResponse> apply(ServerHttpRequest request, String applyKey, String serviceId) {
+    public Mono<ServerResponse> apply(ServerRequest fluxRequest) {
         try {
+
+            Optional<String> applyKeyOpt = fluxRequest.queryParam("serviceKey");
+            Optional<String> serviceIdOpt = fluxRequest.queryParam("serviceId");
+
+            if (applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
+                return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST,null));
+            }
+
+            String applyKey = applyKeyOpt.get();
+            String serviceId = serviceIdOpt.get();
+
+            ServerHttpRequest request = fluxRequest.exchange().getRequest();
+
             UserSessionObject user = getUserSessionDetails(request);
             //APPID,TASKID
             ServiceMeta service = preProcessingFacade.decryptApplyKey(applyKey);

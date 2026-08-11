@@ -2,7 +2,10 @@ package com.serviceplus.form.validation.controller;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.ServiceMeta;
+import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.flow.EventRouter;
+import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepository;
+import com.serviceplus.form.validation.service.PreProcessingService;
 import com.serviceplus.form.validation.service.TransactionGeneration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -16,16 +19,29 @@ import reactor.core.publisher.Mono;
 
 import java.util.Optional;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.Utility.decryptServiceKeys;
+import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
+import static java.util.Objects.isNull;
+import static java.util.Objects.requireNonNull;
 
 @RestController
 public class HandlerController {
 
-    @Autowired
-    private EventRouter applicationFlowRouter;
+    private final  EventRouter applicationFlowRouter;
 
-    @Autowired
-    private TransactionGeneration transactionGeneration;
+    private final  TransactionGeneration transactionGeneration;
+
+    private final ApplicationFlowRouterRepository applicationFlowRouterRepository;
+
+    private final PreProcessingService preProcessingService;
+
+    public HandlerController(EventRouter applicationFlowRouter, TransactionGeneration transactionGeneration, ApplicationFlowRouterRepository applicationFlowRouterRepository, PreProcessingService preProcessingService) {
+        this.applicationFlowRouter = applicationFlowRouter;
+        this.transactionGeneration = transactionGeneration;
+        this.applicationFlowRouterRepository = applicationFlowRouterRepository;
+        this.preProcessingService = preProcessingService;
+    }
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
@@ -99,5 +115,53 @@ public class HandlerController {
                     );
                 });
     }
+
+    public Mono<ServerResponse> open(ServerRequest request) {
+
+        Optional<String> appIdOpt = request.queryParam("appId");
+        Optional<String> serviceKeyOpt = request.queryParam("serviceKey");
+        Optional<String> serviceIdOpt = request.queryParam("serviceId");
+
+        if (appIdOpt.isEmpty() || serviceKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
+            return Mono.error(new SPRuntimeError("Mandatory parameters is required", HttpStatus.BAD_REQUEST, null));
+        }
+
+        String appId = appIdOpt.get();
+        String serviceKey = serviceKeyOpt.get();
+        String serviceId = serviceIdOpt.get();
+
+        ServiceMeta service = decryptServiceKeys(serviceKey);
+
+        if (!service.getServiceId().toString().equals(serviceId)) {
+            return Mono.error(new SPRuntimeError("Key mismatch", HttpStatus.NOT_ACCEPTABLE, null));
+        }
+
+        UserSessionObject user = requireNonNull(getUserSessionDetails(request.exchange().getRequest()));
+
+        String taskId = service.getTaskId();
+
+        return applicationFlowRouterRepository
+                .findFirstByApplicationIdAndTaskIdAndServiceIdAndTenantIdAndActivityTypeOrderByIdDesc(
+                        appId,
+                        taskId,
+                        service.getServiceId(),
+                        user.getTenantId(),
+                        ACTIVITY_FORM_STATUS_KEY)
+                .flatMap(flow -> {
+
+                    if (!isNull(flow.getCompleted())) {
+                        applicationFlowLogs.info("Opening draft for application {} taskId {} txnId {}", appId, taskId, flow.getTxnId());
+                        return draft(request);
+                    }
+
+                    applicationFlowLogs.info("No active draft found for application {} taskId {}. Opening new form.", appId, taskId);
+                    return preProcessingService.apply(request);
+                }
+                ).switchIfEmpty(
+                                preProcessingService.apply(request)
+                );
+    }
+
+
 
 }

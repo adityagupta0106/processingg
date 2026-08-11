@@ -32,4 +32,6 @@ public interface ApplicationFlowRouterRepository  extends ReactiveCrudRepository
 
 
     Mono<ApplicationFlowStatusEntity> findFirstByApplicationIdAndTaskIdAndActivityTypeAndCompletedOrderByIdDesc(String applicationId, String taskId, String type, int completed);
+
+    Mono<ApplicationFlowStatusEntity> findFirstByApplicationIdAndTaskIdAndServiceIdAndTenantIdAndActivityTypeOrderByIdDesc(String appId, String taskId, Integer serviceId, String tenantId, String activityFormStatusKey);
 }

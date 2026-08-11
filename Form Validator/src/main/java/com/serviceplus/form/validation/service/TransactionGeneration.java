@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
@@ -102,10 +103,9 @@ public class TransactionGeneration {
         return transactionalDBExecutor.execute(txnLog.getTxnId(),txnLog,flowStatusEntity).thenReturn(txnLog);
     }
 
-    public Mono<ProcessingTxn> editApplication(ServiceMeta service, String appId,
-                                               String txnId, ServerHttpRequest request) {
+    public Mono<ProcessingTxn> editApplication(ServiceMeta service, String appId,String txnId, ServerHttpRequest request) {
 
-        UserSessionObject user = getUserSessionDetails(request);
+        UserSessionObject user = Objects.requireNonNull(getUserSessionDetails(request));
 
         Mono<ApplicationFlowStatusEntity> flow = applicationFlowRepository.findFirstByApplicationIdAndCompletedAndTaskIdAndServiceIdAndTenantIdAndActivityTypeOrderByIdDesc(
                 appId,1, service.getTaskId(), service.getServiceId(), user.getTenantId(),ACTIVITY_FORM_STATUS_KEY

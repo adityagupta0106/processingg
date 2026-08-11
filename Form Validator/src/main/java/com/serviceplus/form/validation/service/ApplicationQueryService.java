@@ -17,10 +17,7 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_STATUS_DRAFT;
 import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
@@ -58,7 +55,7 @@ public class ApplicationQueryService {
     public Mono<ServerResponse> fetchServiceKeyAndTxn(
             ServerRequest request) {
 
-        UserSessionObject user = getUserSessionDetails(request.exchange().getRequest());
+        UserSessionObject user = Objects.requireNonNull(getUserSessionDetails(request.exchange().getRequest()));
         Optional<String> appId = request.queryParam("appId");
         Optional<String> serviceId = request.queryParam("serviceId");
 
@@ -100,7 +97,7 @@ public class ApplicationQueryService {
                                                         baseServiceId,
                                                         user,
                                                         appId.get(),
-                                                        flow.getTaskId(),
+                                                        null,
                                                         Integer.parseInt(serviceId.get()))
                                                 .switchIfEmpty(
                                                         Mono.error(new SPRuntimeError("Service metadata not found", HttpStatus.BAD_REQUEST, null))

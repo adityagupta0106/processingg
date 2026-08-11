@@ -30,14 +30,7 @@ public class PreProcessingController {
 
       // return fetchServiceKey(request).flatMap(res -> {
             //String sKey = res.getServiceKey();
-            Optional<String> applyKeyOpt = request.queryParam("serviceKey");
-            Optional<String> serviceIdOpt = request.queryParam("serviceId");
-
-            if (applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
-                return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST,null));
-            }
-
-            return preProcessingService.apply(request.exchange().getRequest(), applyKeyOpt.get(),serviceIdOpt.get());
+            return preProcessingService.apply(request);
        // });
 
 
