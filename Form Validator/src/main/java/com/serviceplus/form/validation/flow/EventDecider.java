@@ -190,7 +190,7 @@ public class EventDecider {
 
                         reactiveApiClient
                         .fetchWorkflowAttributes(
-                                user, service.getFormId(), dataId, txnId
+                                user, fsFlow.getFormId(), fsFlow.getDataId(), txnId
                         )
                         .doOnNext(workflowData ->
                                 applicationFlowLogs.info("TxnId : {} | Workflow attributes fetched: {}", txnId, workflowData)
