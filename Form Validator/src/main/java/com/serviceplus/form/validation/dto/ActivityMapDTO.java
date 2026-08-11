@@ -18,6 +18,8 @@ public class ActivityMapDTO {
 		private Boolean isLast;
 
         private Boolean userSubmissionRequired;
+        
+        private Long activityConfigId;
 
 		public ActivityData(String activityType) {
 			this.activityType=activityType;
@@ -66,6 +68,15 @@ public class ActivityMapDTO {
         public void setUserSubmissionRequired(Boolean userSubmissionRequired) {
             this.userSubmissionRequired = userSubmissionRequired;
         }
+
+		public Long getActivityConfigId() {
+			return activityConfigId;
+		}
+
+		public void setActivityConfigId(Long activityConfigId) {
+			this.activityConfigId = activityConfigId;
+		}
+        
     }
 
 	public String getTaskId() {
