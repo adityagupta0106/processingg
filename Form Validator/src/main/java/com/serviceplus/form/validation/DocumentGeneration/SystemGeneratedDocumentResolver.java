@@ -1,10 +1,13 @@
 package com.serviceplus.form.validation.DocumentGeneration;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.Helpers.SystemAttributeHelper;
 import com.serviceplus.form.validation.dto.*;
+import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.ApplicationDocumentLogEntity;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.CurrentProcess;
+import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.ApplicationDocumentLogRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.service.ReactiveApiClient;
@@ -16,7 +19,9 @@ import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 import static java.util.Objects.isNull;
@@ -31,10 +36,14 @@ public class SystemGeneratedDocumentResolver {
     private final ReactiveApiClient reactiveApiClient;
 
     private final ApplicationDocumentLogRepository applicationDocumentRepository;
+    private final ApplicationDetailsRepository applicationDetailsRepository;
+    private final SystemAttributeHelper systemAttributeHelper;
 
-    public SystemGeneratedDocumentResolver(ReactiveApiClient reactiveApiClient, ApplicationDocumentLogRepository applicationDocumentRepository) {
+    public SystemGeneratedDocumentResolver(ReactiveApiClient reactiveApiClient, ApplicationDocumentLogRepository applicationDocumentRepository, ApplicationDetailsRepository applicationDetailsRepository,SystemAttributeHelper systemAttributeHelper) {
         this.reactiveApiClient = reactiveApiClient;
         this.applicationDocumentRepository = applicationDocumentRepository;
+		this.applicationDetailsRepository = applicationDetailsRepository;
+		this.systemAttributeHelper=systemAttributeHelper;
     }
 
     public Mono<List<ResolvedDocument>> resolve(UserSessionObject user,
@@ -82,22 +91,38 @@ public class SystemGeneratedDocumentResolver {
 
         Integer outputFormatId = mapping.getSystemGeneratedDocument().getValue();
 
-        applicationFlowLogs.info("Generating system document. ApplicationId: {}, ServiceId: {}, OutputFormatId: {}, txnId: {}", flow.getApplicationId(), service.getServiceId(), outputFormatId, flow.getTxnId());
-
-        return reactiveApiClient.generateDocument(
-                        user,
-                        service.getServiceId(),
-                        outputFormatId,
+        Mono<ApplicationDetails> applicationDetails =
+                applicationDetailsRepository.findByApplicationIdAndTenantId(
                         flow.getApplicationId(),
-                        false,
-                        flow.getTxnId())
+                        user.getTenantId());
+        Map<String, Object> systemAttrMap=new HashMap<>();
+
+        applicationFlowLogs.info(
+                "Generating system document. ApplicationId: {}, ServiceId: {}, OutputFormatId: {}, txnId: {}",
+                flow.getApplicationId(),
+                service.getServiceId(),
+                outputFormatId,
+                flow.getTxnId());
+
+		return applicationDetails
+				.doOnNext(details -> systemAttributeHelper.systemAttrMap(systemAttrMap, details, service))
+				.then(reactiveApiClient.generateDocument(user, service.getServiceId(), outputFormatId,
+						flow.getApplicationId(), false, flow.getTxnId(), systemAttrMap))
                 .flatMap(response -> {
 
-                    applicationFlowLogs.info("Document generated successfully. UploadId: {}, Status: {}, txnId: {}", response.getUploadId(), response.getStatus(), flow.getTxnId());
+                    applicationFlowLogs.info(
+                            "Document generated successfully. UploadId: {}, Status: {}, txnId: {}",
+                            response.getUploadId(),
+                            response.getStatus(),
+                            flow.getTxnId());
 
-                    String processId = isNull(flow.getCurrentProcess()) ? null : flow.getCurrentProcess().getProcessId();
+                    String processId = isNull(flow.getCurrentProcess())
+                            ? null
+                            : flow.getCurrentProcess().getProcessId();
 
-                    ApplicationDocumentLogEntity entity = new ApplicationDocumentLogEntity();
+                    ApplicationDocumentLogEntity entity =
+                            new ApplicationDocumentLogEntity();
+
                     entity.setNewEntity(Boolean.TRUE);
                     entity.setId(createUniqueId());
                     entity.setApplicationId(flow.getApplicationId());
@@ -120,14 +145,20 @@ public class SystemGeneratedDocumentResolver {
                             .save(entity)
                             .flatMap(saved -> {
                                 saved.setPreviewUrl(response.getPreviewUrl());
-                                return buildResolvedDocument(saved, mapping,user, flow.getTxnId());
+                                return buildResolvedDocument(
+                                        saved,
+                                        mapping,
+                                        user,
+                                        flow.getTxnId());
                             });
                 })
                 .doOnError(ex ->
-                        applicationFlowLogs.error("Failed to generate system document for ApplicationId: {}, txnId: {}", flow.getApplicationId(), txnId, ex)
-                );
+                        applicationFlowLogs.error(
+                                "Failed to generate system document for ApplicationId: {}, txnId: {}",
+                                flow.getApplicationId(),
+                                txnId,
+                                ex));
     }
-
     private Mono<List<ResolvedDocument>> buildResolvedDocument(
             ApplicationDocumentLogEntity entity,
             DocumentGenerationDetails.DocMappingDTO mapping,
