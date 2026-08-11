@@ -167,9 +167,10 @@ public class ApplicationGenerationService {
                     cp.setDataId(dataId);
                     cp.setUserId(user.getUserID());
                     cp.setFormId(service.getFormId());
-                    List<WorkFlowDataDTO.WorkFlowAction> availableActions = service.getAvailableActions();
+                    ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflowElementData = service.getSelectedWorkflowElementData();
 
-                    cp.setActionName(availableActions.getFirst().getTrackLabelOfficial());
+                    cp.setActionCode(Integer.parseInt(selectedWorkflowElementData.getActionAttribute().getFirst().getKey()));
+                    cp.setActionName(selectedWorkflowElementData.getActionAttribute().getFirst().getTrackLabel());
 
                     Mono<CurrentProcess> populateDocuments =
                             applicationDocumentSubmissionRepository
