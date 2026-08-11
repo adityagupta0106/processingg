@@ -1,16 +1,14 @@
 package com.serviceplus.form.validation.service;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_SUBMISSION_TASK_FLAG;
-import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
-import static com.serviceplus.form.validation.utility.Utility.handleWebClientError;
+import static com.serviceplus.form.validation.utility.Utility.*;
 import static java.util.Objects.isNull;
 
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import com.serviceplus.form.validation.dto.FetchTaskHolders;
-import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,8 +24,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.flow.EventDecider;
@@ -124,6 +120,7 @@ public class FormService {
         return Mono.just(tempTransactionLogs);
     }
 
+    @SuppressWarnings("unchecked")
     private Mono<ServiceMeta> validateTransaction(UserSessionObject user, TempTransactionLogs txnLog, ServiceMeta service, String appData, ApplicationFlowStatusEntity flowStatus) {
 
         if (!service.getServiceId().equals(txnLog.getService().getServiceId()) ||
@@ -142,15 +139,17 @@ public class FormService {
             if (service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)) {
 
                 return reactiveApiClient
-                        .fetchServiceKey(
-                                service.getBaseServiceId(),
+                        .fetchServiceMetadata(
                                 user,
-                                "",
-                                service.getTaskId(),
-                                service.getServiceId())
+                                service.getServiceId(),
+                                txnLog.getTxnId()
+                        )
                         .flatMap(metadataService -> {
 
-                            List<ServiceMeta.AvailableApplyLocations> locations = metadataService.getLocations();
+                            populateActionAndLocation(metadataService,service);
+
+                            List<WorkFlowDataDTO.WorkFlowAction> availableActions = service.getAvailableActions();
+                            List<ServiceMeta.AvailableApplyLocations> locations = service.getLocations();
 
                             if (locations == null || locations.isEmpty()) {
                                 return Mono.error(new SPRuntimeError("No locations configured for this task.", HttpStatus.BAD_REQUEST, txnLog.getTxnId()));
@@ -478,8 +477,8 @@ public class FormService {
         }));
     }
 
-    public Mono<ServerResponse> fetchFormData(String dataId, String formId, UserSessionObject user, String txnId, String applId, String serviceId, ServiceMeta service) {
-        return reactiveApiClient.fetchApplicantData(dataId,formId,user,txnId,applId);
+    public Mono<HandlerResponse> fetchFormData(String dataId, String formId, UserSessionObject user, String txnId, String applId, String serviceId, ServiceMeta service) {
+        return reactiveApiClient.fetchApplicantData(dataId, formId, user, txnId, applId);
     }
 
     private Mono<Void> executeFormSubmissionMvel(

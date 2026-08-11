@@ -45,6 +45,8 @@ public class ServiceMeta {
 
     private Object previousHandlerData;
 
+    List<WorkFlowDataDTO.WorkFlowAction> availableActions;
+
     public DocumentGenerationDetails getDocumentGenerationDetails() {
         return documentGenerationDetails;
     }
@@ -247,5 +249,13 @@ public class ServiceMeta {
 
     public void setPreviousHandlerData(Object previousHandlerData) {
         this.previousHandlerData = previousHandlerData;
+    }
+
+    public List<WorkFlowDataDTO.WorkFlowAction> getAvailableActions() {
+        return availableActions;
+    }
+
+    public void setAvailableActions(List<WorkFlowDataDTO.WorkFlowAction> availableActions) {
+        this.availableActions = availableActions;
     }
 }

@@ -4,10 +4,12 @@ import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.dto.WorkFlowDataDTO;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 import com.serviceplus.form.validation.service.FormService;
+import com.serviceplus.form.validation.service.PreProcessingFacade;
 import com.serviceplus.form.validation.service.ReactiveApiClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -36,6 +38,9 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
 
     @Autowired
     private ReactiveApiClient reactiveApiClient;
+
+    @Autowired
+    private PreProcessingFacade preProcessingFacade;
 
     @Override
     public String getActivityType() {
@@ -82,15 +87,14 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
                             String formData = entityToString(requestBody);
 
                             return reactiveApiClient
-                                    .fetchServiceKey(
-                                            service.getBaseServiceId(),
+                                    .fetchServiceMetadata(
                                             getUserSessionDetails(request.exchange().getRequest()),
-                                            applicationId,
-                                            service.getTaskId(),
-                                            service.getServiceId())
+                                            service.getServiceId(),
+                                            txnId
+                                    )
                                     .flatMap(metadataService -> {
 
-                                        service.setLocations(metadataService.getLocations());
+                                        populateActionAndLocation(metadataService,service);
 
                                         return formService.applicationSubmission(
                                                 request.exchange().getRequest(),
@@ -126,15 +130,42 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
     }
 
     @Override
-    public Mono<ServerResponse> fetch(String applicationId, ServerRequest request, String statusKey, String txnId, Mono<TempTransactionLogs> fetch,
-                                      ApplicationFlowStatusEntity flow,ServiceMeta service, boolean fromDraft) {
+    public Mono<ServerResponse> fetch(String applicationId, ServerRequest request, String statusKey, String txnId, Mono<TempTransactionLogs> fetch, ApplicationFlowStatusEntity flow, ServiceMeta service, boolean fromDraft) {
+
         UserSessionObject user = getUserSessionDetails(request.exchange().getRequest());
+
         Optional<String> serviceIdOpt = request.queryParam("serviceId");
 
-        if(serviceIdOpt.isEmpty()){
-            return Mono.error(new SPRuntimeError("Key missing",HttpStatus.BAD_REQUEST,txnId));
-        }
+        return serviceIdOpt.map(s -> preProcessingFacade
+                .prepareForm(
+                        service, user, flow.getTxnId()
+                )
+                .flatMap(context ->
+                        formService
+                                .fetchFormData(
+                                        flow.getDataId(),
+                                        flow.getFormId(),
+                                        user,
+                                        flow.getTxnId(),
+                                        applicationId,
+                                        s,
+                                        service
+                                )
+                                .map(response -> {
 
-        return formService.fetchFormData(flow.getDataId(),flow.getFormId(),user, flow.getTxnId(), applicationId,serviceIdOpt.get(),service);
+                                    response.setWorkflowElementData(context.service().getWorkflowElementData());
+                                    response.setWorkflowKey(context.workflowKey());
+
+                                    return response;
+                                })
+                )
+                .flatMap(response ->
+                        ServerResponse.ok()
+                                .bodyValue(response)
+                )).orElseGet(() -> Mono.error(
+                        new SPRuntimeError("Key missing", HttpStatus.BAD_REQUEST, txnId
+                )
+        ));
+
     }
 }

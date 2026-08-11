@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -21,7 +22,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,8 +35,6 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.UserSessionObject;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -430,5 +429,74 @@ public class Utility {
             Map.entry("csv", "text/csv"),
             Map.entry("zip", "application/zip")
     );
+
+    public static ServiceMeta populateActionAndLocation(ServiceJSONDTO metadata, ServiceMeta service) {
+
+        List<WorkFlowDataDTO.WorkFlowAction> availableActions =
+                metadata.getWorkFlowDetails()
+                        .stream()
+                        .filter(workflow ->
+                                service.getTaskId().equals(workflow.getTaskId()))
+                        .filter(workflow ->
+                                workflow.getAllowedAction() != null)
+                        .flatMap(workflow ->
+                                workflow.getAllowedAction().stream())
+                        .filter(Objects::nonNull)
+                        .toList();
+
+        service.setAvailableActions(availableActions);
+
+
+        metadata.getActivityMap()
+                .stream()
+                .filter(a ->
+                        service.getTaskId().equals(a.getTaskId()))
+                .findFirst()
+                .ifPresent(activityMap -> {
+
+                    ActivityMapDTO taskActivity = new ActivityMapDTO();
+                    taskActivity.setData(activityMap.getData());
+
+                    service.setActivityMap(taskActivity);
+
+                    service.setServiceKey(encryptServiceKeys(service)
+                    );
+                });
+
+        if (APPLICATION_SUBMISSION_TASK_FLAG.equals(service.getTaskType()) && metadata.getOfficeDetails() != null) {
+
+            metadata.getOfficeDetails()
+                    .stream()
+                    .filter(o ->
+                            service.getTaskId().equals(o.getTaskId()))
+                    .findFirst()
+                    .ifPresent(o -> {
+
+                        if (o.getAllowedOffices() == null) {
+                            service.setLocations(Collections.emptyList());
+                            return;
+                        }
+
+                        List<ServiceMeta.AvailableApplyLocations> locations =
+                                o.getAllowedOffices()
+                                        .stream()
+                                        .map(office -> {
+
+                                            ServiceMeta.AvailableApplyLocations location = new ServiceMeta.AvailableApplyLocations();
+
+                                            location.setOrgUnitCode(office.getOrgUnitCode() != null ? office.getOrgUnitCode().longValue() : null);
+                                            location.setOrgUnitName(office.getOrgUnitName());
+                                            location.setHolderIds(new ArrayList<>());
+
+                                            return location;
+                                        })
+                                        .collect(Collectors.toList());
+
+                        service.setLocations(locations);
+                    });
+        }
+
+        return service;
+    }
 
 }

@@ -118,7 +118,7 @@ public class DocumentProcessService {
                                                     fsFlow.getTxnId())
                                             .flatMap(workflowData -> {
 
-                                                List<Map<String, Object>> selectedActions = (List<Map<String, Object>>) workflowData.get("action");
+                                                Map<String, Object> selectedAction = (Map<String, Object>) workflowData.get("action");
 
                                                 if (service.getDocumentGenerationDetails() == null || service.getDocumentGenerationDetails().getDocumentMapping() == null) {
                                                     return Mono.error(new SPRuntimeError("Document generation configuration not found.", HttpStatus.BAD_REQUEST, flow.getTxnId()));
@@ -126,16 +126,19 @@ public class DocumentProcessService {
 
                                                 List<DocumentGenerationDetails.DocMappingDTO> applicableMappings;
 
+                                                List<DocumentGenerationDetails.DocMappingDTO> mappings = service.getDocumentGenerationDetails().getDocumentMapping();
+
                                                 String actionCode = FALLBACK_ACTION_NO.toString();
 
-                                                if (selectedActions == null || selectedActions.isEmpty()) {
+                                                if (selectedAction == null || selectedAction.isEmpty()) {
 
-                                                    List<DocumentGenerationDetails.DocMappingDTO> mappings = service.getDocumentGenerationDetails().getDocumentMapping();
-
-                                                    Set<String> configuredActionCodes = mappings.stream()
-                                                                                        .filter(mapping -> mapping.getAction() != null)
-                                                                                        .flatMap(mapping -> mapping.getAction().stream())
-                                                                                        .map(DocumentGenerationDetails.DocMappingDTO.LabelValueDTO::getValue)
+                                                    Set<String> configuredActionCodes = metadata.getWorkFlowDetails()
+                                                                                        .stream()
+                                                                                        .filter(workflow ->
+                                                                                                service.getTaskId().equals(workflow.getTaskId()))
+                                                                                        .flatMap(workflow ->
+                                                                                                workflow.getAllowedAction().stream())
+                                                                                        .map(action -> String.valueOf(action.getActionKey()))
                                                                                         .filter(Objects::nonNull)
                                                                                         .collect(Collectors.toSet());
 
@@ -143,23 +146,26 @@ public class DocumentProcessService {
 
                                                         actionCode = configuredActionCodes.iterator().next();
 
-                                                        applicableMappings = mappings.stream().filter(mapping ->
-                                                                                                    mapping.getAction() != null &&
-                                                                                                    mapping.getAction().stream().anyMatch(
-                                                                                                            action ->
-                                                                                                                            configuredActionCodes.iterator().next().equals(action.getValue())))
-                                                                                                    .toList();
+                                                        String ac_1 = actionCode;
+
+                                                        applicableMappings = mappings.stream()
+                                                                                .filter(mapping ->
+                                                                                        mapping.getAction() != null
+                                                                                                && mapping.getAction().stream()
+                                                                                                .anyMatch(action ->
+                                                                                                        ac_1.equals(action.getValue())))
+                                                                                .toList();
 
                                                         applicationFlowLogs.info("TxnId : {} | No action selected. Using configured actionCode={}", flow.getTxnId(), actionCode);
 
                                                     } else {
-                                                        return Mono.error(new SPRuntimeError("No action selected.", HttpStatus.BAD_REQUEST, flow.getTxnId()));
+                                                        return Mono.error(new SPRuntimeError("No action selected [DOC - 01].", HttpStatus.BAD_REQUEST, flow.getTxnId()));
                                                     }
 
 
                                                 } else {
 
-                                                    actionCode = String.valueOf(selectedActions.getFirst().get("value"));
+                                                    actionCode = String.valueOf(selectedAction.get("value"));
                                                     String aC_1 = actionCode;
 
                                                     applicableMappings = service.getDocumentGenerationDetails()
@@ -174,7 +180,34 @@ public class DocumentProcessService {
                                                                                 .toList();
 
                                                     if (applicableMappings.isEmpty()) {
-                                                        return Mono.error(new SPRuntimeError("No document mapping configured for action : " + actionCode, HttpStatus.BAD_REQUEST, flow.getTxnId()));
+
+                                                        applicationFlowLogs.info("TxnId : {} | Selected action {} has no document mapping. " + "Skipping document generation and proceeding to next workflow.", flow.getTxnId(), actionCode);
+
+                                                        String ac_3 = actionCode;
+
+                                                        return processingTxnRepository
+                                                                .findById(flow.getTxnId())
+                                                                .switchIfEmpty(Mono.error(
+                                                                        new SPRuntimeError("Transaction not found.", HttpStatus.BAD_REQUEST, flow.getTxnId())
+                                                                ))
+                                                                .flatMap(txnLog -> {
+
+                                                                    applicationFlowLogs.info("TxnId : {} | No document mapping for selected action {}. " + "Proceeding to next workflow.", flow.getTxnId(), ac_3
+                                                                    );
+
+                                                                    return eventDecider.proceedToNext(
+                                                                            fsFlow.getDataId(),
+                                                                            service,
+                                                                            user,
+                                                                            txnLog,
+                                                                            applicationId,
+                                                                            ac_3,
+                                                                            flow.getActivityType(),
+                                                                            request,
+                                                                            flow
+                                                                    );
+                                                                });
+
                                                     }
 
                                                     applicationFlowLogs.info("TxnId : {} | Action : {} | Applicable Documents : {}", flow.getTxnId(), actionCode, applicableMappings.size());

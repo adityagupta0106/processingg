@@ -1,5 +1,6 @@
 package com.serviceplus.form.validation.service;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_SUBMISSION_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 
@@ -80,68 +81,21 @@ public class PreProcessingFacade {
                         return Mono.empty();
                     }
 
-                    return reactiveApiClient
-                            .fetchServiceMetadata(user, service.getServiceId(), data.getTxnId())
-                            .flatMap(metadata -> {
+                    return prepareForm(
+                            service, user, data.getTxnId()
+                    ).flatMap(context ->
 
-                                if (metadata.getProcessFlowMap() != null && metadata.getProcessFlowMap().getData() != null) {
+                            reactiveApiClient.fetchFormData(
+                                            context.txnId(), context.service(), user
+                                    )
+                                    .map(response -> {
 
-                                    metadata.getProcessFlowMap()
-                                            .getData()
-                                            .stream()
-                                            .filter(d -> d.getNode().getId().equals(service.getTaskId()))
-                                            .findFirst()
-                                            .map(ServiceProcessFlowDTO.Data::getWorkflowElementData)
-                                            .ifPresent(service::setWorkflowElementData);
-                                }
+                                        response.setWorkflowElementData(context.service().getWorkflowElementData());
+                                        response.setWorkflowKey(context.workflowKey());
 
-                                String workflowKey = encryptWorkflowKey(
-                                        data.getTxnId(),
-                                        service);
-
-                                Optional<ServiceProcessFlowDTO.Data> task = metadata.getProcessFlowMap()
-                                                                                      .getData()
-                                                                                      .stream()
-                                                                                      .filter(p -> p.getNode().getId().equals(service.getTaskId()))
-                                                                                      .findFirst();
-
-                                if(task.isEmpty()){
-                                   return Mono.error(new SPRuntimeError("Internal processing error [REN - 05]", HttpStatus.INTERNAL_SERVER_ERROR,data.getTxnId()));
-                                }
-
-                                List<OfficeDetailsDTO.OfficeUnitData> allowedOffices = task.get().getAllowedOffices();
-
-                                List<ServiceMeta.AvailableApplyLocations> locations = allowedOffices
-                                                                                        .stream()
-                                                                                        .map(office -> {
-                                                                                            ServiceMeta.AvailableApplyLocations location =
-                                                                                                    new ServiceMeta.AvailableApplyLocations();
-                                                                                            location.setOrgUnitCode(office.getOrgUnitCode() != null
-                                                                                                    ? office.getOrgUnitCode().longValue()
-                                                                                                    : null);
-                                                                                            location.setOrgUnitName(
-                                                                                                    office.getOrgUnitName());
-
-                                                                                            location.setHolderIds(new ArrayList<>());
-
-                                                                                            return location;
-
-                                                                                        })
-                                                                                        .collect(Collectors.toList());
-
-                                service.setLocations(locations);
-
-
-                                return reactiveApiClient
-                                        .fetchFormData(data.getTxnId(), service, user)
-                                        .map(response -> {
-
-                                            response.setWorkflowElementData(service.getWorkflowElementData());
-                                            response.setWorkflowKey(workflowKey);
-                                            return response;
-                                        });
-                            });
-
+                                        return response;
+                                    })
+                    );
                 });
     }
 
@@ -201,8 +155,8 @@ public class PreProcessingFacade {
         );
 
         applicationDetails.setNewEntity(newEntityFlag);
-        applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getOrgUnitCode().intValue());
-        applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getOrgUnitName());
+        //applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getOrgUnitCode().intValue());
+        //applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getOrgUnitName());
         applicationDetails.setServiceName(service.getServiceName());
 
         applicationFlowLogs.info(
@@ -400,6 +354,64 @@ public class PreProcessingFacade {
 
             return inboxList;
         });
+    }
+
+    public Mono<FormPreparationContext> prepareForm(ServiceMeta service, UserSessionObject user, String txnId) {
+
+        return reactiveApiClient
+                .fetchServiceMetadata(
+                        user, service.getServiceId(), txnId
+                )
+                .flatMap(metadata -> {
+
+                    if (metadata.getProcessFlowMap() == null || metadata.getProcessFlowMap().getData() == null) {
+                        return Mono.error(new SPRuntimeError("Internal processing error [REN-03]", HttpStatus.INTERNAL_SERVER_ERROR, txnId));
+                    }
+
+                    Optional<ServiceProcessFlowDTO.Data> task =
+                            metadata.getProcessFlowMap()
+                                    .getData()
+                                    .stream()
+                                    .filter(p ->
+                                            p.getNode() != null
+                                                    && service.getTaskId()
+                                                    .equals(p.getNode().getId()))
+                                    .findFirst();
+
+                    if (task.isEmpty()) {
+                        return Mono.error(new SPRuntimeError("Internal processing error [REN-05]", HttpStatus.INTERNAL_SERVER_ERROR, txnId));
+                    }
+
+                    ServiceProcessFlowDTO.Data taskData = task.get();
+
+                    Optional.ofNullable(taskData.getWorkflowElementData()).ifPresent(service::setWorkflowElementData);
+
+                    String workflowKey = encryptWorkflowKey(txnId, service);
+
+                    List<OfficeDetailsDTO.OfficeUnitData> allowedOffices = taskData.getAllowedOffices();
+
+                    if(service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)) {
+
+                        List<ServiceMeta.AvailableApplyLocations> locations =
+                                allowedOffices == null
+                                        ? new ArrayList<>()
+                                        : allowedOffices.stream()
+                                        .map(office -> {
+
+                                            ServiceMeta.AvailableApplyLocations location = new ServiceMeta.AvailableApplyLocations();
+                                            location.setOrgUnitCode(office.getOrgUnitCode() != null ? office.getOrgUnitCode().longValue() : null);
+                                            location.setOrgUnitName(office.getOrgUnitName());
+                                            location.setHolderIds(new ArrayList<>());
+
+                                            return location;
+                                        })
+                                        .collect(Collectors.toList());
+
+                        service.setLocations(locations);
+                    }
+
+                    return Mono.just(new FormPreparationContext(service, txnId, workflowKey));
+                });
     }
 }
 
