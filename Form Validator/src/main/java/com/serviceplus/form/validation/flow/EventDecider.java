@@ -185,7 +185,7 @@ public class EventDecider {
                         flowStatus.getTaskId(),
                         ACTIVITY_FORM_STATUS_KEY,
                         1)
-                .switchIfEmpty(Mono.error(new SPRuntimeError("Completed Form Submission activity not found.", HttpStatus.BAD_REQUEST, flowStatus.getTxnId())))
+                .defaultIfEmpty(flowStatus)
                 .flatMap(fsFlow ->
 
                         reactiveApiClient
