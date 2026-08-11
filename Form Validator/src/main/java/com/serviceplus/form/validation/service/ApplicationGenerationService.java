@@ -8,14 +8,12 @@ import java.util.*;
 
 import com.serviceplus.form.validation.dto.*;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
-import com.serviceplus.form.validation.entity.ApplicationDocumentSubmissionEntity;
 import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.ApplicationDocumentSubmissionRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -111,24 +109,25 @@ public class ApplicationGenerationService {
         txnLog.setEndTime(LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault()));
         txnLog.setNewEntity(false);
         HandlerResponse hr = new HandlerResponse();
-        Map<String,Object> result = new HashMap<>();
 
-        result.put("referenceNo", referenceNo);
-        result.put("data",service.getPreviousHandlerData());
-        hr.setData(result);
         hr.setApplicationId(applicationId);
         hr.setActivityEnd(true);
         hr.setActivityType(from);
         //return transactionalOperator.execute(status ->
         return saveApplicationAndCurrentProcess(
-                txnLog, service, user, referenceNo, applicationId, appStatus,dataId
+                txnLog, service, user, referenceNo, applicationId, appStatus,dataId,hr
         ).then(ServerResponse.ok().bodyValue(hr));
     }
 
-    private Mono<?> saveApplicationAndCurrentProcess(ProcessingTxn savedLog, ServiceMeta service, UserSessionObject user, String referenceNo, String appId, String appStatus, String dataId) {
+    private Mono<?> saveApplicationAndCurrentProcess(ProcessingTxn savedLog, ServiceMeta service, UserSessionObject user, String referenceNo, String appId, String appStatus, String dataId, HandlerResponse hr) {
 
         return applicationDetailsRepository.findByApplicationIdAndTenantId(appId,user.getTenantId()).flatMap(ad ->{
             final Integer status = isEmpty(appStatus) ? FALLBACK_ACTION_NO : Integer.parseInt(appStatus);
+            Map<String,Object> result = new HashMap<>();
+
+            result.put("referenceNo", referenceNo);
+            result.put("data",service.getPreviousHandlerData());
+            hr.setData(result);
 
             if(service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)){
                     ad.setReferenceNo(referenceNo);
