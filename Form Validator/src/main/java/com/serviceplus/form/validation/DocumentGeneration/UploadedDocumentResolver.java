@@ -95,7 +95,7 @@ public class UploadedDocumentResolver {
 
                     CreateUploadSessionsRequest uploadRequest = new CreateUploadSessionsRequest();
                     uploadRequest.setUserId(user.getUserID());
-                    uploadRequest.setSourceService("FORM_VALIDATION");
+                    uploadRequest.setSourceService("processing");
 
                     CreateUploadSessionsRequest.FileUploadRequest file =
                             new CreateUploadSessionsRequest.FileUploadRequest();
