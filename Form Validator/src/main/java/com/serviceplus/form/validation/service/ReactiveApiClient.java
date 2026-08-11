@@ -669,7 +669,7 @@ public class ReactiveApiClient {
                                                      Integer outputFormatId,
                                                      String applicationId,
                                                      boolean async,
-                                                     String txnId) {
+                                                     String txnId, Map<String, Object> systemAttrMap) {
 
         String url = DOCUMENT_GENERATION_SERVICE.concat("doc/generate");
 
@@ -680,6 +680,7 @@ public class ReactiveApiClient {
         request.put("outputFormatId", outputFormatId);
         request.put("applicationIdList", List.of(applicationId));
         request.put("async", async);
+        request.put("applicationDetails", systemAttrMap);
 
         return AsynchronousApiExecutor.callExternalEndpoint(
                         String.class,
@@ -768,7 +769,7 @@ public class ReactiveApiClient {
     }
     
     public Mono<ServerResponse> sendNotification(String applicationId, Integer serviceId, Long activityConfigId,
-			String txnId, ServerRequest request) {
+			String txnId, Map<String, Object> systemAttrMap, ServerRequest request) {
 
 		String url = NOTIFICATION_SERVICE.concat("/trigger");
 
@@ -778,7 +779,7 @@ public class ReactiveApiClient {
 		requestBody.put("applicationId", applicationId);
 		requestBody.put("serviceId", serviceId);
 		requestBody.put("notificationId", activityConfigId);
-
+		requestBody.put("applicationDetails", systemAttrMap);
 		return AsynchronousApiExecutor.callExternalEndpoint(String.class, HttpMethod.POST, headers,
 				Collections.emptyMap(), url, entityToString(requestBody), MediaType.APPLICATION_JSON)
 				.flatMap(response -> {
