@@ -4,6 +4,7 @@ import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLI
 import static com.serviceplus.form.validation.utility.Utility.*;
 import static java.util.Objects.isNull;
 
+import java.time.Year;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -252,17 +253,30 @@ public class FormService {
 
         return validateWorkflowSelection(responseJson, service, user, txnLog.getTxnId())
                 .then(
-                        preProcessingFacade.getFormDataAndSaveTxn(
-                                service,
-                                user,
-                                request,
-                                txnLog,
-                                appId,
-                                dataId,
-                                "FS",
-                                newEntityFlag,
-                                flowStatus
-                        )
+                        reactiveApiClient
+                                .fetchReferenceAbbrviation(
+                                        service.getServiceId(), user, txnLog.getTxnId()
+                                )
+
+                                .flatMap(abbr -> {
+
+                                    String referenceNo = abbr.concat("/").concat(String.valueOf(Year.now().getValue())).concat("/").concat(txnLog.getTxnId());
+
+                                    applicationFlowLogs.info("Generated referenceNo {} for applicationId {} txnId {}", referenceNo, appId, txnLog.getTxnId());
+
+                                    return preProcessingFacade
+                                            .getFormDataAndSaveTxn(
+                                                    service,
+                                                    user,
+                                                    request,
+                                                    txnLog,
+                                                    appId,
+                                                    dataId,
+                                                    "FS",
+                                                    newEntityFlag,
+                                                    flowStatus,
+                                                    referenceNo);
+                                })
                 )
                 .flatMap(txn -> {
 

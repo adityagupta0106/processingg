@@ -95,7 +95,7 @@ public class SystemGeneratedDocumentResolver {
                 applicationDetailsRepository.findByApplicationIdAndTenantId(
                         flow.getApplicationId(),
                         user.getTenantId());
-        Map<String, Object> systemAttrMap=new HashMap<>();
+        Map<String, Object> systemAttrMap = new HashMap<>();
 
         applicationFlowLogs.info(
                 "Generating system document. ApplicationId: {}, ServiceId: {}, OutputFormatId: {}, txnId: {}",
@@ -104,10 +104,22 @@ public class SystemGeneratedDocumentResolver {
                 outputFormatId,
                 flow.getTxnId());
 
-		return applicationDetails
-				.doOnNext(details -> systemAttributeHelper.systemAttrMap(systemAttrMap, details, service))
-				.then(reactiveApiClient.generateDocument(user, service.getServiceId(), outputFormatId,
-						flow.getApplicationId(), false, flow.getTxnId(), systemAttrMap))
+        return applicationDetails
+                .flatMap(details -> {
+
+                    applicationFlowLogs.info("Application details found. ApplicationId: {}, TenantId: {}, txnId: {}", flow.getApplicationId(), user.getTenantId(), flow.getTxnId());
+
+                    systemAttributeHelper.systemAttrMap(systemAttrMap, details, service);
+
+                    return reactiveApiClient.generateDocument(
+                            user,
+                            service.getServiceId(),
+                            outputFormatId,
+                            flow.getApplicationId(),
+                            false,
+                            flow.getTxnId(),
+                            systemAttrMap);
+                })
                 .flatMap(response -> {
 
                     applicationFlowLogs.info(

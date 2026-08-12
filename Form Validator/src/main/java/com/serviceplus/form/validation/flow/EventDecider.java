@@ -179,13 +179,24 @@ public class EventDecider {
                 service.getTaskId()
         );
 
-        return applicationFlowRouterRepository
-                .findFirstByApplicationIdAndTaskIdAndActivityTypeAndCompletedOrderByIdDesc(
-                        flowStatus.getApplicationId(),
-                        flowStatus.getTaskId(),
-                        ACTIVITY_FORM_STATUS_KEY,
-                        1)
-                .defaultIfEmpty(flowStatus)
+        Mono<ApplicationFlowStatusEntity> fsFlowMono;
+
+        if (ACTIVITY_FORM_STATUS_KEY.equals(flowStatus.getActivityType())) {
+            fsFlowMono = Mono.just(flowStatus);
+
+        } else {
+            fsFlowMono = applicationFlowRouterRepository
+                                        .findFirstByApplicationIdAndTaskIdAndActivityTypeAndCompletedOrderByIdDesc(
+                                                flowStatus.getApplicationId(),
+                                                flowStatus.getTaskId(),
+                                                ACTIVITY_FORM_STATUS_KEY,
+                                                1)
+                    .switchIfEmpty(Mono.error(
+                            new SPRuntimeError("Completed Form Submission activity not found.", HttpStatus.BAD_REQUEST, flowStatus.getTxnId()))
+                    );
+        }
+
+        return fsFlowMono
                 .flatMap(fsFlow ->
 
                         reactiveApiClient

@@ -15,7 +15,6 @@ import java.util.UUID;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -187,7 +186,7 @@ public class WorkflowWebServiceTaskExecutor {
 
 		return preProcessingFacade.getFormDataAndSaveTxn(submission.getService(), user, null,
 						submission.getTempTransactionLogs(), String.valueOf(application.getApplicationId()), dataId,
-						"FS", false, null)
+						"FS", false, null, "")
 				.map(txn -> {
 					WorkflowContext ctx = new WorkflowContext();
 					ctx.setTxn(txn);

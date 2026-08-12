@@ -19,7 +19,6 @@ import com.serviceplus.form.validation.entity.*;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.json.HTTP;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -31,7 +30,6 @@ import static com.serviceplus.form.validation.utility.Utility.*;
 import static java.util.Objects.isNull;
 
 import org.springframework.web.reactive.function.server.ServerResponse;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Service
@@ -101,7 +99,7 @@ public class PreProcessingFacade {
 
     public Mono<ProcessingTxn> getFormDataAndSaveTxn(ServiceMeta service, UserSessionObject user, ServerHttpRequest request,
                                                      TempTransactionLogs tempLog, String appId, String dataId, String activityType, boolean newEntityFlag,
-                                                     ApplicationFlowStatusEntity oldFlowStatus) {
+                                                     ApplicationFlowStatusEntity oldFlowStatus, String referenceNo) {
         String txnId=tempLog.getTxnId();
         LocalDateTime dt = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
         LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneId.systemDefault());
@@ -150,10 +148,11 @@ public class PreProcessingFacade {
                 now,
                 user.getUserName(),
                 "S",
-                user.getUserID().longValue(),
+                user.getUserID(),
                 user.getTenantId()
         );
 
+        applicationDetails.setReferenceNo(referenceNo);
         applicationDetails.setNewEntity(newEntityFlag);
         //applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getOrgUnitCode().intValue());
         //applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getOrgUnitName());
