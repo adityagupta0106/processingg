@@ -1,11 +1,14 @@
 package com.serviceplus.form.validation.dto;
 
+import java.util.List;
+
 public class TrackingDocument {
 
     private String uploadId;
     private String documentName;
     private String sourceType;
     private String referenceId;
+    private List<String> viewPermission;
 
     public String getDocumentName() {
         return documentName;
@@ -37,5 +40,13 @@ public class TrackingDocument {
 
     public void setReferenceId(String referenceId) {
         this.referenceId = referenceId;
+    }
+
+    public List<String> getViewPermission() {
+        return viewPermission;
+    }
+
+    public void setViewPermission(List<String> viewPermission) {
+        this.viewPermission = viewPermission;
     }
 }
