@@ -31,6 +31,7 @@ import reactor.core.publisher.Mono;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 import static com.serviceplus.form.validation.utility.Utility.*;
+import static java.util.Objects.isNull;
 
 @Service
 public class ApplicationGenerationService {
@@ -121,8 +122,14 @@ public class ApplicationGenerationService {
             if(service.getTaskType().equals(APPLICATION_SUBMISSION_TASK_FLAG)){
                     ad.setReferenceNo(referenceNo);
                     ad.setStatus("I");
-                    ad.setAppliedLocationId(service.getSelectedLocationByUser().intValue());
-                    ad.setAppliedLocationName(service.getSelectedLocationNameByUser());
+
+                    if(!isNull(service.getSelectedLocationByUser())){
+                        ad.setAppliedLocationId(service.getSelectedLocationByUser().intValue());
+                    }
+
+                    if(!isNull(service.getSelectedLocationNameByUser())) {
+                        ad.setAppliedLocationName(service.getSelectedLocationNameByUser());
+                    }
                     result.put("referenceNo", referenceNo);
             } else if (service.getTaskType().equals(OFFICIAL_TASK_FLAG)) {
                     ad.setStatus(ACTION_CODE_MAPPING.get(status));
@@ -164,27 +171,67 @@ public class ApplicationGenerationService {
                     cp.setActionName(selectedWorkflowElementData.getActionAttribute().getFirst().getTrackLabel());
 
                     Mono<CurrentProcess> populateDocuments =
-                            applicationDocumentSubmissionRepository
-                                    .findByApplicationIdAndTxnIdAndTaskIdAndStatus(
-                                            ad.getApplicationId(),
-                                            savedLog.getTxnId(),
-                                            service.getTaskId(),
-                                            "P")
-                                    .map(entity -> {
+                            reactiveApiClient
+                                    .fetchServiceMetadata(
+                                            user,
+                                            service.getServiceId(),
+                                            savedLog.getTxnId()
+                                    )
+                                    .flatMap(metadataService -> {
 
-                                        TrackingDocument document = new TrackingDocument();
+                                        List<DocumentGenerationDetails.DocMappingDTO> documentMappings =
+                                                metadataService.getDocumentGenerationDetails() == null
+                                                        ? Collections.emptyList()
+                                                        : metadataService.getDocumentGenerationDetails()
+                                                        .stream()
+                                                        .filter(details ->
+                                                                service.getTaskId().equals(details.getTaskId()))
+                                                        .findFirst()
+                                                        .map(DocumentGenerationDetails::getDocumentMapping)
+                                                        .orElse(Collections.emptyList());
 
-                                        document.setUploadId(entity.getUploadId());
-                                        document.setReferenceId(entity.getReferenceId());
-                                        document.setDocumentName(entity.getDocumentName());
+                                        return applicationDocumentSubmissionRepository
+                                                .findByApplicationIdAndTxnIdAndTaskIdAndStatus(
+                                                        ad.getApplicationId(),
+                                                        savedLog.getTxnId(),
+                                                        service.getTaskId(),
+                                                        "P")
+                                                .map(entity -> {
 
-                                        return document;
-                                    })
-                                    .collectList()
-                                    .map(documents -> {
+                                                    TrackingDocument document = new TrackingDocument();
 
-                                        cp.setDocuments(documents);
-                                        return cp;
+                                                    document.setUploadId(entity.getUploadId());
+                                                    document.setReferenceId(entity.getReferenceId());
+                                                    document.setDocumentName(entity.getDocumentName());
+
+                                                    // Find metadata using document referenceId
+                                                    documentMappings.stream()
+                                                            .filter(mapping ->
+                                                                    mapping.getReferenceId() != null
+                                                                            && mapping.getReferenceId()
+                                                                            .equals(entity.getReferenceId()))
+                                                            .findFirst()
+                                                            .ifPresent(mapping -> {
+
+                                                                document.setViewPermission(
+                                                                        mapping.getViewPermission()
+                                                                );
+
+                                                                applicationFlowLogs.info(
+                                                                        "TxnId : {} | Document referenceId: {} | ViewPermission: {}",
+                                                                        savedLog.getTxnId(),
+                                                                        entity.getReferenceId(),
+                                                                        mapping.getViewPermission()
+                                                                );
+                                                            });
+
+                                                    return document;
+                                                })
+                                                .collectList()
+                                                .map(documents -> {
+                                                    cp.setDocuments(documents);
+                                                    return cp;
+                                                });
                                     });
 
                     return populateDocuments.flatMap(currentProcess -> {
