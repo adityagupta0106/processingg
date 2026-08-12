@@ -22,6 +22,8 @@ public class SystemAttributeHelper {
 		if(service!=null) {
 			
 		}
+
+        System.out.println("syssssss " + systemAttrMap);
 		return systemAttrMap;
 		
 	}

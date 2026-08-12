@@ -49,32 +49,72 @@ public class NotificationProcessService {
 		this.systemAttributeHelper = systemAttributeHelper;
 	}
 
-	public Mono<ServerResponse> process(String applicationId, ServerRequest request, String statusKey, String txnId,
-			Mono<TempTransactionLogs> fetch, ApplicationFlowStatusEntity flow, ServiceMeta service, boolean fromDraft) {
+    public Mono<ServerResponse> process(
+            String applicationId,
+            ServerRequest request,
+            String statusKey,
+            String txnId,
+            Mono<TempTransactionLogs> fetch,
+            ApplicationFlowStatusEntity flow,
+            ServiceMeta service,
+            boolean fromDraft) {
 
-		UserSessionObject user = getUserSessionDetails(request.exchange().getRequest());
+        UserSessionObject user =
+                getUserSessionDetails(request.exchange().getRequest());
 
-		Mono<ApplicationDetails> applicationDetails = applicationDetailsRepository
-				.findByApplicationIdAndTenantId(applicationId, user.getTenantId());
-		Map<String, Object> systemAttrMap=new HashMap<>();
-		return applicationDetails.doOnNext(details -> systemAttributeHelper.systemAttrMap(systemAttrMap,details, service))
-				.then(activityMapService
-						.activityConfigId(service, user, applicationId, flow.getTxnId(), flow.getActivityType())
-						.switchIfEmpty(Mono.error(new SPRuntimeError("Notification activity configuration not found.",
-								HttpStatus.BAD_REQUEST, flow.getTxnId())))
-						.flatMap(activityConfigId -> reactiveApiClient.sendNotification(applicationId,
-								service.getServiceId(), activityConfigId, flow.getTxnId(),systemAttrMap, request))
-						.then(processingTxnRepository.findById(flow.getTxnId())
-								.switchIfEmpty(Mono.error(new SPRuntimeError("Processing transaction not found.",
-										HttpStatus.INTERNAL_SERVER_ERROR, flow.getTxnId()))))
-						.flatMap(txnLog -> {
+        return applicationDetailsRepository
+                .findByApplicationIdAndTenantId(
+                        applicationId, user.getTenantId())
 
-							applicationFlowLogs.info(
-									"TxnId : {} | Notification processing completed successfully. Invoking EventDecider for next workflow activity.",
-									flow.getTxnId());
+                .switchIfEmpty(Mono.error(
+                        new SPRuntimeError("Application details not found.", HttpStatus.BAD_REQUEST, flow.getTxnId())
+                ))
 
-							return eventDecider.proceedToNext(flow.getDataId(), service, user, txnLog, applicationId,
-									null, flow.getActivityType(), request, flow);
-						}));
-	}
+                .flatMap(details -> {
+
+                    Map<String, Object> systemAttrMap = new HashMap<>();
+
+                    systemAttributeHelper.systemAttrMap(
+                            systemAttrMap,
+                            details,
+                            service);
+
+                    applicationFlowLogs.info(
+                            "TxnId : {} | Application details loaded. ReferenceNo={}",
+                            flow.getTxnId(),
+                            details.getReferenceNo());
+
+                    return activityMapService
+                            .activityConfigId(
+                                    service,
+                                    user,
+                                    applicationId,
+                                    flow.getTxnId(),
+                                    flow.getActivityType())
+
+                            .switchIfEmpty(Mono.error(
+                                    new SPRuntimeError("Notification activity configuration not found.", HttpStatus.BAD_REQUEST, flow.getTxnId()
+                                    )
+                            ))
+
+                            .flatMap(activityConfigId ->
+                                    reactiveApiClient.sendNotification(applicationId, service.getServiceId(), activityConfigId, flow.getTxnId(), systemAttrMap, request)
+                            );
+                })
+
+                .then(
+                        processingTxnRepository
+                                .findById(flow.getTxnId())
+                                .switchIfEmpty(Mono.error(
+                                        new SPRuntimeError("Processing transaction not found.", HttpStatus.INTERNAL_SERVER_ERROR, flow.getTxnId())
+                                ))
+                )
+
+                .flatMap(txnLog -> {
+
+                    applicationFlowLogs.info("TxnId : {} | Notification processing completed successfully. Invoking EventDecider for next workflow activity.", flow.getTxnId());
+
+                    return eventDecider.proceedToNext(flow.getDataId(), service, user, txnLog, applicationId, null, flow.getActivityType(), request, flow);
+                });
+    }
 }

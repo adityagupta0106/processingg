@@ -72,36 +72,27 @@ public class ApplicationGenerationService {
     private String PUSH_FORM_SUBMISSION_DATA_INBOX_TOPIC;
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
-    
-    public Mono<ServerResponse> executeApplicationProcessing(String dataId, ServiceMeta service, UserSessionObject user, ProcessingTxn txnLog, String appId
-                                                                    , String appStatus, String from) {
 
-            applicationFlowLogs.info("Finalizing application for txnId {} applicationId {} status {} taskType {}",
-                                        txnLog.getTxnId(),appId,appStatus,service.getTaskType());
+    public Mono<ServerResponse> executeApplicationProcessing(String dataId, ServiceMeta service, UserSessionObject user, ProcessingTxn txnLog, String appId, String appStatus, String from) {
 
-            if(service.getTaskType().equals(OFFICIAL_TASK_FLAG)){
-                return saveTxn(txnLog,dataId,service,user,"",appId,txnLog.getTxnId(),"","",appStatus, from);
-            }
-            else{
-                return reactiveApiClient.fetchReferenceAbbrviation(service.getServiceId(),user,txnLog.getTxnId())
-                        .flatMap(data -> {
-                            try {
-                                String abbr = data;
-                                applicationFlowLogs.info("Abbreviation for txnId {} is {} ",txnLog.getTxnId(),abbr);
-                                String referenceNo = abbr.concat("/").concat(String.valueOf(Year.now().getValue())).concat("/").concat(txnLog.getTxnId());
-                                return saveTxn(txnLog,dataId,service,user,referenceNo,appId,txnLog.getTxnId(),"","",appStatus,from);
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                                return Mono.error(new SPRuntimeError(
-                                        "Issue while processing the request [SUB - 009]",
-                                        HttpStatus.INTERNAL_SERVER_ERROR,txnLog.getTxnId()
-                                ));
-                            }
-                        })
-                        .onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex,txnLog.getTxnId()));
-            }
+        applicationFlowLogs.info("Finalizing application for txnId {} applicationId {} status {} taskType {}", txnLog.getTxnId(), appId, appStatus, service.getTaskType());
 
+        return applicationDetailsRepository
+                .findByApplicationIdAndTenantId(
+                        appId,
+                        user.getTenantId())
+                .switchIfEmpty(Mono.error(
+                        new SPRuntimeError("Application details not found.", HttpStatus.BAD_REQUEST, txnLog.getTxnId()
+                        )
+                ))
+                .flatMap(applicationDetails -> {
 
+                    String referenceNo = applicationDetails.getReferenceNo();
+
+                    applicationFlowLogs.info("Using existing referenceNo {} for applicationId {} txnId {}", referenceNo, appId, txnLog.getTxnId());
+
+                    return saveTxn(txnLog, dataId, service, user, referenceNo, appId, txnLog.getTxnId(), "", "", appStatus, from);
+                });
     }
 
     private Mono<ServerResponse> saveTxn(ProcessingTxn txnLog, String dataId, ServiceMeta service, UserSessionObject user, String referenceNo, String applicationId,
@@ -124,8 +115,6 @@ public class ApplicationGenerationService {
         return applicationDetailsRepository.findByApplicationIdAndTenantId(appId,user.getTenantId()).flatMap(ad ->{
             final Integer status = isEmpty(appStatus) ? FALLBACK_ACTION_NO : Integer.parseInt(appStatus);
             Map<String,Object> result = new HashMap<>();
-
-            result.put("referenceNo", referenceNo);
             result.put("data",service.getPreviousHandlerData());
             hr.setData(result);
 
@@ -134,8 +123,10 @@ public class ApplicationGenerationService {
                     ad.setStatus("I");
                     ad.setAppliedLocationId(service.getSelectedLocationByUser().intValue());
                     ad.setAppliedLocationName(service.getSelectedLocationNameByUser());
+                    result.put("referenceNo", referenceNo);
             } else if (service.getTaskType().equals(OFFICIAL_TASK_FLAG)) {
                     ad.setStatus(ACTION_CODE_MAPPING.get(status));
+                    result.put("referenceNo", ad.getReferenceNo());
             }
 
             ad.setNewEntity(false);
