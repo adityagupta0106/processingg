@@ -17,6 +17,7 @@ import com.serviceplus.form.validation.dto.EscalationMvelResponse;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.WorkflowEscalation;
 import com.serviceplus.form.validation.enums.EscalationStatus;
@@ -89,7 +90,7 @@ public class EscalationExecutionServiceImpl implements EscalationExecutionServic
 						            	serviceMeta.setServiceName(metadata.getServiceName());
 						                Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
 						                List<String> nextNodeList = new ArrayList<>();
-
+						                Map<String,TaskRelationDTO> taskRelationMap=metadata.getProcessFlowMap().getTaskRelation();
 						                EscalationDetailsDTO escalationConfig = metadata.getEscalationDetails().stream()
 						                        .filter(e -> e.getTaskId().equals(currentProcess.getCurrentTask()))
 						                        .findFirst()
@@ -135,7 +136,8 @@ public class EscalationExecutionServiceImpl implements EscalationExecutionServic
 						                                    metadata,
 						                                    null,
 						                                    user,
-						                                    serviceMeta);
+						                                    serviceMeta,
+						                                    taskRelationMap);
 						                        }));
 						            });
 						}))

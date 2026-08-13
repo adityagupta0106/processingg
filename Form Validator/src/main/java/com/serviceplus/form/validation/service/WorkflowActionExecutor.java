@@ -6,6 +6,7 @@ import java.util.Map;
 import com.serviceplus.form.validation.dto.InboxKafka;
 import com.serviceplus.form.validation.dto.ServiceJSONDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.CurrentProcess;
@@ -24,5 +25,6 @@ public interface WorkflowActionExecutor {
             ServiceJSONDTO serviceJson,
             ProcessingTxn txn,
             UserSessionObject user,
-            ServiceMeta serviceMeta);
+            ServiceMeta serviceMeta,
+            Map<String,TaskRelationDTO> taskRelationMap);
 }

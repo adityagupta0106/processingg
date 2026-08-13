@@ -1,22 +1,8 @@
 package com.serviceplus.form.validation.service;
 
-import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.Helpers.CurrentProcessBuilder;
-import com.serviceplus.form.validation.Helpers.WorkflowHelper;
-import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
-import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
-import com.serviceplus.form.validation.dto.UserSessionObject;
-import com.serviceplus.form.validation.entity.ApplicationDetails;
-import com.serviceplus.form.validation.entity.CurrentProcess;
-import com.serviceplus.form.validation.entity.ProcessingTxn;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_INCLUSIVE_CONVERGENT;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.GATEWAY_BEHAVIOUR_INCLUSIVE_DIVERGENT;
 
 import java.time.LocalDateTime;
 import java.util.Date;
@@ -25,7 +11,31 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.reactivestreams.Publisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.Helpers.CurrentProcessBuilder;
+import com.serviceplus.form.validation.Helpers.WorkflowHelper;
+import com.serviceplus.form.validation.config.ConvergentGatewayFactory;
+import com.serviceplus.form.validation.dto.ServiceMeta;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
+import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.Data;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.Data.Nodes;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
+import com.serviceplus.form.validation.entity.ApplicationDetails;
+import com.serviceplus.form.validation.entity.CurrentProcess;
+import com.serviceplus.form.validation.entity.ProcessingTxn;
+import com.serviceplus.form.validation.handlers.ConvergentGatewayHandler;
+import com.serviceplus.form.validation.repository.CurrentProcessRepository;
+
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @Service
 public class GatewayService {
@@ -37,20 +47,26 @@ public class GatewayService {
     private final TaskAssignmentService taskAssignmentService;
 
     private final CurrentProcessBuilder currentProcessBuilder;
+    
+    private final ConvergentGatewayFactory convergentGatewayFactory;
 
+    private final CurrentProcessRepository currentProcessRepository;
+    
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
-    public GatewayService(ReactiveApiClient apiClient, WorkflowHelper workflowHelper, TaskAssignmentService taskAssignmentService, CurrentProcessBuilder currentProcessBuilder) {
+    public GatewayService(ReactiveApiClient apiClient, WorkflowHelper workflowHelper, TaskAssignmentService taskAssignmentService, CurrentProcessBuilder currentProcessBuilder, CurrentProcessRepository currentProcessRepository, ConvergentGatewayFactory convergentGatewayFactory) {
         this.apiClient = apiClient;
         this.workflowHelper = workflowHelper;
         this.taskAssignmentService = taskAssignmentService;
         this.currentProcessBuilder = currentProcessBuilder;
+		this.convergentGatewayFactory = convergentGatewayFactory;
+		this.currentProcessRepository = currentProcessRepository;
     }
 
     public Flux<CurrentProcess> processGateway(
             ServiceProcessFlowDTO.Data.Nodes node,
             ServiceProcessFlowDTO.Data.Nodes gatewayNode,
-            List<ServiceProcessFlowDTO.Data> wf,
+            List<ServiceProcessFlowDTO.Data> workflow,
             ServiceMeta service,
             ApplicationDetails ad,
             ProcessingTxn txn,
@@ -60,14 +76,14 @@ public class GatewayService {
             CurrentProcess baseProcess,
             List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
             Map<String, Map<String,List<String>>> taskLocationUserHolderMap,
-            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow, Map<String, Date> timerDueDate){
+            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow, Map<String, Date> timerDueDate,Map<String,TaskRelationDTO> taskRelationMap){
 
 
             applicationFlowLogs.info(
                     "Gateway encountered gatewayId={}, behaviour={}", gatewayNode.getId(),
                     gatewayNode.getBehaviour());
 
-            ServiceProcessFlowDTO.Data nextToGatewayData = workflowHelper.fetchNode(wf, gatewayNode.getId());
+            ServiceProcessFlowDTO.Data nextToGatewayData = workflowHelper.fetchNode(workflow, gatewayNode.getId());
 
             List<ServiceProcessFlowDTO.Data.MappedTask> nextToGateway = nextToGatewayData
                     .getMappedTasks();
@@ -86,7 +102,7 @@ public class GatewayService {
 
                         .doOnNext(mappedTask -> applicationFlowLogs.info("Resolving gateway child task={}", mappedTask.getNode().getId()))
 
-                        .flatMap(mappedTask -> taskAssignmentService.nextAllowedOfficeLocation(wf,
+                        .flatMap(mappedTask -> taskAssignmentService.nextAllowedOfficeLocation(workflow,
                                 mappedTask.getNode(), txn.getTxnId(),
                                 service.getServiceId(), user,
                                 taskLocationUserHolderMap,service))
@@ -193,34 +209,373 @@ public class GatewayService {
 
                             return currentProcessBuilder.buildGatewayNextProcess(baseProcess, gatewayNode,
                                     filteredTask.getNode(), service, ad, user, now,
-                                    taskAvailableOfficeLocations, wf, txn);
+                                    taskAvailableOfficeLocations, workflow, txn);
                         });
             }
 
             if (workflowHelper.isConvergentGateway(behaviour)) {
 
                 applicationFlowLogs.info(
-                        "Processing Convergent Gateway gatewayId={}", gatewayNode.getId());
+                        "Processing Convergent Gateway gatewayId={}, behaviour={}",
+                        gatewayNode.getId(),
+                        behaviour);
 
-                ServiceProcessFlowDTO.Data.Nodes nextNode = nextToGatewayData.getNode();
-
-                CurrentProcess cp = currentProcessBuilder.buildGatewayNextProcess(baseProcess, gatewayNode,
-                        nextNode, service, ad, user, now,
-                        taskAvailableOfficeLocations, wf, txn);
-
-                applicationFlowLogs.info(
-                        "Convergent Gateway produced process for nodeId={}",
-                        nextNode.getId());
-
-                return Flux.just(cp);
+                return processConvergentGateway(
+                        gatewayNode,
+                        nextToGatewayData,
+                        workflow,
+                        service,
+                        ad,
+                        txn,
+                        user,
+                        now,
+                        currentActionProcess,
+                        baseProcess,
+                        taskAvailableOfficeLocations,
+                        taskRelationMap,
+                        taskLocationUserHolderMap,
+                        timerDueDate);
             }
 
             applicationFlowLogs.info("Returning normal base process for taskId={}",gatewayNode.getId());
 
             return Flux.just(baseProcess);
     }
+    
+    private Flux<CurrentProcess> processConvergentGateway(Nodes gatewayNode, ServiceProcessFlowDTO.Data nextToGatewayData, List<ServiceProcessFlowDTO.Data> workflow,
+			ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user, LocalDateTime now,
+			CurrentProcess currentActionProcess, CurrentProcess baseProcess,
+			List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
+			Map<String, TaskRelationDTO> taskRelationMap,
+			Map<String, Map<String, List<String>>> taskLocationUserHolderMap, Map<String, Date> timerDueDate) {
 
-    private Mono<List<ServiceProcessFlowDTO.Data.MappedTask>> executeGatewayMvel(
+        String behaviour = gatewayNode.getBehaviour();
+
+        TaskRelationDTO taskRelation =
+                taskRelationMap.get(gatewayNode.getId());
+
+        if (taskRelation == null) {
+
+            applicationFlowLogs.error(
+                    "Task relation not found for convergent gateway={}",
+                    gatewayNode.getId());
+
+            return Flux.error(new SPRuntimeError(
+                    "Task relation not found for convergent gateway",
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    txn.getTxnId()));
+        }
+
+        if (GATEWAY_BEHAVIOUR_INCLUSIVE_CONVERGENT
+                .equalsIgnoreCase(behaviour)) {
+
+            return executeConvergentGatewayMvel(
+                    user,
+                    service,
+                    ad,
+                    txn,
+                    "",
+                    currentActionProcess,
+                    gatewayNode.getId(),
+                    taskLocationUserHolderMap,
+                    timerDueDate)
+                    .flatMapMany(mvelResponse -> {
+
+                        if (mvelResponse.isProcessGateway()) {
+
+                            applicationFlowLogs.info(
+                                    "ICG Gateway MVEL allowed gateway processing. gatewayId={}",
+                                    gatewayNode.getId());
+
+                            return completeConvergentGateway(
+                                    gatewayNode,
+                                    nextToGatewayData,
+                                    service,
+                                    ad,
+                                    txn,
+                                    user,
+                                    now,
+                                    baseProcess,
+                                    taskAvailableOfficeLocations,workflow);
+                        }
+
+                        applicationFlowLogs.info(
+                                "ICG Gateway MVEL did not allow gateway processing. Falling back to IC handler. gatewayId={}",
+                                gatewayNode.getId());
+
+                        return processUsingConvergentHandler(
+                                behaviour,
+                                baseProcess,
+                                taskRelation,
+                                service,
+                                txn,
+                                nextToGatewayData,
+                                gatewayNode,
+                                ad,
+                                user,
+                                now,
+                                taskAvailableOfficeLocations,
+                                currentActionProcess,workflow);
+                    });
+        }
+
+        /*
+         * PC / EC
+         */
+        return processUsingConvergentHandler(
+                behaviour,
+                baseProcess,
+                taskRelation,
+                service,
+                txn,
+                nextToGatewayData,
+                gatewayNode,
+                ad,
+                user,
+                now,
+                taskAvailableOfficeLocations,
+                currentActionProcess,workflow);
+    }
+    
+    private Mono<MvelExecutionResponse> executeConvergentGatewayMvel(
+            UserSessionObject user,
+            ServiceMeta service,
+            ApplicationDetails applicationDetails,
+            ProcessingTxn txn,
+            String appData,
+            CurrentProcess currentActionProcess,
+            String gatewayId,
+            Map<String, Map<String, List<String>>> taskLocationUserHolderMap,
+            Map<String, Date> timerDueDate) {
+
+        applicationFlowLogs.info(
+                "Executing Convergent Gateway MVEL for txnId={}, gatewayId={}, taskLocationUserHolderMap={}",
+                txn.getTxnId(),
+                gatewayId,
+                taskLocationUserHolderMap);
+
+        return apiClient.fetchMvelDetails(
+                        user,
+                        service.getServiceId(),
+                        txn.getTxnId())
+
+                .flatMapMany(Flux::fromIterable)
+
+                .filter(m -> "GW".equalsIgnoreCase(m.getValue()))
+
+                .doOnNext(m ->
+                        applicationFlowLogs.info(
+                                "Convergent Gateway MVEL candidate found mvelId={}, nodeId={}",
+                                m.getMvelId(),
+                                m.getNodeId()))
+
+                .filter(m -> gatewayId.equals(m.getNodeId()))
+
+                .doOnNext(m ->
+                        applicationFlowLogs.info(
+                                "Executing Convergent Gateway MVEL mvelId={}, gatewayId={}",
+                                m.getMvelId(),
+                                gatewayId))
+
+                .flatMap(m ->
+                        apiClient.executeMvel(
+                                        m.getMvelId(),
+                                        txn.getTxnId(),
+                                        "",
+                                        "GW",
+                                        currentActionProcess.getApplicationId(),
+                                        service.getServiceId(),
+                                        null,
+                                        appData,
+                                        null,
+                                        null,
+                                        taskLocationUserHolderMap,
+                                        null
+                                )
+
+                                .doOnNext(response ->
+                                        applicationFlowLogs.info(
+                                                "Convergent Gateway MVEL response txnId={}, gatewayId={}, success={}, processGateway={}, taskLocationUserHolderMap={}",
+                                                txn.getTxnId(),
+                                                gatewayId,
+                                                response.isSuccess(),
+                                                response.isProcessGateway(),
+                                                response.getTaskLocationUserHolderMap()))
+
+                                .flatMap(response -> {
+
+                                    if (!response.isSuccess()) {
+
+                                        applicationFlowLogs.error(
+                                                "Convergent Gateway MVEL execution failed for txnId={}, gatewayId={}",
+                                                txn.getTxnId(),
+                                                gatewayId);
+
+                                        return Mono.error(new SPRuntimeError(
+                                                "Convergent Gateway MVEL failed",
+                                                HttpStatus.BAD_GATEWAY,
+                                                txn.getTxnId()));
+                                    }
+
+                                    /*
+                                     * Update task location / holder map
+                                     */
+                                    if (response.getTaskLocationUserHolderMap() != null) {
+
+                                        applicationFlowLogs.info(
+                                                "Updating taskLocationUserHolderMap from Convergent Gateway MVEL. OldMap={}, NewMap={}",
+                                                taskLocationUserHolderMap,
+                                                response.getTaskLocationUserHolderMap());
+
+                                        taskLocationUserHolderMap.clear();
+
+                                        taskLocationUserHolderMap.putAll(
+                                                response.getTaskLocationUserHolderMap());
+
+                                        applicationFlowLogs.info(
+                                                "Updated taskLocationUserHolderMap={}",
+                                                taskLocationUserHolderMap);
+                                    }
+
+                                    /*
+                                     * Update timer due date
+                                     */
+                                    if (response.getTimerDueDate() != null
+                                            && !response.getTimerDueDate().isEmpty()) {
+
+                                        timerDueDate.clear();
+
+                                        timerDueDate.putAll(
+                                                response.getTimerDueDate());
+                                    }
+
+                                    return Mono.just(response);
+                                })
+                )
+
+                /*
+                 * Only one Gateway MVEL should be applicable.
+                 */
+                .next()
+
+                /*
+                 * No MVEL configured for this gateway.
+                 *
+                 * Return a successful response with
+                 * processGateway = false.
+                 *
+                 * Caller will then use the normal
+                 * Inclusive Convergent Gateway handler.
+                 */
+                .switchIfEmpty(Mono.defer(() -> {
+
+                    applicationFlowLogs.info(
+                            "No Convergent Gateway MVEL configured for gatewayId={}, falling back to BPMN convergence",
+                            gatewayId);
+
+                    MvelExecutionResponse response =
+                            new MvelExecutionResponse();
+
+                    response.setSuccess(true);
+                    response.setProcessGateway(false);
+
+                    return Mono.just(response);
+                }))
+
+                .doOnSuccess(response ->
+                        applicationFlowLogs.info(
+                                "Convergent Gateway MVEL completed txnId={}, gatewayId={}, success={}, processGateway={}",
+                                txn.getTxnId(),
+                                gatewayId,
+                                response.isSuccess(),
+                                response.isProcessGateway()))
+
+                .doOnError(ex ->
+                        applicationFlowLogs.error(
+                                "Convergent Gateway MVEL failed txnId={}, gatewayId={}",
+                                txn.getTxnId(),
+                                gatewayId,
+                                ex));
+    }
+
+    private Flux<CurrentProcess> processUsingConvergentHandler(
+            String behaviour,
+            CurrentProcess gatewayProcess,
+            TaskRelationDTO taskRelation,
+            ServiceMeta service,
+            ProcessingTxn txn,
+            ServiceProcessFlowDTO.Data nextToGatewayData,
+            ServiceProcessFlowDTO.Data.Nodes gatewayNode,
+            ApplicationDetails ad,
+            UserSessionObject user,
+            LocalDateTime now,
+            List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
+            CurrentProcess currentActionProcess,List<ServiceProcessFlowDTO.Data> workflow) {
+
+        ConvergentGatewayHandler handler =
+                convergentGatewayFactory.getHandler(behaviour);
+
+        return handler.canProceed(
+                        gatewayProcess,
+                        currentActionProcess,
+                        taskRelation,
+                        txn.getApplicationId(),
+                        service.getServiceId(),
+                        ad.getTenantId())
+                .flatMapMany(canProceed -> {
+
+                    if (!canProceed) {
+
+                        applicationFlowLogs.info(
+                                "Convergent gateway waiting. gatewayId={}, behaviour={}",
+                                gatewayNode.getId(),
+                                behaviour);
+
+                        return Flux.empty();
+                    }
+
+                    return completeConvergentGateway(
+                            gatewayNode,
+                            nextToGatewayData,
+                            service,
+                            ad,
+                            txn,
+                            user,
+                            now,
+                            gatewayProcess,
+                            taskAvailableOfficeLocations,workflow);
+                });
+    }
+
+	private Flux<CurrentProcess> completeConvergentGateway(
+			ServiceProcessFlowDTO.Data.Nodes gatewayNode, ServiceProcessFlowDTO.Data nextNode,
+			ServiceMeta service, ApplicationDetails ad,ProcessingTxn txn, UserSessionObject user, LocalDateTime now,
+			CurrentProcess gatewayProcess,
+			List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations, List<ServiceProcessFlowDTO.Data> workflow) {
+
+		
+		applicationFlowLogs.info(
+				"Convergent gateway completed. "
+						+ "gatewayProcessId={}, currentTask={}, previousTask={}, actionTaken=Y",
+				gatewayProcess.getProcessId(), gatewayProcess.getCurrentTask(), gatewayProcess.getPreviousTask(),
+				gatewayProcess.getActionTaken());
+
+		
+		CurrentProcess nextProcess = currentProcessBuilder.buildGatewayNextProcess(gatewayProcess, gatewayNode,
+				nextNode.getMappedTasks().getFirst().getNode(), service, ad, user, now, taskAvailableOfficeLocations, workflow, txn);
+		
+		applicationFlowLogs.info(
+				"Created next task after convergent gateway. "
+						+ "nextProcessId={}, currentTask={}, previousTask={}, actionTaken=N",
+				nextProcess.getProcessId(), nextProcess.getCurrentTask(), nextProcess.getPreviousTask(),
+				nextProcess.getActionTaken());
+
+		return Flux.just(gatewayProcess,nextProcess);
+	}
+
+	
+
+	private Mono<List<ServiceProcessFlowDTO.Data.MappedTask>> executeGatewayMvel(
     		UserSessionObject user,
             ServiceMeta service,
             ApplicationDetails applicationDetails,
