@@ -14,6 +14,7 @@ import com.serviceplus.form.validation.dto.InboxKafka;
 import com.serviceplus.form.validation.dto.ServiceJSONDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
 import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
@@ -50,7 +51,8 @@ public class WorkflowActionExecutorImpl implements WorkflowActionExecutor {
 	        ServiceJSONDTO serviceJson,
 	        ProcessingTxn txn,
 	        UserSessionObject user,
-	        ServiceMeta serviceMeta)  {
+	        ServiceMeta serviceMeta,
+	        Map<String,TaskRelationDTO> taskRelationMap)  {
 
 	    currentProcess.setActionTaken("Y");
 	    currentProcess.setActionOn(LocalDateTime.now());
@@ -106,7 +108,7 @@ public class WorkflowActionExecutorImpl implements WorkflowActionExecutor {
 	                            baseProcess,
 	                            officeLocations,
 	                            taskLocationUserHolderMap,
-	                            null,timerDueDate);
+	                            null,timerDueDate,taskRelationMap);
 	                }
 
 	                return Mono.just(baseProcess);

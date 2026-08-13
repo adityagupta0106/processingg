@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.TimerTaskExecution;
 import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
@@ -88,6 +89,7 @@ public class TimerTaskExecutionService {
 										Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
 										List<String> nextNodeList = new ArrayList<>();
 										ServiceProcessFlowDTO processFlow = metadata.getProcessFlowMap();
+										Map<String,TaskRelationDTO> taskRelationMap=processFlow.getTaskRelation();
 										ServiceProcessFlowDTO.Data workflowData = processFlow.getData().stream()
 												.filter(data -> data.getNode().getId().equals(currentProcess.getCurrentTask()))
 												.findFirst()
@@ -107,7 +109,7 @@ public class TimerTaskExecutionService {
 												.then(Mono.defer(() ->
 												workflowActionExecutor.execute(application, currentProcess,
 														timerExecution.getActionTaken(), taskLocationUserHolderMap,
-														nextNodeList, metadata, null, user, serviceMeta)));
+														nextNodeList, metadata, null, user, serviceMeta,taskRelationMap)));
 									});
 						}))
 

@@ -15,6 +15,7 @@ public class MvelExecutionResponse {
     private Map<String, Map<String,List<String>>> taskLocationUserHolderMap;
     private List<String> nextNodeList=new ArrayList<String>();
     private Map<String, Date> timerDueDate=new HashMap<String, Date>(); 
+    private Boolean processGateway;
 	public boolean isSuccess() {
 		return success;
 	}
@@ -57,6 +58,12 @@ public class MvelExecutionResponse {
 	}
 	public void setTimerDueDate(Map<String, Date> timerDueDate) {
 		this.timerDueDate = timerDueDate;
+	}
+	public Boolean isProcessGateway() {
+		return processGateway;
+	}
+	public void setProcessGateway(Boolean processGateway) {
+		this.processGateway = processGateway;
 	}
     
 	
