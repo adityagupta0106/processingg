@@ -21,7 +21,7 @@ public class EscalationScheduler {
 	/**
 	 * Executes every minute.
 	 */
-	@Scheduled(cron = "0 */1 * * * *")
+	//@Scheduled(cron = "0 */1 * * * *")
 	public void executePendingEscalations() {
 		LOGGER.info("Escalation Scheduler started.");
 		try {

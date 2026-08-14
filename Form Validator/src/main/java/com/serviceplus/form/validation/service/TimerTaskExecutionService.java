@@ -1,7 +1,7 @@
 package com.serviceplus.form.validation.service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,10 +10,14 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Service;
 
+import com.serviceplus.form.validation.dto.ServiceJSONDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
 import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.entity.ApplicationDetails;
+import com.serviceplus.form.validation.entity.CurrentProcess;
+import com.serviceplus.form.validation.entity.ProcessingTxn;
 import com.serviceplus.form.validation.entity.TimerTaskExecution;
 import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
@@ -33,11 +37,14 @@ public class TimerTaskExecutionService {
 	private final ReactiveApiClient reactiveApiClient;
 	private final TaskAssignmentService taskAssignmentService;
 	private final WorkflowActionExecutor workflowActionExecutor;
+	private final TempTransactionLogService tempTransactionLogService;
+	private final PreProcessingFacade preProcessingFacade;
 
 	public TimerTaskExecutionService(TimerTaskExecutionRepository timerRepository,
 			CurrentProcessRepository currentProcessRepository,
 			ApplicationDetailsRepository applicationDetailsRepository, ReactiveApiClient reactiveApiClient,
-			TaskAssignmentService taskAssignmentService, WorkflowActionExecutor workflowActionExecutor) {
+			TaskAssignmentService taskAssignmentService, WorkflowActionExecutor workflowActionExecutor,
+			TempTransactionLogService tempTransactionLogService, PreProcessingFacade preProcessingFacade) {
 
 		this.timerRepository = timerRepository;
 		this.currentProcessRepository = currentProcessRepository;
@@ -45,97 +52,158 @@ public class TimerTaskExecutionService {
 		this.reactiveApiClient = reactiveApiClient;
 		this.taskAssignmentService = taskAssignmentService;
 		this.workflowActionExecutor = workflowActionExecutor;
+		this.tempTransactionLogService = tempTransactionLogService;
+		this.preProcessingFacade = preProcessingFacade;
 	}
 
 	public Mono<Void> processPendingTimers() {
-		return timerRepository.findByStatusAndDueDateLessThanEqual("PENDING", new Date()).flatMap(this::executeTimer)
-				.then();
+
+		return timerRepository.findByStatusAndDueDateLessThanEqual("PENDING", LocalDateTime.now())
+
+				.doOnNext(timer -> LOGGER.info("Pending timer found. id={}, applicationId={}, taskId={}, dueDate={}",
+						timer.getId(), timer.getApplicationId(), timer.getTaskId(), timer.getDueDate()))
+
+				.flatMap(this::executeTimer).then();
 	}
 
-	@SuppressWarnings("unused")
 	private Mono<Void> executeTimer(TimerTaskExecution timerExecution) {
+
 		timerExecution.setStatus("IN_PROGRESS");
-		return timerRepository.save(timerExecution)
-				.then(execute(timerExecution))
-				.then(markExecuted(timerExecution))
-				.onErrorResume(ex -> markFailed(timerExecution))
-				.then();
+		timerExecution.setNew(false);
+
+		return timerRepository.save(timerExecution).then(execute(timerExecution)).flatMap(executed -> {
+			if (!executed) {
+				return Mono.empty();
+			}
+			timerExecution.setStatus("EXECUTED");
+			timerExecution.setActionTaken("Y");
+			timerExecution.setExecutedOn(LocalDateTime.now());
+			timerExecution.setNew(false);
+			return timerRepository.save(timerExecution).then();
+		}).onErrorResume(ex -> {
+			LOGGER.error("Timer execution failed. timerId={}", timerExecution.getId(), ex);
+			timerExecution.setStatus("FAILED");
+			timerExecution.setNew(false);
+			return timerRepository.save(timerExecution).then();
+		});
 	}
 
-	public Mono<?> execute(TimerTaskExecution timerExecution) {
-		ServiceMeta serviceMeta = new ServiceMeta();
-		UserSessionObject user = new UserSessionObject();
-		timerExecution.setStatus("IN_PROGRESS");
+	private Mono<Boolean> execute(TimerTaskExecution timerExecution) {
+
 		String currentProcessId = timerExecution.getCurrentProcessId();
 
-		return timerRepository.save(timerExecution)
-				.then(currentProcessRepository.findByIdAndActionTaken(currentProcessId, "N"))
-				.switchIfEmpty(Mono.defer(() -> {
-					LOGGER.info("Timer {} cancelled. Current process {} is no longer active.", timerExecution.getId(),currentProcessId);
-					timerExecution.setStatus("CANCELLED");
-					timerExecution.setExecutedOn(new Date());
-					return timerRepository.save(timerExecution).then(Mono.empty());
-				}))
+		return currentProcessRepository.findByProcessIdAndActionTaken(currentProcessId, "N")
+
 				.flatMap(currentProcess ->
+
 				applicationDetailsRepository.findByApplicationId(timerExecution.getApplicationId())
-						.switchIfEmpty(Mono.error(new RuntimeException("Application not found")))
-						.flatMap(application -> {
-							user.setTenantId(application.getTenantId());
-							return reactiveApiClient
-									.fetchServiceMetadata(user, timerExecution.getServiceId(), "Timer")
-									.flatMap(metadata -> {
-										serviceMeta.setServiceId(metadata.getServiceId());
-										serviceMeta.setServiceName(metadata.getServiceName());
-										Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
-										List<String> nextNodeList = new ArrayList<>();
-										ServiceProcessFlowDTO processFlow = metadata.getProcessFlowMap();
-										Map<String,TaskRelationDTO> taskRelationMap=processFlow.getTaskRelation();
-										ServiceProcessFlowDTO.Data workflowData = processFlow.getData().stream()
-												.filter(data -> data.getNode().getId().equals(currentProcess.getCurrentTask()))
-												.findFirst()
-												.orElseThrow(() -> new RuntimeException("Workflow node not found : "
-														+ currentProcess.getCurrentTask()));
 
-										return Flux.fromIterable(workflowData.getMappedTasks())
+						.switchIfEmpty(Mono.error(
+								new RuntimeException("Application not found : " + timerExecution.getApplicationId())))
 
-												.concatMap(task -> {
-													ServiceProcessFlowDTO.Data.Nodes next = task.getNode();
-													nextNodeList.add(next.getId());
-													return taskAssignmentService.nextAllowedOfficeLocation(
-															processFlow.getData(), next, "Timer_" + currentProcessId,
-															timerExecution.getServiceId(), user,
-															taskLocationUserHolderMap, serviceMeta);
-												})
-												.then(Mono.defer(() ->
-												workflowActionExecutor.execute(application, currentProcess,
-														timerExecution.getActionTaken(), taskLocationUserHolderMap,
-														nextNodeList, metadata, null, user, serviceMeta,taskRelationMap)));
-									});
-						}))
+						.flatMap(application ->
+
+						executeWithProcess(timerExecution, currentProcess, application)))
+
+				.switchIfEmpty(Mono.defer(() -> {
+
+					LOGGER.info("Timer {} cancelled. Current process {} is no longer active.", timerExecution.getId(),
+							currentProcessId);
+
+					timerExecution.setStatus("CANCELLED");
+					timerExecution.setExecutedOn(LocalDateTime.now());
+					timerExecution.setNew(false);
+
+					return timerRepository.save(timerExecution).thenReturn(false);
+				}));
+	}
+
+	private Mono<Boolean> executeWithProcess(TimerTaskExecution timerExecution, CurrentProcess currentProcess,
+			ApplicationDetails application) {
+
+		UserSessionObject user = new UserSessionObject();
+		user.setTenantId(application.getTenantId());
+
+		ServiceMeta serviceMeta = new ServiceMeta();
+
+		serviceMeta.setServiceId(timerExecution.getServiceId());
+
+		serviceMeta.setBaseServiceId(timerExecution.getBaseServiceId());
+
+		serviceMeta.setCurrentProcessId(timerExecution.getCurrentProcessId());
+
+		serviceMeta.setTaskId(timerExecution.getTaskId());
+		
+		serviceMeta.setFormId("");
+
+		return reactiveApiClient.fetchServiceMetadata(user, timerExecution.getServiceId(), "Timer")
+
+				.flatMap(metadata ->
+
+				createTimerTransaction(timerExecution, currentProcess, application, user, serviceMeta)
+
+						.flatMap(txn ->
+
+						executeTimerWorkflow(timerExecution, currentProcess, application, user, metadata, serviceMeta,
+								txn)));
+	}
+
+	
+	private Mono<ProcessingTxn> createTimerTransaction(TimerTaskExecution timerExecution, CurrentProcess currentProcess,
+			ApplicationDetails application, UserSessionObject user, ServiceMeta serviceMeta) {
+
+		return tempTransactionLogService.mergeTransactionLog(serviceMeta, user, null)
+
+				.switchIfEmpty(Mono.error(new RuntimeException("Unable to create transaction.")))
+
+				.flatMap(txnLog ->
+
+				preProcessingFacade.getFormDataAndSaveTxn(serviceMeta, user, null, txnLog,
+						application.getApplicationId(), currentProcess.getDataId(), "FS", false, null, ""));
+	}
+
+	
+	private Mono<Boolean> executeTimerWorkflow(TimerTaskExecution timerExecution, CurrentProcess currentProcess,
+			ApplicationDetails application, UserSessionObject user, ServiceJSONDTO metadata, ServiceMeta serviceMeta,
+			ProcessingTxn txn) {
+
+		Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
+
+		List<String> nextNodeList = new ArrayList<>();
+
+		ServiceProcessFlowDTO processFlow = metadata.getProcessFlowMap();
+
+		Map<String, TaskRelationDTO> taskRelationMap = processFlow.getTaskRelation();
+
+		String currentTask = currentProcess.getCurrentTask();
+
+		ServiceProcessFlowDTO.Data workflowData = processFlow.getData().stream()
+				.filter(data -> data.getNode().getId().equals(currentTask)).findFirst()
+				.orElseThrow(() -> new RuntimeException("Workflow node not found : " + currentTask));
+
+		return Flux.fromIterable(workflowData.getMappedTasks())
+
+				.concatMap(task -> {
+
+					ServiceProcessFlowDTO.Data.Nodes next = task.getNode();
+
+					nextNodeList.add(next.getId());
+
+					return taskAssignmentService.nextAllowedOfficeLocation(processFlow.getData(), next,
+							txn.getTxnId(), timerExecution.getServiceId(), user,
+							taskLocationUserHolderMap, serviceMeta);
+				})
 
 				.then(Mono.defer(() -> {
-					timerExecution.setStatus("EXECUTED");
-					timerExecution.setExecutedOn(new Date());
-					return timerRepository.save(timerExecution).then();
+
+					LOGGER.info("Executing timer workflow. timerId={}, txnId={}, processId={}", timerExecution.getId(),
+							txn.getTxnId(), currentProcess.getProcessId());
+
+					return workflowActionExecutor.execute(application, currentProcess, timerExecution.getActionTaken(),
+							taskLocationUserHolderMap, nextNodeList, metadata, txn,
+							user, serviceMeta, taskRelationMap);
 				}))
 
-				.onErrorResume(ex -> {
-					LOGGER.error("Timer execution failed : {}", timerExecution.getId(), ex);
-
-					timerExecution.setStatus("FAILED");
-
-					return timerRepository.save(timerExecution).then();
-				});
-	}
-
-	private Mono<TimerTaskExecution> markExecuted(TimerTaskExecution timerExecution) {
-		timerExecution.setStatus("EXECUTED");
-		timerExecution.setExecutedOn(new Date());
-		return timerRepository.save(timerExecution);
-	}
-
-	private Mono<TimerTaskExecution> markFailed(TimerTaskExecution timerExecution) {
-		timerExecution.setStatus("FAILED");
-		return timerRepository.save(timerExecution);
+				.thenReturn(true);
 	}
 }

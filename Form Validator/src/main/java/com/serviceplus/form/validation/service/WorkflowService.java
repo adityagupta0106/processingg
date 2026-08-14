@@ -2,6 +2,7 @@ package com.serviceplus.form.validation.service;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_WORKFLOW_REDIS_KEY_APPENDER;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_GATEWAY;
+import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -119,7 +120,7 @@ public class WorkflowService {
         List<CurrentProcess> pList = new ArrayList<>();
 
         Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
-        Map<String, Date> timerDueDate=new HashMap<String, Date>();
+        Map<String, LocalDateTime> timerDueDate=new HashMap<String, LocalDateTime>();
 
         applicationFlowLogs.info("calculateNextWorkflow started txnId={}, currentNode={}, mappedTasks={}",
                 txn.getTxnId(), node.getId(), data.getMappedTasks().size());
@@ -197,50 +198,55 @@ public class WorkflowService {
 
                 .collectList()
 
-                .map(processList -> {
+				.flatMap(processList -> {
 
-                    applicationFlowLogs.info("Workflow processing completed. Generated process count={}",
-                            processList.size());
+					applicationFlowLogs.info("Workflow processing completed. Generated process count={}",
+							processList.size());
 
-                    processList.add(currentActionProcess);
-                    //To add gateway process in current process by checking current action process task having multiple next task
-                    TaskRelationDTO taskRelationDTO = taskRelationMap.get(currentActionProcess.getCurrentTask());
-                    taskRelationDTO.getNextTask().size();
-                    if (taskRelationDTO.getNextTask().size()>1 && !pList.isEmpty()) {
-                        processList.add(pList.getFirst());
-                    }
-                    //
-                    saveTimerTaskExecution(processList,timerDueDate,timerTaskDetails);
-                    InboxKafka inboxKafkaDto = new InboxKafka();
-                    inboxKafkaDto.setProcessList(processList);
-                    inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
-                    inboxKafkaDto.setServiceName(service.getServiceName());
-                    inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
-                    inboxKafkaDto.setServiceName(service.getServiceName());
-                    inboxKafkaDto.setAppliedBy(ad.getBeneficiaryId());
-                    inboxKafkaDto.setBeneficiaryName(ad.getBeneficiaryName());
-                    inboxKafkaDto.setApplyDate(ad.getApplyDate());
-                    inboxKafkaDto.setLoggedInUserId(user.getUserID());
-                    inboxKafkaDto.setLoggedInUserLocation(user.getLocationId());
+					processList.add(currentActionProcess);
 
-                    applicationFlowLogs.info("InboxKafka prepared txnId={}, processCount={}, officeLocationCount={}",
-                            txn.getTxnId(), inboxKafkaDto.getProcessList().size(),
-                            inboxKafkaDto.getOfficeDetails().size());
+					TaskRelationDTO taskRelationDTO = taskRelationMap.get(currentActionProcess.getCurrentTask());
 
-                    applicationFlowLogs.info("Final taskLocationUserHolderMap={}", taskLocationUserHolderMap);
+					if (taskRelationDTO != null && taskRelationDTO.getNextTask() != null
+							&& taskRelationDTO.getNextTask().size() > 1 && !pList.isEmpty()) {
 
-                    return inboxKafkaDto;
-                })
+						processList.add(pList.getFirst());
+					}
 
-                .doOnError(
-                        ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
+					return saveTimerTaskExecution(processList, timerDueDate, timerTaskDetails)
+
+							.then(Mono.fromSupplier(() -> {
+
+								InboxKafka inboxKafkaDto = new InboxKafka();
+
+								inboxKafkaDto.setProcessList(processList);
+								inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
+								inboxKafkaDto.setServiceName(service.getServiceName());
+								inboxKafkaDto.setAppliedBy(ad.getBeneficiaryId());
+								inboxKafkaDto.setBeneficiaryName(ad.getBeneficiaryName());
+								inboxKafkaDto.setApplyDate(ad.getApplyDate());
+								inboxKafkaDto.setLoggedInUserId(user.getUserID());
+								inboxKafkaDto.setLoggedInUserLocation(user.getLocationId());
+
+								applicationFlowLogs.info(
+										"InboxKafka prepared txnId={}, processCount={}, officeLocationCount={}",
+										txn.getTxnId(), inboxKafkaDto.getProcessList().size(),
+										inboxKafkaDto.getOfficeDetails().size());
+
+								applicationFlowLogs.info("Final taskLocationUserHolderMap={}",
+										taskLocationUserHolderMap);
+
+								return inboxKafkaDto;
+							}));
+				}).doOnError(
+						ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
     }
     
-	private void saveTimerTaskExecution(List<CurrentProcess> processList,
-			Map<String, Date> timerDueDate,List<TimerTaskDTO> timerTaskDetails) {
+	private Mono<Void> saveTimerTaskExecution(List<CurrentProcess> processList,
+			Map<String, LocalDateTime> timerDueDate,List<TimerTaskDTO> timerTaskDetails) {
 
 		if (processList == null || processList.isEmpty()) {
-			return;
+			return Mono.empty();
 		}
 
 		List<TimerTaskExecution> timerExecutionList = new ArrayList<>();
@@ -258,7 +264,7 @@ public class WorkflowService {
 			}
 
 			TimerTaskExecution execution = new TimerTaskExecution();
-
+			execution.setId(createUniqueId());
 			execution.setApplicationId(process.getApplicationId());
 			execution.setCurrentProcessId(process.getProcessId());
 			execution.setServiceId(process.getServiceId());
@@ -266,34 +272,44 @@ public class WorkflowService {
 			execution.setTaskId(process.getCurrentTask());
 			execution.setStatus("PENDING");
 			execution.setActionTaken("N");
-			execution.setCreatedOn(new Date());
+			execution.setCreatedOn(LocalDateTime.now());
+			execution.setNew(true);
 
-			Date dueDate = null;
-
+			LocalDateTime dueDate = null;
 
 			if (Integer.valueOf(2).equals(timerTask.getBehaviour())) {
-				Calendar calendar = Calendar.getInstance();
-				if ("Minute".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
-					calendar.add(Calendar.MINUTE, timerTask.getExecutionPeriod());
-				} else if ("Hour".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
-					calendar.add(Calendar.HOUR, timerTask.getExecutionPeriod());
-				} else if ("Day".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
-					calendar.add(Calendar.DATE, timerTask.getExecutionPeriod());
-				}
 
-				dueDate = calendar.getTime();
+			    LocalDateTime now = LocalDateTime.now();
+
+			    if ("Minutes".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
+			        dueDate = now.plusMinutes(timerTask.getExecutionPeriod());
+			    } else if ("Hours".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
+			        dueDate = now.plusHours(timerTask.getExecutionPeriod());
+			    } else if ("Days".equalsIgnoreCase(timerTask.getExecutionPeriodUnit())) {
+			        dueDate = now.plusDays(timerTask.getExecutionPeriod());
+			    }
+
 			} else {
-				dueDate = timerDueDate.get(process.getCurrentTask());
+			    dueDate = timerDueDate.get(process.getCurrentTask());
 			}
 
 			execution.setDueDate(dueDate);
 
 			timerExecutionList.add(execution);
 		}
-
-		if (!timerExecutionList.isEmpty()) {
-			timerTaskExecutionRepository.saveAll(timerExecutionList);
-		}
+		applicationFlowLogs.info("Timer execution records prepared: {}",timerExecutionList.size());
+		if (timerExecutionList.isEmpty()) {
+	        return Mono.empty();
+	    }
+		return timerTaskExecutionRepository
+		            .saveAll(timerExecutionList)
+		            .doOnNext(saved -> applicationFlowLogs.info(
+		                    "Timer execution saved successfully. id={}",
+		                    saved.getId()))
+		            .doOnError(ex -> applicationFlowLogs.error(
+		                    "Failed to save timer execution records",
+		                    ex))
+		            .then();
 	}
 
 }

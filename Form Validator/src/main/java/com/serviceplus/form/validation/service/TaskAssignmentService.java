@@ -25,6 +25,8 @@ import com.serviceplus.form.validation.entity.ProcessingTxn;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_GATEWAY;
 import static java.util.Objects.isNull;
 
+import java.time.LocalDateTime;
+
 @Service
 public class TaskAssignmentService {
 
@@ -172,7 +174,7 @@ public class TaskAssignmentService {
     }
 
     public Mono<Void> executeAfterTaskMvel(UserSessionObject user,ServiceMeta service, ApplicationDetails applicationDetails, ProcessingTxn txn, String appData,
-                                            CurrentProcess currentActionProcess, String taskId, Map<String, Map<String,List<String>>> taskLocationUserHolderMap, Map<String, Date> timerDueDate
+                                            CurrentProcess currentActionProcess, String taskId, Map<String, Map<String,List<String>>> taskLocationUserHolderMap, Map<String, LocalDateTime> timerDueDate
     ) {
 
         return apiClient.fetchMvelDetails(user,service.getServiceId(),txn.getTxnId())

@@ -5,15 +5,17 @@ import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SC
 import java.util.Date;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 @Table(name="workflow_webservice_execution", schema = SP_SCHEMA_NAME)
-public class WorkflowWebServiceExecution {
+public class WorkflowWebServiceExecution implements Persistable<String>{
 
     @Id
     @Column("execution_id")
-    private Long executionId;
+    private String executionId;
 
     @Column("application_id")
     private String applicationId;
@@ -72,11 +74,25 @@ public class WorkflowWebServiceExecution {
     @Column("modified_on")
     private Date modifiedOn;
 
-    public Long getExecutionId() {
+    @Transient
+    private boolean isNew = true;
+
+    @Override
+    @Transient
+    public boolean isNew() {
+        return isNew;
+    }
+    
+    @Override
+	public String getId() {
+		return executionId;
+	}
+    
+    public String getExecutionId() {
         return executionId;
     }
 
-    public void setExecutionId(Long executionId) {
+    public void setExecutionId(String executionId) {
         this.executionId = executionId;
     }
 
@@ -231,4 +247,9 @@ public class WorkflowWebServiceExecution {
     public void setModifiedOn(Date modifiedOn) {
         this.modifiedOn = modifiedOn;
     }
+
+	public void setNew(boolean isNew) {
+		this.isNew = isNew;
+	}
+	
 }

@@ -5,15 +5,17 @@ import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SC
 import java.util.Date;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
 
 
 
 @Table(name="workflow_escalation", schema = SP_SCHEMA_NAME)
-public class WorkflowEscalation {
+public class WorkflowEscalation implements Persistable<String>{
 
     @Id
-    private Long id;
+    private String id;
 
     private String applicationId;
 
@@ -38,12 +40,22 @@ public class WorkflowEscalation {
     private Date createdOn;
 
     private Date modifiedOn;
+    
+    @Transient
+    private boolean isNew = true;
 
-	public Long getId() {
-		return id;
-	}
+    @Override
+    public String getId() {
+        return id;
+    }
 
-	public void setId(Long id) {
+    @Override
+    @Transient
+    public boolean isNew() {
+        return isNew;
+    }
+
+	public void setId(String id) {
 		this.id = id;
 	}
 
@@ -142,6 +154,9 @@ public class WorkflowEscalation {
 	public void setModifiedOn(Date modifiedOn) {
 		this.modifiedOn = modifiedOn;
 	}
-    
+
+	public void setNew(boolean isNew) {
+		this.isNew = isNew;
+	}    
 
 }
