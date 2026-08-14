@@ -76,7 +76,7 @@ public class GatewayService {
             CurrentProcess baseProcess,
             List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
             Map<String, Map<String,List<String>>> taskLocationUserHolderMap,
-            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow, Map<String, Date> timerDueDate,Map<String,TaskRelationDTO> taskRelationMap){
+            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow, Map<String, LocalDateTime> timerDueDate,Map<String,TaskRelationDTO> taskRelationMap){
 
 
             applicationFlowLogs.info(
@@ -247,7 +247,7 @@ public class GatewayService {
 			CurrentProcess currentActionProcess, CurrentProcess baseProcess,
 			List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
 			Map<String, TaskRelationDTO> taskRelationMap,
-			Map<String, Map<String, List<String>>> taskLocationUserHolderMap, Map<String, Date> timerDueDate) {
+			Map<String, Map<String, List<String>>> taskLocationUserHolderMap, Map<String, LocalDateTime> timerDueDate) {
 
         String behaviour = gatewayNode.getBehaviour();
 
@@ -346,7 +346,7 @@ public class GatewayService {
             CurrentProcess currentActionProcess,
             String gatewayId,
             Map<String, Map<String, List<String>>> taskLocationUserHolderMap,
-            Map<String, Date> timerDueDate) {
+            Map<String, LocalDateTime> timerDueDate) {
 
         applicationFlowLogs.info(
                 "Executing Convergent Gateway MVEL for txnId={}, gatewayId={}, taskLocationUserHolderMap={}",
@@ -585,7 +585,7 @@ public class GatewayService {
             String gatewayId,
             List<ServiceProcessFlowDTO.Data.MappedTask> nextToGateway,
             Map<String, Map<String, List<String>>> taskLocationUserHolderMap,
-            Map<String, Date> timerDueDate
+            Map<String, LocalDateTime> timerDueDate
 
     ) {
 

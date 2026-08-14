@@ -2,16 +2,18 @@ package com.serviceplus.form.validation.entity;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
 import org.springframework.data.relational.core.mapping.Table;
 
 @Table(name = "timer_task_execution", schema = SP_SCHEMA_NAME)
-public class TimerTaskExecution {
+public class TimerTaskExecution implements Persistable<String>{
 
     @Id
-    private Long id;
+    private String id;
 
     private String applicationId;
 
@@ -23,22 +25,31 @@ public class TimerTaskExecution {
 
     private String taskId;
     
-    private Date dueDate;
+    private LocalDateTime dueDate;
 
     private String status;
 
     private String actionTaken;
     
-    private Date createdOn;
+    private LocalDateTime createdOn;
 
-    private Date executedOn;
+    private LocalDateTime executedOn;
     
+    @Transient
+    private boolean isNew = true;
+
+    @Override
+    @Transient
+    public boolean isNew() {
+        return isNew;
+    }
     
-	public Long getId() {
+    @Override
+	public String getId() {
 		return id;
 	}
 
-	public void setId(Long id) {
+	public void setId(String id) {
 		this.id = id;
 	}
 
@@ -82,13 +93,6 @@ public class TimerTaskExecution {
 		this.taskId = taskId;
 	}
 
-	public Date getDueDate() {
-		return dueDate;
-	}
-
-	public void setDueDate(Date dueDate) {
-		this.dueDate = dueDate;
-	}
 
 	public String getStatus() {
 		return status;
@@ -105,20 +109,32 @@ public class TimerTaskExecution {
 	public void setActionTaken(String actionTaken) {
 		this.actionTaken = actionTaken;
 	}
+	
+	public LocalDateTime getDueDate() {
+		return dueDate;
+	}
 
-	public Date getCreatedOn() {
+	public void setDueDate(LocalDateTime dueDate) {
+		this.dueDate = dueDate;
+	}
+
+	public LocalDateTime getCreatedOn() {
 		return createdOn;
 	}
 
-	public void setCreatedOn(Date createdOn) {
+	public void setCreatedOn(LocalDateTime createdOn) {
 		this.createdOn = createdOn;
 	}
 
-	public Date getExecutedOn() {
+	public LocalDateTime getExecutedOn() {
 		return executedOn;
 	}
 
-	public void setExecutedOn(Date executedOn) {
+	public void setExecutedOn(LocalDateTime executedOn) {
 		this.executedOn = executedOn;
+	}
+
+	public void setNew(boolean isNew) {
+		this.isNew = isNew;
 	}
 }

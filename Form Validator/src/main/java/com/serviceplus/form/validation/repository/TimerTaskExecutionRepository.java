@@ -1,6 +1,6 @@
 package com.serviceplus.form.validation.repository;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
@@ -11,9 +11,9 @@ import reactor.core.publisher.Flux;
 
 @Repository
 public interface TimerTaskExecutionRepository
-        extends ReactiveCrudRepository<TimerTaskExecution, Long> {
+        extends ReactiveCrudRepository<TimerTaskExecution, String> {
 
     Flux<TimerTaskExecution> findByStatusAndDueDateLessThanEqual(
             String status,
-            Date dueDate);
+            LocalDateTime now);
 }

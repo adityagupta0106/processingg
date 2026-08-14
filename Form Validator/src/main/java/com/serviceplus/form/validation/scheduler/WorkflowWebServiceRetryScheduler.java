@@ -17,7 +17,7 @@ public class WorkflowWebServiceRetryScheduler {
         this.schedulerService = schedulerService;
     }
 
-    @Scheduled(cron = "0 0 * * * *")
+    //@Scheduled(cron = "0 0 * * * *")
     public void retry() {
     	log.info("Workflow Web Service Retry Scheduler started.");
         try {

@@ -12,7 +12,7 @@ import reactor.core.publisher.Mono;
 
 @Repository
 public interface WorkflowWebServiceExecutionRepository
-        extends ReactiveCrudRepository<WorkflowWebServiceExecution, Long> {
+        extends ReactiveCrudRepository<WorkflowWebServiceExecution, String> {
 
     Mono<WorkflowWebServiceExecution> findByStatusInAndNextRetryTimeLessThanEqual(
             List<String> status,

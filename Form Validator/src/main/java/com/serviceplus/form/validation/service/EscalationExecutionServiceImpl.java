@@ -61,7 +61,7 @@ public class EscalationExecutionServiceImpl implements EscalationExecutionServic
 		String escalationCPId=escalation.getCurrentProcessId();
 		return escalationRepository.save(escalation)
 
-				.then(applicationCurrentProcessRepository.findByIdAndActionTaken(escalation.getCurrentProcessId(), "N"))
+				.then(applicationCurrentProcessRepository.findByProcessIdAndActionTaken(escalation.getCurrentProcessId(), "N"))
 
 				.switchIfEmpty(Mono.defer(() -> {
 

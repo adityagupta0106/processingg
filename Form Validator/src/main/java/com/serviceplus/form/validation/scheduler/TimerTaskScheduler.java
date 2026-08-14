@@ -12,7 +12,7 @@ import com.serviceplus.form.validation.service.TimerTaskExecutionService;
 @Component
 public class TimerTaskScheduler {
 
-	private static final Logger LOGGER = LogManager.getLogger(TimerTaskScheduler.class);
+	private static final Logger applicationFlowLogger = LogManager.getLogger("applicationFlowLogger");
 
 	private final TimerTaskExecutionService timerTaskExecutionService;
 
@@ -23,8 +23,8 @@ public class TimerTaskScheduler {
 	@Scheduled(cron = "0 */15 * * * *")
 	public void executeTimerTasks() {
 
-		LOGGER.info("Timer Scheduler started at {}", new Date());
-		timerTaskExecutionService.processPendingTimers().doOnSuccess(v -> LOGGER.info("Timer Scheduler completed"))
-				.doOnError(ex -> LOGGER.error("Timer Scheduler failed", ex)).subscribe();
+		applicationFlowLogger.info("Timer Scheduler started at {}", new Date());
+		timerTaskExecutionService.processPendingTimers().doOnSuccess(v -> applicationFlowLogger.info("Timer Scheduler completed"))
+				.doOnError(ex -> applicationFlowLogger.error("Timer Scheduler failed", ex)).subscribe();
 	}
 }

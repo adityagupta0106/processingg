@@ -32,8 +32,8 @@ public class TempTransactionLogService {
             if(flag){
                 return Mono.just(logs);
             }
-            else{
-                return null;
+            else {
+                return Mono.empty();
             }
         });
     }
