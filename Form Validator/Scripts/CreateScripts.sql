@@ -209,31 +209,7 @@ alter table schm_sp.application_document_log add column tenant_id character vary
 alter table schm_sp.application_document_merge add column tenant_id character varying;
 alter table schm_sp.application_document_submission add column tenant_id character varying;
 
--- timer_task_execution
-ALTER TABLE IF EXISTS schm_sp.timer_task_execution DROP COLUMN IF EXISTS id;
-
-ALTER TABLE IF EXISTS schm_sp.timer_task_execution
-    ADD COLUMN id character varying NOT NULL;
-ALTER TABLE IF EXISTS schm_sp.timer_task_execution
-    ADD PRIMARY KEY (id);
     
- -- workflow_escalation   
-ALTER TABLE IF EXISTS schm_sp.workflow_escalation
-    DROP COLUMN IF EXISTS id;
-
-ALTER TABLE IF EXISTS schm_sp.workflow_escalation
-    ADD COLUMN id character varying NOT NULL;
-
-ALTER TABLE IF EXISTS schm_sp.workflow_escalation
-    ADD PRIMARY KEY (id);
-
-
--- workflow_webservice_execution
-ALTER TABLE IF EXISTS schm_sp.workflow_webservice_execution
-    DROP COLUMN IF EXISTS execution_id;
-
-ALTER TABLE IF EXISTS schm_sp.workflow_webservice_execution
-    ADD COLUMN execution_id character varying NOT NULL;
-
-ALTER TABLE IF EXISTS schm_sp.workflow_webservice_execution
-    ADD PRIMARY KEY (execution_id);
+ALTER TABLE IF EXISTS schm_sp.timer_task_execution   ALTER COLUMN id type character varying ;
+ALTER TABLE IF EXISTS schm_sp.workflow_escalation   ALTER COLUMN id type character varying ;
+ALTER TABLE IF EXISTS schm_sp.workflow_webservice_execution   ALTER COLUMN execution_id type character varying ;
