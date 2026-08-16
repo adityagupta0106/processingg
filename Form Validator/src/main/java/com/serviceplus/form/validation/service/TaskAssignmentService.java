@@ -62,104 +62,123 @@ public class TaskAssignmentService {
                                                                     : serviceMeta.getSelectedWorkflowElementData().getUserAttribute().getUserNodes();
 
 
-        if (!isNull(userNodes) && !userNodes.isEmpty() && !next.getType().equals(TYPE_GATEWAY)) {
-
-            applicationFlowLogs.info("Using holderIds from workflow metadata for txnId={}, taskId={}", txnId, next.getId());
-
-            Map<String, List<String>> locationHolderMap =
-                    taskLocationHolderMap.computeIfAbsent(next.getId(), k -> new HashMap<>());
-
-            userNodes.stream()
-                    .filter(u -> u.getTaskId().equals(next.getId()))
-                    .forEach(u ->
-                            locationHolderMap
-                                    .computeIfAbsent(String.valueOf(u.getLocationId()), k -> new ArrayList<>())
-                                    .add(u.getHolderId()));
-
-            locationHolderMap.replaceAll((k, v) ->
-                    v.stream().filter(Objects::nonNull).distinct().toList());
-
-            allowedOffices.forEach(office ->
-                    office.setHolderIds(
-                            locationHolderMap.getOrDefault(
-                                    String.valueOf(office.getOrgUnitCode()),
-                                    List.of())));
-
-            location.setAllowedOffices(allowedOffices);
-
-            return Mono.just(location);
-        }
 
         location.setAllowedOffices(allowedOffices);
 
-        return Flux.fromIterable(allowedOffices)
+		return Flux.fromIterable(allowedOffices)
 
-                .doOnNext(office -> applicationFlowLogs.info("Fetching workflow assignments for txnId={}, taskId={}, locationId={}", txnId, next.getId(), office.getOrgUnitCode()))
+				.doOnNext(office -> applicationFlowLogs.info(
+						"Fetching workflow assignments for txnId={}, taskId={}, locationId={}", txnId, next.getId(),
+						office.getOrgUnitCode()))
 
-                .flatMap(office -> apiClient.fetchWorkflowAssignments(serviceId, next.getId(), office.getOrgUnitCode().toString(), user, txnId))
+				.flatMap(office -> apiClient.fetchWorkflowAssignments(serviceId, next.getId(),
+						office.getOrgUnitCode().toString(), user, txnId))
 
-                .doOnNext(assignments -> applicationFlowLogs.info(
-                        "Workflow assignments received for txnId={}, taskId={} : {}", txnId, next.getId(), assignments))
+				.doOnNext(assignments -> applicationFlowLogs.info(
+						"Workflow assignments received for txnId={}, taskId={} : {}", txnId, next.getId(), assignments))
 
-                .flatMapIterable(assignments -> assignments)
-                .doOnNext(assignment -> applicationFlowLogs.info("Assignment -> locationId={}, holderId={}", assignment.getLocationId(), assignment.getHolderId()))
+				.flatMapIterable(assignments -> assignments)
 
-                .collectList()
-                .map(assignments -> {
+				.doOnNext(assignment -> applicationFlowLogs.info("Assignment -> locationId={}, holderId={}",
+						assignment.getLocationId(), assignment.getHolderId()))
 
-                    applicationFlowLogs.info("Total assignments fetched for txnId={}, taskId={} : {}", txnId, next.getId(), assignments.size());
+				.collectList()
 
-                    Map<String, List<String>> locationHolderMap = taskLocationHolderMap.computeIfAbsent(next.getId(), k -> new HashMap<>());
+				.map(assignments -> {
 
-                    assignments.stream().filter(a -> a.getLocationId() != null).forEach(a -> {
+					applicationFlowLogs.info("Total assignments fetched for txnId={}, taskId={} : {}", txnId,
+							next.getId(), assignments.size());
 
-                        applicationFlowLogs.info("Adding holderId={} for locationId={} taskId={}", a.getHolderId(), a.getLocationId(), next.getId());
-                        locationHolderMap.computeIfAbsent(a.getLocationId(), k -> new ArrayList<>()).add(a.getHolderId());
-                    });
+					Map<String, List<String>> locationHolderMap = taskLocationHolderMap.computeIfAbsent(next.getId(),
+							k -> new HashMap<>());
 
-                    applicationFlowLogs.info("Location holder map before duplicate removal for taskId={} : {}",
-                            next.getId(), locationHolderMap);
+					/*
+					 * First fetch workflow assignments. After that, if workflow metadata contains
+					 * userNodes for this task and the task is not a gateway, use those holderIds.
+					 */
+					if (userNodes != null && !userNodes.isEmpty() && !TYPE_GATEWAY.equals(next.getType())) {
 
-                    locationHolderMap.replaceAll(
-                            (locationId, holders) -> holders.stream().filter(Objects::nonNull).distinct().toList());
+						applicationFlowLogs.info("Using holderIds from workflow metadata after fetching assignments. "
+								+ "txnId={}, taskId={}", txnId, next.getId());
 
-                    applicationFlowLogs.info("Location holder map after duplicate removal for taskId={} : {}",
-                            next.getId(), locationHolderMap);
+						userNodes.stream().filter(Objects::nonNull).filter(u -> next.getId().equals(u.getTaskId()))
+								.forEach(u -> {
 
-                    location.getAllowedOffices().forEach(office -> {
+									String locationId = String.valueOf(u.getLocationId());
 
-                        String officeId = office.getOrgUnitCode().toString();
+									applicationFlowLogs.info("Adding metadata holderId={} for locationId={} taskId={}",
+											u.getHolderId(), locationId, next.getId());
 
-                        List<String> holderIds = locationHolderMap.getOrDefault(officeId, List.of());
+									locationHolderMap.computeIfAbsent(locationId, k -> new ArrayList<>())
+											.add(u.getHolderId());
+								});
 
-                        office.setHolderIds(holderIds);
+					} else {
 
-                        applicationFlowLogs.info("Mapped office locationId={} with holderIds={} for taskId={}",
-                                officeId, holderIds, next.getId());
-                    });
+						/*
+						 * No workflow metadata holder information available. Use holderIds returned by
+						 * workflow assignment API.
+						 */
+						applicationFlowLogs.info("Using holderIds from workflow assignments for txnId={}, taskId={}",
+								txnId, next.getId());
 
-                    applicationFlowLogs.info("Final taskLocationHolderMap for txnId={}, taskId={} : {}", txnId,
-                            next.getId(), taskLocationHolderMap);
+						assignments.stream().filter(Objects::nonNull).filter(a -> a.getLocationId() != null)
+								.forEach(a -> {
 
-                    applicationFlowLogs.info("Final TaskAvailableOfficeLocation for txnId={}, taskId={} : {}", txnId,
-                            next.getId(), location);
+									applicationFlowLogs.info(
+											"Adding assignment holderId={} for locationId={} taskId={}",
+											a.getHolderId(), a.getLocationId(), next.getId());
 
-                    return location;
-                })
+									locationHolderMap.computeIfAbsent(a.getLocationId(), k -> new ArrayList<>())
+											.add(a.getHolderId());
+								});
+					}
 
-                .defaultIfEmpty(location)
+					/*
+					 * Remove null and duplicate holder IDs.
+					 */
+					locationHolderMap.replaceAll(
+							(locationId, holders) -> holders.stream().filter(Objects::nonNull).distinct().toList());
 
-                .doOnSuccess(result -> applicationFlowLogs.info(
-                        "Completed nextAllowedOfficeLocation for txnId={}, taskId={}, result={}", txnId, next.getId(),
-                        result))
+					applicationFlowLogs.info("Final locationHolderMap for txnId={}, taskId={} : {}", txnId,
+							next.getId(), locationHolderMap);
 
-                .onErrorResume(ex -> {
+					/*
+					 * Map holderIds to allowed offices.
+					 */
+					location.getAllowedOffices().forEach(office -> {
 
-                    applicationFlowLogs.error("Error fetching workflow assignments for txnId={}, taskId={}", txnId,
-                            next.getId(), ex);
+						String officeId = String.valueOf(office.getOrgUnitCode());
 
-                    return Mono.just(location);
-                });
+						List<String> holderIds = locationHolderMap.getOrDefault(officeId, List.of());
+
+						office.setHolderIds(holderIds);
+
+						applicationFlowLogs.info("Mapped office locationId={} with holderIds={} for taskId={}",
+								officeId, holderIds, next.getId());
+					});
+
+					location.setAllowedOffices(allowedOffices);
+
+					applicationFlowLogs.info("Final TaskAvailableOfficeLocation for txnId={}, taskId={} : {}", txnId,
+							next.getId(), location);
+
+					return location;
+				})
+
+				.defaultIfEmpty(location)
+
+				.doOnSuccess(result -> applicationFlowLogs.info(
+						"Completed nextAllowedOfficeLocation for txnId={}, taskId={}, result={}", txnId, next.getId(),
+						result))
+
+				.onErrorResume(ex -> {
+
+					applicationFlowLogs.error("Error fetching workflow assignments for txnId={}, taskId={}", txnId,
+							next.getId(), ex);
+
+					return Mono.just(location);
+				});
     }
 
     public ServiceMeta.AvailableApplyLocations mapAvailableLocation(OfficeDetailsDTO.OfficeUnitData office) {
