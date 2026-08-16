@@ -191,46 +191,50 @@ public class ApplicationGenerationService {
                                                         .orElse(Collections.emptyList());
 
                                         return applicationDocumentSubmissionRepository
-                                                .findByApplicationIdAndTxnIdAndTaskIdAndStatus(
+                                                .findByApplicationIdAndTaskIdAndStatusOrderByCreatedOnDesc(
                                                         ad.getApplicationId(),
-                                                        savedLog.getTxnId(),
                                                         service.getTaskId(),
                                                         "P")
-                                                .map(entity -> {
-
-                                                    TrackingDocument document = new TrackingDocument();
-
-                                                    document.setUploadId(entity.getUploadId());
-                                                    document.setReferenceId(entity.getReferenceId());
-                                                    document.setDocumentName(entity.getDocumentName());
-
-                                                    // Find metadata using document referenceId
-                                                    documentMappings.stream()
-                                                            .filter(mapping ->
-                                                                    mapping.getReferenceId() != null
-                                                                            && mapping.getReferenceId()
-                                                                            .equals(entity.getReferenceId()))
-                                                            .findFirst()
-                                                            .ifPresent(mapping -> {
-
-                                                                document.setViewPermission(
-                                                                        mapping.getViewPermission()
-                                                                );
-
-                                                                applicationFlowLogs.info(
-                                                                        "TxnId : {} | Document referenceId: {} | ViewPermission: {}",
-                                                                        savedLog.getTxnId(),
-                                                                        entity.getReferenceId(),
-                                                                        mapping.getViewPermission()
-                                                                );
-                                                            });
-
-                                                    return document;
-                                                })
                                                 .collectList()
-                                                .map(documents -> {
+                                                .flatMap(allDocuments -> {
+
+                                                    if (allDocuments.isEmpty()) {
+                                                        cp.setDocuments(Collections.emptyList());
+                                                        return Mono.just(cp);
+                                                    }
+
+                                                    String latestTxnId = allDocuments.getFirst().getTxnId();
+
+                                                    List<TrackingDocument> documents = allDocuments.stream()
+                                                            .filter(entity ->
+                                                                    latestTxnId.equals(entity.getTxnId()))
+                                                            .map(entity -> {
+
+                                                                TrackingDocument document = new TrackingDocument();
+
+                                                                document.setUploadId(entity.getUploadId());
+                                                                document.setReferenceId(entity.getReferenceId());
+                                                                document.setDocumentName(entity.getDocumentName());
+
+                                                                documentMappings.stream()
+                                                                        .filter(mapping ->
+                                                                                mapping.getReferenceId() != null && mapping.getReferenceId().equals(entity.getReferenceId())
+                                                                        )
+                                                                        .findFirst()
+                                                                        .ifPresent(mapping -> {
+
+                                                                            document.setViewPermission(mapping.getViewPermission());
+                                                                            applicationFlowLogs.info("TxnId : {} | DocumentTxnId : {} | ReferenceId : {} | ViewPermission : {}", savedLog.getTxnId(), entity.getTxnId(), entity.getReferenceId(), mapping.getViewPermission());
+                                                                        });
+
+                                                                return document;
+                                                            })
+                                                            .toList();
+
+                                                    applicationFlowLogs.info("TxnId : {} | ApplicationId : {} | TaskId : {} | Latest document transaction : {} | Documents : {}", savedLog.getTxnId(), ad.getApplicationId(), service.getTaskId(), latestTxnId, documents.size());
+
                                                     cp.setDocuments(documents);
-                                                    return cp;
+                                                    return Mono.just(cp);
                                                 });
                                     });
 

@@ -22,4 +22,6 @@ public interface ApplicationDocumentSubmissionRepository extends ReactiveCrudRep
     Mono<ApplicationDocumentSubmissionEntity> findFirstByApplicationIdAndTaskIdAndReferenceIdAndStatusOrderByCreatedOnDesc(String applicationId, String linkedTaskId, String linkedReferenceId, String p);
 
     Flux<ApplicationDocumentSubmissionEntity> findByApplicationIdAndTxnIdAndTaskIdAndStatus(String applicationId, String txnId, String taskId, String p);
+
+    Flux<ApplicationDocumentSubmissionEntity> findByApplicationIdAndTaskIdAndStatusOrderByCreatedOnDesc(String applicationId, String taskId, String p);
 }
