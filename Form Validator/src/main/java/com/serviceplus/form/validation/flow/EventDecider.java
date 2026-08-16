@@ -25,6 +25,8 @@ import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 import static com.serviceplus.form.validation.utility.Utility.populateActionAndLocation;
 import static java.util.Objects.isNull;
 
+import java.math.BigDecimal;
+
 @Service
 public class EventDecider {
 
@@ -373,8 +375,9 @@ public class EventDecider {
                 users.forEach(userData -> {
 
                     Object holderId = userData.get("value");
+                    Object locationId = userData.get("locationId");
 
-                    if (holderId == null) {
+                    if (holderId == null || locationId==null) {
                         return;
                     }
 
@@ -384,6 +387,15 @@ public class EventDecider {
                     userNode.setHolderId(String.valueOf(holderId));
                     Object holderName = userData.get("label");
                     userNode.setHolderName(holderName != null ? String.valueOf(holderName) : null);
+                    Long locationIdLong;
+
+                    if (locationId instanceof Number) {
+                        locationIdLong = ((Number) locationId).longValue();
+                    } else {
+                        locationIdLong = new BigDecimal(locationId.toString()).longValue();
+                    }
+
+                    userNode.setLocationId(locationIdLong);
                     selectedUserNodes.add(userNode);
                 });
             });
