@@ -315,7 +315,7 @@ public class GatewayService {
                                 user,
                                 now,
                                 taskAvailableOfficeLocations,
-                                currentActionProcess,workflow);
+                                currentActionProcess,workflow,taskLocationUserHolderMap);
                     });
         }
 
@@ -334,7 +334,7 @@ public class GatewayService {
                 user,
                 now,
                 taskAvailableOfficeLocations,
-                currentActionProcess,workflow);
+                currentActionProcess,workflow,taskLocationUserHolderMap);
     }
     
     private Mono<MvelExecutionResponse> executeConvergentGatewayMvel(
@@ -510,7 +510,8 @@ public class GatewayService {
             UserSessionObject user,
             LocalDateTime now,
             List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
-            CurrentProcess currentActionProcess,List<ServiceProcessFlowDTO.Data> workflow) {
+            CurrentProcess currentActionProcess,
+            List<ServiceProcessFlowDTO.Data> workflow, Map<String, Map<String, List<String>>> taskLocationUserHolderMap) {
 
         ConvergentGatewayHandler handler =
                 convergentGatewayFactory.getHandler(behaviour);
@@ -522,6 +523,7 @@ public class GatewayService {
                         txn.getApplicationId(),
                         service.getServiceId(),
                         ad.getTenantId())
+
                 .flatMapMany(canProceed -> {
 
                     if (!canProceed) {
@@ -534,16 +536,98 @@ public class GatewayService {
                         return Flux.empty();
                     }
 
-                    return completeConvergentGateway(
-                            gatewayNode,
-                            nextToGatewayData,
-                            service,
-                            ad,
-                            txn,
-                            user,
-                            now,
-                            gatewayProcess,
-                            taskAvailableOfficeLocations,workflow);
+                    applicationFlowLogs.info(
+                            "Convergent gateway can proceed. gatewayId={}, behaviour={}",
+                            gatewayNode.getId(),
+                            behaviour);
+
+                    List<ServiceProcessFlowDTO.Data.MappedTask> nextMappedTasks =
+                            nextToGatewayData != null
+                                    ? nextToGatewayData.getMappedTasks()
+                                    : null;
+
+                    if (nextMappedTasks == null || nextMappedTasks.isEmpty()) {
+
+                        applicationFlowLogs.warn(
+                                "No next task found after convergent gateway. gatewayId={}",
+                                gatewayNode.getId());
+
+                        return Flux.empty();
+                    }
+
+                    if (nextMappedTasks.size() > 1) {
+
+                        applicationFlowLogs.error(
+                                "Multiple next tasks found after convergent gateway. "
+                                        + "gatewayId={}, nextTasks={}",
+                                gatewayNode.getId(),
+                                nextMappedTasks.stream()
+                                        .map(t -> t.getNode().getId())
+                                        .toList());
+
+                        return Flux.error(new SPRuntimeError(
+                                "Multiple next tasks are not allowed after convergent gateway",
+                                HttpStatus.BAD_REQUEST,
+                                txn.getTxnId()));
+                    }
+
+                    ServiceProcessFlowDTO.Data.Nodes nextNode =
+                            nextMappedTasks.get(0).getNode();
+
+                    applicationFlowLogs.info(
+                            "Resolving office location for convergent gateway next task. "
+                                    + "gatewayId={}, nextTaskId={}",
+                            gatewayNode.getId(),
+                            nextNode.getId());
+
+                    /*
+                     * Resolve office location for NEXT TASK.
+                     */
+                    return taskAssignmentService
+                            .nextAllowedOfficeLocation(
+                                    workflow,
+                                    nextNode,
+                                    txn.getTxnId(),
+                                    service.getServiceId(),
+                                    user,
+                                    taskLocationUserHolderMap,
+                                    service)
+
+                            .flatMapMany(nextTaskLocation -> {
+
+                                if (nextTaskLocation != null) {
+
+                                    applicationFlowLogs.info(
+                                            "Next task office location resolved. "
+                                                    + "gatewayId={}, nextTaskId={}, location={}",
+                                            gatewayNode.getId(),
+                                            nextNode.getId(),
+                                            nextTaskLocation);
+
+                                    /*
+                                     * Refresh location using latest holder map.
+                                     */
+                                    taskAssignmentService
+                                            .refreshTaskAvailableOfficeLocation(
+                                                    nextTaskLocation,
+                                                    taskLocationUserHolderMap);
+
+                                    taskAvailableOfficeLocations.add(
+                                            nextTaskLocation);
+                                }
+
+                                return completeConvergentGateway(
+                                        gatewayNode,
+                                        nextToGatewayData,
+                                        service,
+                                        ad,
+                                        txn,
+                                        user,
+                                        now,
+                                        gatewayProcess,
+                                        taskAvailableOfficeLocations,
+                                        workflow);
+                            });
                 });
     }
 
