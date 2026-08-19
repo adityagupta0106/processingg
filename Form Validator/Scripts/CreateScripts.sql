@@ -213,3 +213,5 @@ alter table schm_sp.application_document_submission add column tenant_id charact
 ALTER TABLE IF EXISTS schm_sp.timer_task_execution   ALTER COLUMN id type character varying ;
 ALTER TABLE IF EXISTS schm_sp.workflow_escalation   ALTER COLUMN id type character varying ;
 ALTER TABLE IF EXISTS schm_sp.workflow_webservice_execution   ALTER COLUMN execution_id type character varying ;
+
+ALTER TABLE IF EXISTS schm_sp.application_details ADD COLUMN is_priority boolean  NOT NULL DEFAULT false;
