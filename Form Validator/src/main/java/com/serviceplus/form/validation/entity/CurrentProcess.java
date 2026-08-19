@@ -71,6 +71,9 @@ public class CurrentProcess implements Persistable<String> {
     @Transient
     private List<TrackingDocument> documents;
 
+    @Transient
+    private Boolean isPriority;
+
     @Override
     @Transient
     public boolean isNew() {
@@ -281,5 +284,13 @@ public class CurrentProcess implements Persistable<String> {
     public void setDocuments(List<TrackingDocument> documents) {
         this.documents = documents;
     }
+
+	public Boolean getIsPriority() {
+		return isPriority;
+	}
+
+	public void setIsPriority(Boolean isPriority) {
+		this.isPriority = isPriority;
+	}
 }
 

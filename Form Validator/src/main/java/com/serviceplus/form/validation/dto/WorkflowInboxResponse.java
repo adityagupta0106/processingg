@@ -43,6 +43,8 @@ public class WorkflowInboxResponse {
     private List<String> locations;
 
     private String receivedDate;
+    
+    private Boolean isPriority;
 
     public String getApplId() {
         return applId;
@@ -163,4 +165,12 @@ public class WorkflowInboxResponse {
     public void setReceivedDate(String receivedDate) {
         this.receivedDate = receivedDate;
     }
+
+	public Boolean getIsPriority() {
+		return isPriority;
+	}
+
+	public void setIsPriority(Boolean isPriority) {
+		this.isPriority = isPriority;
+	}
 }

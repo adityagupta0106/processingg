@@ -49,6 +49,8 @@ public class ServiceProcessFlowDTO {
 
             private UserAttribute userAttribute;
 
+            private Boolean priorityEnabled;
+            
             public List<ActionAttribute> getActionAttribute() {
                 return actionAttribute;
             }
@@ -72,6 +74,15 @@ public class ServiceProcessFlowDTO {
             public void setUserAttribute(UserAttribute userAttribute) {
                 this.userAttribute = userAttribute;
             }
+
+			public Boolean getPriorityEnabled() {
+				return priorityEnabled;
+			}
+
+			public void setPriorityEnabled(Boolean priorityEnabled) {
+				this.priorityEnabled = priorityEnabled;
+			}
+
         }
 
         public static class ActionAttribute {

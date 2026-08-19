@@ -44,6 +44,7 @@ public class CurrentProcessBuilder {
         cp.setTenantId(user.getTenantId());
         cp.setBaseServiceId(service.getBaseServiceId());
         cp.setFormId(currentTask.getFormId());
+        cp.setIsPriority(ad.getIsPriority());
 
         if (TYPE_GATEWAY.equals(currentTask.getType())) {
             cp.setActionTaken("Y");
