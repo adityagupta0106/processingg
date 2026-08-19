@@ -27,6 +27,7 @@ public class ApplicationDetails implements Persistable<String> {
     private Long beneficiaryId;
     private String tenantId;
     private String serviceName;
+    private Boolean isPriority;
 
     public ApplicationDetails(){}
 
@@ -175,4 +176,12 @@ public class ApplicationDetails implements Persistable<String> {
     public void setServiceName(String serviceName) {
         this.serviceName = serviceName;
     }
+
+	public Boolean getIsPriority() {
+		return isPriority;
+	}
+
+	public void setIsPriority(Boolean isPriority) {
+		this.isPriority = isPriority;
+	}
 }

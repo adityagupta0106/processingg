@@ -46,6 +46,8 @@ public class ServiceMeta {
     private Object previousHandlerData;
 
     List<WorkFlowDataDTO.WorkFlowAction> availableActions;
+    
+    private Boolean isPriority=false;
 
     public DocumentGenerationDetails getDocumentGenerationDetails() {
         return documentGenerationDetails;
@@ -258,4 +260,12 @@ public class ServiceMeta {
     public void setAvailableActions(List<WorkFlowDataDTO.WorkFlowAction> availableActions) {
         this.availableActions = availableActions;
     }
+
+	public Boolean getIsPriority() {
+		return isPriority;
+	}
+
+	public void setIsPriority(Boolean isPriority) {
+		this.isPriority = isPriority;
+	}
 }

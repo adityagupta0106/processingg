@@ -3,6 +3,12 @@ package com.serviceplus.form.validation.service;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_SUBMISSION_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.OFFICIAL_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+import static com.serviceplus.form.validation.utility.Utility.decryptServiceKeys;
+import static com.serviceplus.form.validation.utility.Utility.encryptServiceKeys;
+import static com.serviceplus.form.validation.utility.Utility.encryptWorkflowKey;
+import static com.serviceplus.form.validation.utility.Utility.getClientIpAddr;
+import static com.serviceplus.form.validation.utility.Utility.isEmpty;
+import static java.util.Objects.isNull;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -13,23 +19,31 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.*;
-import com.serviceplus.form.validation.entity.*;
-import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.server.ServerResponse;
 
+import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.FormPreparationContext;
+import com.serviceplus.form.validation.dto.HandlerResponse;
+import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
+import com.serviceplus.form.validation.dto.ServerSidePaginationRecord;
+import com.serviceplus.form.validation.dto.ServiceMeta;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.dto.WorkflowInboxResponse;
+import com.serviceplus.form.validation.entity.ApplicationDetails;
+import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
+import com.serviceplus.form.validation.entity.ProcessingTxn;
+import com.serviceplus.form.validation.entity.TempTransactionLogs;
+import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
+import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 
-import static com.serviceplus.form.validation.utility.Utility.*;
-import static java.util.Objects.isNull;
-
-import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 @Service
@@ -52,6 +66,9 @@ public class PreProcessingFacade {
 
     @Autowired
     private TransactionalDBExecutor transactionalDBExecutor;
+
+    @Autowired
+    private ApplicationDetailsRepository applicationDetailsRepository;
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
@@ -157,6 +174,7 @@ public class PreProcessingFacade {
         //applicationDetails.setAppliedLocationId(service.getLocations().getFirst().getOrgUnitCode().intValue());
         //applicationDetails.setAppliedLocationName(service.getLocations().getFirst().getOrgUnitName());
         applicationDetails.setServiceName(service.getServiceName());
+        applicationDetails.setIsPriority(service.getIsPriority());
 
         applicationFlowLogs.info(
                 "Preparing ApplicationFlowStatusEntity for txnId : {}",
@@ -221,12 +239,19 @@ public class PreProcessingFacade {
                                 ));
                     });
         }
+        
+		applicationFlowLogs.info("newEntityFlag is false, will update ApplicationDetails priority before txn update for txnId : {} applicationId : {}",
+				txnId, applicationId);
 
-        return transactionalDBExecutor
-                .execute(
-                        txnId,
-                        txnEntity,
-                        flowStatus)
+		return applicationDetailsRepository.findByApplicationId(applicationId)
+				.flatMap(existingApplDetails -> {
+					applicationFlowLogs.info("Updating ApplicationDetails for applicationId : {} isPriority : {} -> {}", applicationId, existingApplDetails.getIsPriority(), service.getIsPriority());
+					existingApplDetails.setIsPriority(service.getIsPriority());
+					return applicationDetailsRepository.save(existingApplDetails);
+				})
+				.doOnSuccess(saved -> applicationFlowLogs.info("ApplicationDetails priority updated successfully for applicationId : {}", applicationId))
+				.doOnError(ex -> applicationFlowLogs.error("Unable to update ApplicationDetails priority for applicationId : {} error : {}", applicationId, ex.getMessage(), ex))
+				.then(transactionalDBExecutor.execute(txnId, txnEntity, flowStatus))
                 .doOnSuccess(success ->
                         applicationFlowLogs.info(
                                 "Transaction updated successfully for txnId : {}",
