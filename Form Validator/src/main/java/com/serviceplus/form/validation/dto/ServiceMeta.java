@@ -47,6 +47,7 @@ public class ServiceMeta {
 
     List<WorkFlowDataDTO.WorkFlowAction> availableActions;
     
+    @JsonIgnore
     private Boolean isPriority=false;
 
     public DocumentGenerationDetails getDocumentGenerationDetails() {
