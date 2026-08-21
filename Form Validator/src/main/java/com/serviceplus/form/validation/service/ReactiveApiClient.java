@@ -1,6 +1,7 @@
 package com.serviceplus.form.validation.service;
 
 import java.lang.reflect.Type;
+import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -760,12 +761,61 @@ public class ReactiveApiClient {
                 });
     }
 
-    public Mono<byte[]> downloadFromPresignedUrl(String previewUrl) {
-        return WebClient.create()
+    public Mono<byte[]> downloadFromPresignedUrl(String presignedUrl) {
+
+        applicationFlowLogs.info(
+                "Downloading presigned URL: {}",
+                presignedUrl
+        );
+
+        WebClient webClient = WebClient.builder()
+                .codecs(configurer ->
+                        configurer.defaultCodecs()
+                                .maxInMemorySize(50 * 1024 * 1024) // 50 MB
+                )
+                .build();
+
+        return webClient
                 .get()
-                .uri(previewUrl)
-                .retrieve()
-                .bodyToMono(byte[].class);
+                .uri(URI.create(presignedUrl))
+                .exchangeToMono(response -> {
+
+                    applicationFlowLogs.info(
+                            "Presigned download response: {}",
+                            response.statusCode()
+                    );
+
+                    if (response.statusCode().is2xxSuccessful()) {
+
+                        return response.bodyToMono(byte[].class)
+                                .doOnNext(bytes ->
+                                        applicationFlowLogs.info(
+                                                "Presigned download successful. Size: {} bytes",
+                                                bytes.length
+                                        )
+                                );
+                    }
+
+                    return response.bodyToMono(String.class)
+                            .defaultIfEmpty("")
+                            .flatMap(body -> {
+
+                                applicationFlowLogs.error(
+                                        "Presigned download failed. Status: {} Body: {}",
+                                        response.statusCode(),
+                                        body
+                                );
+
+                                return Mono.error(
+                                        new RuntimeException(
+                                                "Presigned URL download failed: "
+                                                        + response.statusCode()
+                                                        + " "
+                                                        + body
+                                        )
+                                );
+                            });
+                });
     }
     
     public Mono<ServerResponse> sendNotification(String applicationId, Integer serviceId, Long activityConfigId,
@@ -794,5 +844,51 @@ public class ReactiveApiClient {
 							.bodyValue(response.getBody());
 				}).onErrorResume(WebClientResponseException.class, ex -> handleWebClientError(ex, txnId));
 	}
+
+    public Mono<UploadStatusResponse> uploadBase64File(
+            UserSessionObject user,
+            String uploadId,
+            String uploadToken,
+            byte[] fileBytes,
+            String fileName,
+            String txnId) {
+
+        String url = FILE_MANAGEMENT_SERVICE.concat("b/upload/base64");
+
+        Map<String, String> headers = new HashMap<>();
+        headers.put("USER-DETAILS", entityToString(user));
+        headers.put("X-Upload-Id", uploadId);
+        headers.put("Authorization", "Bearer ".concat(uploadToken));
+        headers.put("x-file-name", fileName);
+
+        Base64UploadRequest request = new Base64UploadRequest();
+        request.setBase64(Base64.getEncoder().encodeToString(fileBytes));
+        request.setFileName(fileName);
+
+        return AsynchronousApiExecutor.callExternalEndpoint(
+                        String.class,
+                        HttpMethod.POST,
+                        headers,
+                        Collections.emptyMap(),
+                        url,
+                        entityToString(request),
+                        MediaType.APPLICATION_JSON
+                )
+                .flatMap(response -> {
+
+                    String body = response.getBody();
+
+                    if (body == null || body.isBlank()) {
+                        return Mono.error(new SPRuntimeError("File upload failed.", HttpStatus.FAILED_DEPENDENCY, txnId));
+                    }
+
+                    UploadStatusResponse result = (UploadStatusResponse) stringToEntityUsingType(body, new TypeToken<UploadStatusResponse>() {}.getType());
+
+                    return Mono.just(Objects.requireNonNull(result));
+                })
+                .onErrorResume(
+                        WebClientResponseException.class,ex -> handleWebClientError(ex, txnId)
+                );
+    }
 }
 

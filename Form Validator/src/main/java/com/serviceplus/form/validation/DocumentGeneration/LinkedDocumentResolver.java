@@ -63,6 +63,7 @@ public class LinkedDocumentResolver {
 
         ResolvedDocument document = new ResolvedDocument();
 
+        document.setUploadId(entity.getUploadId());
         document.setDocumentId(entity.getId());
         document.setReferenceId(document.getReferenceId());
         document.setDocumentName(entity.getDocumentName());

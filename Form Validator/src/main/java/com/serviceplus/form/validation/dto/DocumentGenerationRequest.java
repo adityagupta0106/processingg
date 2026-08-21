@@ -4,6 +4,10 @@ import java.util.List;
 
 public class DocumentGenerationRequest {
 
+    private String mode;
+
+    private List<DocumentSectionRequest> mergedUploadSection;
+
     private List<DocumentSectionRequest> documentSections;
 
     public static class DocumentSectionRequest {
@@ -78,5 +82,21 @@ public class DocumentGenerationRequest {
 
     public void setDocumentSections(List<DocumentSectionRequest> documentSections) {
         this.documentSections = documentSections;
+    }
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
+    }
+
+    public List<DocumentSectionRequest> getMergedUploadSection() {
+        return mergedUploadSection;
+    }
+
+    public void setMergedUploadSection(List<DocumentSectionRequest> mergedUploadSection) {
+        this.mergedUploadSection = mergedUploadSection;
     }
 }

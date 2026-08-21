@@ -48,20 +48,22 @@ public class UploadedDocumentResolver {
         if (flow.getCurrentProcess() != null) {
 
             documentMono = applicationDocumentRepository
-                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeAndStatusOrderByCreatedOnDesc(
                             flow.getApplicationId(),
                             flow.getCurrentProcess().getProcessId(),
                             mapping.getReferenceId(),
-                            FILE_UPLOAD);
+                            FILE_UPLOAD,
+                            "P");
 
         } else {
 
             documentMono = applicationDocumentRepository
-                    .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                    .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeAndStatusOrderByCreatedOnDesc(
                             flow.getApplicationId(),
                             flow.getTaskId(),
                             mapping.getReferenceId(),
-                            FILE_UPLOAD);
+                            FILE_UPLOAD,
+                            "P");
         }
 
         return documentMono

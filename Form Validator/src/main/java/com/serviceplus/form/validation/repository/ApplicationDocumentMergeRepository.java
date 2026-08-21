@@ -17,4 +17,12 @@ public interface ApplicationDocumentMergeRepository extends ReactiveCrudReposito
     Flux<ApplicationDocumentMergeEntity> findByApplicationId(String applicationId);
 
     Flux<ApplicationDocumentMergeEntity> findByTxnId(String txnId);
+
+    Mono<ApplicationDocumentMergeEntity> findFirstByApplicationIdAndProcessIdAndReferenceIdAndTenantIdOrderByCreatedOnDesc(String applicationId, String processId, String referenceId, String tenantId);
+
+    Mono<ApplicationDocumentMergeEntity> findFirstByApplicationIdAndTaskIdAndReferenceIdAndTenantIdOrderByCreatedOnDesc(String applicationId, String taskId, String referenceId, String tenantId);
+
+    Mono<ApplicationDocumentMergeEntity> findFirstByApplicationIdAndProcessIdAndReferenceIdAndTenantIdAndStatusOrderByCreatedOnDesc(String applicationId, String processId, String referenceId, String tenantId, String p);
+
+    Mono<ApplicationDocumentMergeEntity> findFirstByApplicationIdAndTaskIdAndReferenceIdAndTenantIdAndStatusOrderByCreatedOnDesc(String applicationId, String taskId, String referenceId, String tenantId, String p);
 }

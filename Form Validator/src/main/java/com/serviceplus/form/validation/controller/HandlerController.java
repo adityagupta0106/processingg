@@ -56,8 +56,18 @@ public class HandlerController {
 
         applicationFlowLogs.info("Handler called for txnId {} applicationId {}",txnId.orElse(null),appIdOpt.orElse(null));
 
+        ServiceMeta serviceMeta = null;
+
+        try{
+            serviceMeta = decryptServiceKeys(serviceKey.get());
+        }
+        catch (Exception e){
+            e.printStackTrace();
+            return Mono.error(new SPRuntimeError("Invalid service key",HttpStatus.BAD_REQUEST,txnId.get()));
+        }
+
         return  applicationFlowRouter.route(null, appIdOpt.orElse(null), request, txnId.orElse(null)
-                                ,decryptServiceKeys(serviceKey.get()),false);
+                                ,serviceMeta,false);
 
     }
 

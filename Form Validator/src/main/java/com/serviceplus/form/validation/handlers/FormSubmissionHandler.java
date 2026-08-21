@@ -19,6 +19,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
@@ -79,16 +80,14 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
                             @SuppressWarnings("unchecked")
                             Map<String, Object> requestBody = (Map<String, Object>) stringToEntity(body, Map.class);
                             String workflowKey = (String) requestBody.remove("workflowKey");
-                            String isPriority = (String) requestBody.remove("isPriority");
+                            Boolean isPriority = (Boolean) requestBody.remove("isPriority");
                             
 
                             if (!isEmpty(workflowKey)) {
                                 service.setWorkflowElementData(decryptWorkflowKey(workflowKey));
                             }
-                            
-                            if (!isEmpty(isPriority)) {
-                            	service.setIsPriority(Boolean.valueOf(isPriority));
-                            }
+
+                            service.setIsPriority(Objects.requireNonNullElse(isPriority, Boolean.FALSE));
 
                             String formData = entityToString(requestBody);
 
