@@ -224,7 +224,7 @@ public class DocumentGenerationExecutor {
                     response.setDocumentName(mapping.getDocumentName());
 
                     response.setDocuments(List.of(result));
-                    response.setMergeRequired(DocumentMergeMode.MERGE_ALL.getValue().equalsIgnoreCase(mapping.getMergeMode()));
+                    response.setMergeRequired(isMergeRequiredInDocument(mapping.getMergeMode()));
 
                     DocumentSectionResponse.MergedDocumentResponse mergedDocument = new DocumentSectionResponse.MergedDocumentResponse();
 
