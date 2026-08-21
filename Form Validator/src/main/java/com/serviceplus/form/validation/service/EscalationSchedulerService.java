@@ -1,7 +1,9 @@
 package com.serviceplus.form.validation.service;
 
+import reactor.core.publisher.Mono;
+
 public interface EscalationSchedulerService {
 
-    void processPendingEscalations();
+    Mono<Void> processPendingEscalations();
 
 }

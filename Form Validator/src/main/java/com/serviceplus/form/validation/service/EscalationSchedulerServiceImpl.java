@@ -1,18 +1,16 @@
 package com.serviceplus.form.validation.service;
 
-import java.sql.Timestamp;
-import java.time.Instant;
-import java.util.Date;
-import java.util.List;
+import java.time.LocalDateTime;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.serviceplus.form.validation.entity.WorkflowEscalation;
 import com.serviceplus.form.validation.enums.EscalationStatus;
 import com.serviceplus.form.validation.repository.EscalationRepository;
+
+import reactor.core.publisher.Mono;
 
 @Service
 @Transactional
@@ -21,7 +19,6 @@ public class EscalationSchedulerServiceImpl implements EscalationSchedulerServic
 	private static final Logger LOGGER = LogManager.getLogger("escalationSchedulerLogger");
 
 	private final EscalationRepository escalationRepository;
-
 	private final EscalationExecutionService escalationExecutionService;
 
 	public EscalationSchedulerServiceImpl(EscalationRepository escalationRepository,
@@ -32,20 +29,16 @@ public class EscalationSchedulerServiceImpl implements EscalationSchedulerServic
 	}
 
 	@Override
-	public void processPendingEscalations() {
-		List<WorkflowEscalation> escalations = escalationRepository
-				.findPendingEscalations(EscalationStatus.PENDING.name(), new Date());
-		LOGGER.info("Pending Escalations : {}", escalations.size());
-		for (WorkflowEscalation escalation : escalations) {
-			try {
-				escalationExecutionService.execute(escalation);
-			} catch (Exception ex) {
-				LOGGER.error("Escalation failed : {}", escalation.getId(), ex);
-				escalation.setRetryCount(escalation.getRetryCount() == null ? 1 : escalation.getRetryCount() + 1);
-				escalation.setStatus(EscalationStatus.FAILED.name());
-				escalationRepository.save(escalation);
-			}
-		}
-	}
+	@Transactional
+	public Mono<Void> processPendingEscalations() {
 
+		return escalationRepository
+				.findByStatusAndExecuteOnLessThanEqual(EscalationStatus.PENDING.name(), LocalDateTime.now())
+
+				.doOnNext(escalation -> LOGGER.info("Processing escalation : {}", escalation.getId()))
+
+				.flatMap(escalation -> escalationExecutionService.execute(escalation))
+
+				.then();
+	}
 }

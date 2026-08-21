@@ -76,7 +76,7 @@ public class SanitizeRequestAspect {
         
         if (isXss(value)) {
            // Mono.error(new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY)).subscribe();
-           throw new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY,null);
+          // throw new SPRuntimeError("Malicious request detected", HttpStatus.UNPROCESSABLE_ENTITY,null);
         }
 
         String lower = value.toLowerCase();

@@ -21,15 +21,23 @@ public class EscalationScheduler {
 	/**
 	 * Executes every minute.
 	 */
-	//@Scheduled(cron = "0 */1 * * * *")
+	@Scheduled(cron = "0 */15 * * * *")
 	public void executePendingEscalations() {
-		LOGGER.info("Escalation Scheduler started.");
-		try {
-			escalationSchedulerService.processPendingEscalations();
-		} catch (Exception ex) {
-			LOGGER.error("Error while executing escalation scheduler.", ex);
-		}
-		LOGGER.info("Escalation Scheduler completed.");
+
+	    LOGGER.info("Escalation Scheduler started.");
+
+	    try {
+	        escalationSchedulerService.processPendingEscalations()
+	                .subscribe(
+	                        result -> LOGGER.info("Escalation processing completed."),
+	                        error -> LOGGER.error("Error while processing escalations.", error)
+	                );
+
+	    } catch (Exception ex) {
+	        LOGGER.error("Error while executing escalation scheduler.", ex);
+	    }
+
+	    LOGGER.info("Escalation Scheduler completed.");
 	}
 
 }
