@@ -17,24 +17,32 @@ public class DocumentSectionResponse {
 
     public static class MergedDocumentResponse {
 
-        private String previewUrl;
+        private String documentId;
+        private String documentName;
+        private String downloadUrl;
 
-        private String status;
-
-        public String getPreviewUrl() {
-            return previewUrl;
+        public String getDownloadUrl() {
+            return downloadUrl;
         }
 
-        public void setPreviewUrl(String previewUrl) {
-            this.previewUrl = previewUrl;
+        public void setDownloadUrl(String downloadUrl) {
+            this.downloadUrl = downloadUrl;
         }
 
-        public String getStatus() {
-            return status;
+        public String getDocumentName() {
+            return documentName;
         }
 
-        public void setStatus(String status) {
-            this.status = status;
+        public void setDocumentName(String documentName) {
+            this.documentName = documentName;
+        }
+
+        public String getDocumentId() {
+            return documentId;
+        }
+
+        public void setDocumentId(String documentId) {
+            this.documentId = documentId;
         }
     }
 

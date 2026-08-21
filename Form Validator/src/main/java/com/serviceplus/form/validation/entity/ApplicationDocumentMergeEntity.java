@@ -27,8 +27,6 @@ public class ApplicationDocumentMergeEntity implements Persistable<String> {
 
     private String mergedUploadId;
 
-    private String mergedPreviewUrl;
-
     private String signedUploadId;
 
     private String status;
@@ -95,14 +93,6 @@ public class ApplicationDocumentMergeEntity implements Persistable<String> {
 
     public void setMergedUploadId(String mergedUploadId) {
         this.mergedUploadId = mergedUploadId;
-    }
-
-    public String getMergedPreviewUrl() {
-        return mergedPreviewUrl;
-    }
-
-    public void setMergedPreviewUrl(String mergedPreviewUrl) {
-        this.mergedPreviewUrl = mergedPreviewUrl;
     }
 
     public String getSignedUploadId() {

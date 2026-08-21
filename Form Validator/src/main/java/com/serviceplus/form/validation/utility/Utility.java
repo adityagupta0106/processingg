@@ -499,4 +499,7 @@ public class Utility {
         return service;
     }
 
+    public static boolean isMergeRequiredInDocument(String mode){
+        return "mergeAll".equalsIgnoreCase(mode) || "overwrite".equalsIgnoreCase(mode);
+    }
 }

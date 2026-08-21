@@ -44,8 +44,18 @@ public class DocumentProcessHandler implements ApplicationFlowHandler {
                 .defaultIfEmpty(new DocumentGenerationRequest())
                 .flatMap(body -> {
 
-                    DocumentMode mode = (body.getDocumentSections() == null || body.getDocumentSections().isEmpty())
-                                                ? DocumentMode.FETCH : DocumentMode.SUBMIT;
+                    DocumentMode mode;
+
+                    if (DocumentMode.MERGE.name().equalsIgnoreCase(body.getMode()) || (body.getMergedUploadSection() != null && !body.getMergedUploadSection().isEmpty())) {
+                        mode = DocumentMode.MERGE;
+
+                    } else if (body.getDocumentSections() != null && !body.getDocumentSections().isEmpty()) {
+                        mode = DocumentMode.SUBMIT;
+
+                    } else {
+                        mode = DocumentMode.FETCH;
+                    }
+
 
                     return documentProcessService.process(
                             applicationId,

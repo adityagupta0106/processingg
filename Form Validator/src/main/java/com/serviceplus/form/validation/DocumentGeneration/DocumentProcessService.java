@@ -2,16 +2,10 @@ package com.serviceplus.form.validation.DocumentGeneration;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.*;
-import com.serviceplus.form.validation.entity.ApplicationDocumentLogEntity;
-import com.serviceplus.form.validation.entity.ApplicationDocumentSubmissionEntity;
-import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
-import com.serviceplus.form.validation.entity.TempTransactionLogs;
+import com.serviceplus.form.validation.entity.*;
 import com.serviceplus.form.validation.enums.DocumentMode;
 import com.serviceplus.form.validation.flow.EventDecider;
-import com.serviceplus.form.validation.repository.ApplicationDocumentLogRepository;
-import com.serviceplus.form.validation.repository.ApplicationDocumentSubmissionRepository;
-import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepository;
-import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
+import com.serviceplus.form.validation.repository.*;
 import com.serviceplus.form.validation.service.ActivityMapService;
 import com.serviceplus.form.validation.service.ReactiveApiClient;
 import org.apache.logging.log4j.LogManager;
@@ -54,7 +48,11 @@ public class DocumentProcessService {
 
     private final ActivityMapService activityMapService;
 
-    public DocumentProcessService(ReactiveApiClient reactiveApiClient, DocumentGenerationExecutor documentGenerationExecutor, ApplicationFlowRouterRepository applicationFlowRouterRepository, EventDecider eventDecider, ProcessingTxnRepository processingTxnRepository, ApplicationDocumentSubmissionRepository applicationDocumentSubmissionRepository, ApplicationDocumentLogRepository applicationDocumentLogRepository, ActivityMapService activityMapService) {
+    private final ApplicationDocumentMergeRepository applicationDocumentMergeRepository;
+
+    private final ApplicationDocumentLogRepository applicationDocumentRepository;
+
+    public DocumentProcessService(ReactiveApiClient reactiveApiClient, DocumentGenerationExecutor documentGenerationExecutor, ApplicationFlowRouterRepository applicationFlowRouterRepository, EventDecider eventDecider, ProcessingTxnRepository processingTxnRepository, ApplicationDocumentSubmissionRepository applicationDocumentSubmissionRepository, ApplicationDocumentLogRepository applicationDocumentLogRepository, ActivityMapService activityMapService, ApplicationDocumentMergeRepository applicationDocumentMergeRepository, ApplicationDocumentLogRepository applicationDocumentRepository) {
         this.reactiveApiClient = reactiveApiClient;
         this.documentGenerationExecutor = documentGenerationExecutor;
         this.applicationFlowRouterRepository = applicationFlowRouterRepository;
@@ -63,6 +61,8 @@ public class DocumentProcessService {
         this.applicationDocumentSubmissionRepository = applicationDocumentSubmissionRepository;
         this.applicationDocumentLogRepository = applicationDocumentLogRepository;
         this.activityMapService = activityMapService;
+        this.applicationDocumentMergeRepository = applicationDocumentMergeRepository;
+        this.applicationDocumentRepository = applicationDocumentRepository;
     }
 
     @SuppressWarnings("unchecked")
@@ -226,7 +226,28 @@ public class DocumentProcessService {
                                                             applicableMappings,
                                                             fromDraft);
 
-                                                } else {
+                                                } else if (mode == DocumentMode.MERGE) {
+
+                                                    documentProcess =
+                                                            saveUploadedDocumentsForMerge(
+                                                                        applicationId,
+                                                                        flow,
+                                                                        service,
+                                                                        body,
+                                                                        user
+                                                                    )
+                                                                    .then(
+                                                                            documentGenerationExecutor.merge(
+                                                                                    applicationId,
+                                                                                    flow.getTxnId(),
+                                                                                    user,
+                                                                                    flow,
+                                                                                    service,
+                                                                                    applicableMappings,
+                                                                                    body,
+                                                                                    fromDraft)
+                                                                    );
+                                                }else {
 
                                                     documentProcess = documentGenerationExecutor.submit(
                                                             applicationId,
@@ -258,7 +279,7 @@ public class DocumentProcessService {
                                                                                     flow.getTxnId(),
                                                                                     result.size(),userSubmissionRequired);
 
-                                                                            if (mode == DocumentMode.FETCH && userSubmissionRequired) {
+                                                                            if (mode == DocumentMode.MERGE || (mode == DocumentMode.FETCH && userSubmissionRequired)) {
 
                                                                                 HandlerResponse response = new HandlerResponse();
                                                                                 response.setTxnId(flow.getTxnId());
@@ -320,77 +341,341 @@ public class DocumentProcessService {
             boolean permanent,
             UserSessionObject user) {
 
+        applicationFlowLogs.info(
+                "TxnId : {} | saveGeneratedDocuments START | ApplicationId: {} | Total Sections: {}",
+                flow.getTxnId(),
+                applicationId,
+                documentSections.size()
+        );
+
         return Flux.fromIterable(documentSections)
-                .flatMap(section ->
-                        Flux.fromIterable(section.getDocuments())
-                                .flatMap(document -> {
-
-                                    Mono<ApplicationDocumentLogEntity> logMono;
-
-                                    if ("fileUpload".equalsIgnoreCase(document.getSourceType())) {
-
-                                        String processId = isNull(flow.getCurrentProcess()) ? null : flow.getCurrentProcess().getProcessId();
-                                        ApplicationDocumentLogEntity log = new ApplicationDocumentLogEntity();
-
-                                        log.setNewEntity(Boolean.TRUE);
-                                        log.setId(createUniqueId());
-                                        log.setTxnId(flow.getTxnId());
-                                        log.setApplicationId(applicationId);
-                                        log.setServiceId(service.getServiceId());
-                                        log.setTaskId(service.getTaskId());
-                                        log.setProcessId(processId);
-
-                                        log.setReferenceId(document.getReferenceId());
-                                        log.setDocumentName(document.getDocumentName());
-
-                                        log.setSourceType("fileUpload");
-                                        log.setUploadId(document.getUploadId());
-                                        log.setStatus("P");
-                                        log.setCreatedOn(LocalDateTime.now());
-                                        log.setTenantId(user.getTenantId());
-
-                                        logMono = applicationDocumentLogRepository.save(log);
-
-                                    } else {
-
-                                        logMono = applicationDocumentLogRepository
-                                                .findById(document.getDocumentId())
-                                                .switchIfEmpty(
-                                                        Mono.error(new SPRuntimeError("Document log not found for documentId : " + document.getDocumentId(), HttpStatus.BAD_REQUEST, flow.getTxnId()
-                                                        ))
-                                                );
-                                    }
-
-                                    return logMono.map(log -> {
-
-                                        ApplicationDocumentSubmissionEntity entity = new ApplicationDocumentSubmissionEntity();
-
-                                        entity.setId(createUniqueId());
-                                        entity.setTxnId(flow.getTxnId());
-                                        entity.setApplicationId(applicationId);
-                                        entity.setServiceId(service.getServiceId());
-                                        entity.setTaskId(service.getTaskId());
-
-                                        entity.setReferenceId(log.getReferenceId());
-                                        entity.setDocumentName(log.getDocumentName());
-                                        entity.setProcessId(log.getProcessId());
-
-                                        entity.setUploadId(log.getUploadId());
-                                        entity.setSignedUploadId("");
-
-                                        entity.setMerged(Boolean.TRUE.equals(section.getMergeRequired()));
-                                        entity.setStatus("P");
-                                        entity.setCreatedBy(user.getUserID());
-                                        entity.setCreatedOn(LocalDateTime.now());
-                                        entity.setNew(Boolean.TRUE);
-                                        entity.setTenantId(user.getTenantId());
-
-                                        return entity;
-                                    });
-                                })
+                .doOnNext(section ->
+                        applicationFlowLogs.info("TxnId : {} | Processing Section | ReferenceId: {} | DocumentName: {} | MergeRequired: {} | Documents: {}",
+                                flow.getTxnId(),
+                                section.getReferenceId(),
+                                section.getDocumentName(),
+                                section.getMergeRequired(),
+                                section.getDocuments() == null
+                                        ? 0
+                                        : section.getDocuments().size()
+                        )
                 )
+                .flatMap(section -> {
+
+                    if (Boolean.TRUE.equals(section.getMergeRequired())) {
+
+                        return findActiveMergeEntity(
+                                applicationId,
+                                flow,
+                                service,
+                                section.getReferenceId(),
+                                user
+                        )
+                                .doOnNext(mergeEntity ->
+                                        applicationFlowLogs.info(
+                                                "TxnId : {} | Using merged document for submission | " +
+                                                        "MergeId: {} | ReferenceId: {} | MergedUploadId: {} | Status: {}",
+                                                flow.getTxnId(),
+                                                mergeEntity.getId(),
+                                                mergeEntity.getReferenceId(),
+                                                mergeEntity.getMergedUploadId(),
+                                                mergeEntity.getStatus()
+                                        )
+                                )
+                                .map(mergeEntity -> {
+
+                                    ApplicationDocumentSubmissionEntity entity = new ApplicationDocumentSubmissionEntity();
+
+                                    entity.setId(createUniqueId());
+                                    entity.setTxnId(flow.getTxnId());
+                                    entity.setApplicationId(applicationId);
+                                    entity.setServiceId(service.getServiceId());
+                                    entity.setTaskId(service.getTaskId());
+
+                                    entity.setReferenceId(mergeEntity.getReferenceId());
+                                    entity.setDocumentName(section.getDocumentName());
+                                    entity.setProcessId(mergeEntity.getProcessId());
+                                    entity.setUploadId(mergeEntity.getMergedUploadId());
+                                    entity.setSignedUploadId("");
+                                    entity.setMerged(Boolean.TRUE);
+                                    entity.setStatus("P");
+                                    entity.setCreatedBy(user.getUserID());
+                                    entity.setCreatedOn(LocalDateTime.now());
+                                    entity.setNew(Boolean.TRUE);
+                                    entity.setTenantId(user.getTenantId());
+
+                                    applicationFlowLogs.info("TxnId : {} | Creating merged submission | " + "ReferenceId: {} | UploadId: {} | ProcessId: {}", flow.getTxnId(), entity.getReferenceId(), entity.getUploadId(), entity.getProcessId());
+
+                                    return entity;
+                                });
+                    }
+
+                    return Flux.fromIterable(section.getDocuments())
+                            .flatMap(document -> {
+
+                                Mono<ApplicationDocumentLogEntity> logMono;
+
+                                if ("fileUpload".equalsIgnoreCase(document.getSourceType())) {
+
+                                    String processId = isNull(flow.getCurrentProcess()) ? null : flow.getCurrentProcess().getProcessId();
+
+                                    ApplicationDocumentLogEntity log = new ApplicationDocumentLogEntity();
+
+                                    log.setNewEntity(true);
+                                    log.setId(createUniqueId());
+                                    log.setTxnId(flow.getTxnId());
+                                    log.setApplicationId(applicationId);
+                                    log.setServiceId(service.getServiceId());
+                                    log.setTaskId(service.getTaskId());
+                                    log.setProcessId(processId);
+
+                                    log.setReferenceId(document.getReferenceId());
+
+                                    log.setDocumentName(document.getDocumentName());
+
+                                    log.setSourceType("fileUpload");
+                                    log.setUploadId(document.getUploadId());
+                                    log.setStatus("P");
+                                    log.setCreatedOn(LocalDateTime.now());
+                                    log.setTenantId(user.getTenantId());
+
+                                    logMono = applicationDocumentLogRepository.save(log);
+
+                                } else {
+
+                                    logMono =
+                                            applicationDocumentLogRepository
+                                                    .findById(
+                                                            document.getDocumentId()
+                                                    )
+                                                    .switchIfEmpty(
+                                                            Mono.error(
+                                                                    new SPRuntimeError(
+                                                                            "Document log not found for documentId : "
+                                                                                    + document.getDocumentId(),
+                                                                            HttpStatus.BAD_REQUEST,
+                                                                            flow.getTxnId()
+                                                                    )
+                                                            )
+                                                    );
+                                }
+
+                                return logMono.map(log -> {
+
+                                    ApplicationDocumentSubmissionEntity entity = new ApplicationDocumentSubmissionEntity();
+
+                                    entity.setId(createUniqueId());
+                                    entity.setTxnId(flow.getTxnId());
+                                    entity.setApplicationId(applicationId);
+                                    entity.setServiceId(service.getServiceId());
+                                    entity.setTaskId(service.getTaskId());
+
+                                    entity.setReferenceId(log.getReferenceId());
+                                    entity.setDocumentName(log.getDocumentName());
+                                    entity.setProcessId(log.getProcessId());
+                                    entity.setUploadId(log.getUploadId());
+
+                                    entity.setSignedUploadId("");
+                                    entity.setMerged(false);
+                                    entity.setStatus("P");
+
+                                    entity.setCreatedBy(user.getUserID());
+                                    entity.setCreatedOn(LocalDateTime.now());
+                                    entity.setNew(true);
+                                    entity.setTenantId(user.getTenantId());
+
+                                    return entity;
+                                });
+                            });
+                })
                 .collectList()
                 .flatMapMany(applicationDocumentSubmissionRepository::saveAll)
+                .then()
+                .doOnSuccess(v ->
+                        applicationFlowLogs.info("TxnId : {} | saveGeneratedDocuments COMPLETED | ApplicationId: {}", flow.getTxnId(), applicationId)
+                );
+    }
+
+    private Mono<ApplicationDocumentMergeEntity> findActiveMergeEntity(
+            String applicationId,
+            ApplicationFlowStatusEntity flow,
+            ServiceMeta service,
+            String referenceId,
+            UserSessionObject user) {
+
+        if (flow.getCurrentProcess() != null) {
+
+            return applicationDocumentMergeRepository
+                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndTenantIdAndStatusOrderByCreatedOnDesc(
+                            applicationId,
+                            flow.getCurrentProcess().getProcessId(),
+                            referenceId,
+                            user.getTenantId(),
+                            "P"
+                    );
+
+        }
+
+        return applicationDocumentMergeRepository
+                .findFirstByApplicationIdAndTaskIdAndReferenceIdAndTenantIdAndStatusOrderByCreatedOnDesc(
+                        applicationId,
+                        service.getTaskId(),
+                        referenceId,
+                        user.getTenantId(),
+                        "P"
+                );
+    }
+
+    private Mono<Void> saveUploadedDocumentsForMerge(
+            String applicationId,
+            ApplicationFlowStatusEntity flow,
+            ServiceMeta service,
+            DocumentGenerationRequest body,
+            UserSessionObject user) {
+
+        if (body == null
+                || body.getMergedUploadSection() == null
+                || body.getMergedUploadSection().isEmpty()) {
+
+            return Mono.empty();
+        }
+
+        return Flux.fromIterable(body.getMergedUploadSection())
+                .flatMap(section -> {
+
+                    if (section.getDocuments() == null
+                            || section.getDocuments().isEmpty()) {
+                        return Mono.empty();
+                    }
+
+                    return Flux.fromIterable(section.getDocuments())
+                            .filter(document ->
+                                    document.getDocumentId() != null
+                                            && !document.getDocumentId().isBlank())
+                            .flatMap(document -> {
+
+                                String processId = flow.getCurrentProcess() != null ? flow.getCurrentProcess().getProcessId() : null;
+
+                                Mono<ApplicationDocumentLogEntity> existingDocumentMono;
+
+                                if (flow.getCurrentProcess() != null) {
+
+                                    existingDocumentMono =
+                                            applicationDocumentRepository
+                                                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                                                            applicationId,
+                                                            processId,
+                                                            document.getReferenceId(),
+                                                            "fileUpload"
+                                                    );
+
+                                } else {
+
+                                    existingDocumentMono =
+                                            applicationDocumentRepository
+                                                    .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                                                            applicationId,
+                                                            service.getTaskId(),
+                                                            document.getReferenceId(),
+                                                            "fileUpload"
+                                                    );
+                                }
+
+                                return existingDocumentMono
+                                        .flatMap(existing -> {
+
+                                            if (document.getDocumentId().equals(existing.getUploadId()) && "P".equals(existing.getStatus())) {
+
+                                                applicationFlowLogs.info(
+                                                        "TxnId : {} | Same uploaded document already exists. " +
+                                                                "Skipping save. ApplicationId: {} | " +
+                                                                "ReferenceId: {} | UploadId: {} | Status: {}",
+                                                        flow.getTxnId(),
+                                                        applicationId,
+                                                        document.getReferenceId(),
+                                                        document.getDocumentId(),
+                                                        existing.getStatus()
+                                                );
+
+                                                return Mono.just(existing);
+                                            }
+
+                                            applicationFlowLogs.info(
+                                                    "TxnId : {} | New upload detected. Replacing old document log. " +
+                                                            "ApplicationId: {} | ReferenceId: {} | " +
+                                                            "OldUploadId: {} | NewUploadId: {}",
+                                                    flow.getTxnId(),
+                                                    applicationId,
+                                                    document.getReferenceId(),
+                                                    existing.getUploadId(),
+                                                    document.getDocumentId()
+                                            );
+
+                                            existing.setStatus("R");
+
+                                            return applicationDocumentLogRepository
+                                                    .save(existing)
+                                                    .then(
+                                                            saveUploadedDocumentLog(
+                                                                    applicationId,
+                                                                    flow,
+                                                                    service,
+                                                                    document,
+                                                                    processId,
+                                                                    user
+                                                            )
+                                                    );
+                                        })
+                                        .switchIfEmpty(
+                                                Mono.defer(() ->
+                                                        saveUploadedDocumentLog(
+                                                                applicationId,
+                                                                flow,
+                                                                service,
+                                                                document,
+                                                                processId,
+                                                                user
+                                                        )
+                                                )
+                                        );
+                            });
+                })
                 .then();
+    }
+
+    private Mono<ApplicationDocumentLogEntity> saveUploadedDocumentLog(String applicationId, ApplicationFlowStatusEntity flow, ServiceMeta service, DocumentGenerationRequest.DocumentSectionRequest.DocumentRequest document, String processId, UserSessionObject user) {
+
+        ApplicationDocumentLogEntity log = new ApplicationDocumentLogEntity();
+
+        log.setNewEntity(Boolean.TRUE);
+        log.setId(createUniqueId());
+
+        log.setTxnId(flow.getTxnId());
+        log.setApplicationId(applicationId);
+        log.setServiceId(service.getServiceId());
+        log.setTaskId(service.getTaskId());
+        log.setProcessId(processId);
+
+        log.setReferenceId(document.getReferenceId());
+        log.setSourceType("fileUpload");
+        log.setUploadId(document.getDocumentId());
+        log.setStatus("P");
+        log.setCreatedOn(LocalDateTime.now());
+        log.setTenantId(user.getTenantId());
+
+        service.getDocumentGenerationDetails()
+                .getDocumentMapping()
+                .stream()
+                .filter(mapping ->
+                        mapping.getReferenceId() != null && mapping.getReferenceId().equals(document.getReferenceId())
+                )
+                .findFirst()
+                .ifPresent(mapping ->
+                        log.setDocumentName(mapping.getDocumentName())
+                );
+
+        applicationFlowLogs.info("TxnId : {} | Saving uploaded document. " + "ApplicationId: {} | ReferenceId: {} | UploadId: {} | ProcessId: {}", flow.getTxnId(), applicationId, document.getReferenceId(), document.getDocumentId(), processId);
+
+        return applicationDocumentLogRepository.save(log);
     }
 }

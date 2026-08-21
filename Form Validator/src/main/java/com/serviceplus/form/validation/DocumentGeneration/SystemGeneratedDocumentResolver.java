@@ -57,20 +57,22 @@ public class SystemGeneratedDocumentResolver {
         if (flow.getCurrentProcess() != null) {
 
             documentMono = applicationDocumentRepository
-                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                    .findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeAndStatusOrderByCreatedOnDesc(
                             flow.getApplicationId(),
                             flow.getCurrentProcess().getProcessId(),
                             mapping.getReferenceId(),
-                            SYSTEM_GENERATED);
+                            SYSTEM_GENERATED,
+                            "P");
 
         } else {
 
             documentMono = applicationDocumentRepository
-                    .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeOrderByCreatedOnDesc(
+                    .findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeAndStatusOrderByCreatedOnDesc(
                             flow.getApplicationId(),
                             service.getTaskId(),
                             mapping.getReferenceId(),
-                            SYSTEM_GENERATED);
+                            SYSTEM_GENERATED,
+                            "P");
         }
 
         return documentMono
@@ -149,7 +151,7 @@ public class SystemGeneratedDocumentResolver {
                     entity.setSourceType(SYSTEM_GENERATED);
                     entity.setUploadId(response.getUploadId());
                     entity.setPreviewUrl(response.getPreviewUrl());
-                    entity.setStatus(response.getStatus());
+                    entity.setStatus("P");
                     entity.setCreatedOn(LocalDateTime.now());
                     entity.setTenantId(user.getTenantId());
 
@@ -179,6 +181,7 @@ public class SystemGeneratedDocumentResolver {
 
         ResolvedDocument document = new ResolvedDocument();
 
+        document.setUploadId(entity.getUploadId());
         document.setDocumentId(entity.getId());
         document.setReferenceId(mapping.getReferenceId());
         document.setDocumentName(mapping.getDocumentName());
