@@ -2,7 +2,7 @@ package com.serviceplus.form.validation.entity;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
@@ -25,7 +25,7 @@ public class WorkflowEscalation implements Persistable<String>{
 
     private String taskId;
 
-    private Date executeOn;
+    private LocalDateTime executeOn;
 
     private String status;
 
@@ -37,9 +37,9 @@ public class WorkflowEscalation implements Persistable<String>{
 
     private String escalationJson;
 
-    private Date createdOn;
+    private LocalDateTime createdOn;
 
-    private Date modifiedOn;
+    private LocalDateTime modifiedOn;
     
     @Transient
     private boolean isNew = true;
@@ -91,14 +91,6 @@ public class WorkflowEscalation implements Persistable<String>{
 		this.taskId = taskId;
 	}
 
-	public Date getExecuteOn() {
-		return executeOn;
-	}
-
-	public void setExecuteOn(Date executeOn) {
-		this.executeOn = executeOn;
-	}
-
 	public String getStatus() {
 		return status;
 	}
@@ -139,19 +131,27 @@ public class WorkflowEscalation implements Persistable<String>{
 		this.escalationJson = escalationJson;
 	}
 
-	public Date getCreatedOn() {
+	public LocalDateTime getExecuteOn() {
+		return executeOn;
+	}
+
+	public void setExecuteOn(LocalDateTime executeOn) {
+		this.executeOn = executeOn;
+	}
+
+	public LocalDateTime getCreatedOn() {
 		return createdOn;
 	}
 
-	public void setCreatedOn(Date createdOn) {
+	public void setCreatedOn(LocalDateTime createdOn) {
 		this.createdOn = createdOn;
 	}
 
-	public Date getModifiedOn() {
+	public LocalDateTime getModifiedOn() {
 		return modifiedOn;
 	}
 
-	public void setModifiedOn(Date modifiedOn) {
+	public void setModifiedOn(LocalDateTime modifiedOn) {
 		this.modifiedOn = modifiedOn;
 	}
 
