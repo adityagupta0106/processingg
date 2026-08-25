@@ -890,5 +890,35 @@ public class ReactiveApiClient {
                         WebClientResponseException.class,ex -> handleWebClientError(ex, txnId)
                 );
     }
+    
+	public Mono<DSCSignResponse> signDocument(DSCSignRequest request, UserSessionObject user) {
+
+		String url = FILE_MANAGEMENT_SERVICE.concat("a/dsc/sign");
+		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+		return AsynchronousApiExecutor
+				.callExternalEndpoint(String.class, HttpMethod.POST, headers, Collections.emptyMap(), url,
+						entityToString(request), MediaType.APPLICATION_JSON)
+
+				.flatMap(apiResponse -> {
+					if (apiResponse == null || apiResponse.getBody() == null || apiResponse.getBody().isBlank()) {
+						return Mono.error(new SPRuntimeError("Unable to process DSC signing request",
+								HttpStatus.FAILED_DEPENDENCY, null));
+					}
+
+					try {
+						DSCSignResponse response = (DSCSignResponse) stringToEntityUsingType(apiResponse.getBody(),
+								new TypeToken<DSCSignResponse>() {
+								}.getType());
+
+						return Mono.just(response);
+
+					} catch (Exception ex) {
+						ex.printStackTrace();
+						return Mono.error(new SPRuntimeError("Invalid response from File Management",
+								HttpStatus.BAD_GATEWAY, null));
+					}
+				});
+	}
 }
 
