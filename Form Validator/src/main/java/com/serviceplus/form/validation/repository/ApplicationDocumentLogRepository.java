@@ -55,4 +55,6 @@ public interface ApplicationDocumentLogRepository extends ReactiveCrudRepository
     Mono<ApplicationDocumentLogEntity> findFirstByApplicationIdAndProcessIdAndReferenceIdAndSourceTypeAndStatusOrderByCreatedOnDesc(String applicationId, String processId, String referenceId, String fileUpload, String status);
 
     Mono<ApplicationDocumentLogEntity> findFirstByApplicationIdAndTaskIdAndReferenceIdAndSourceTypeAndStatusOrderByCreatedOnDesc(String applicationId, String taskId, String referenceId, String fileUpload, String status);
+
+	Mono<ApplicationDocumentLogEntity> findByIdAndApplicationIdAndTxnIdAndServiceIdAndTaskIdAndTenantId(String documentId,String applicationId, String txnId,Integer serviceId, String taskId, String tenantId);
 }

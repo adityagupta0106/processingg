@@ -1,6 +1,7 @@
 package com.serviceplus.form.validation.utility;
 
 import com.serviceplus.form.validation.controller.ApplicationFetchController;
+import com.serviceplus.form.validation.controller.DSCSignController;
 import com.serviceplus.form.validation.controller.HandlerController;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,9 @@ public class PathRouter {
 
     @Autowired
     private ApplicationFetchController applicationFetchController;
+    
+    @Autowired
+    private DSCSignController dscSignController;
 
 	@Value("${service.context.path}")
 	private String contextPath;
@@ -46,7 +50,8 @@ public class PathRouter {
                 .andRoute(POST(contextPath + "/a/app/preload"), applicationFetchController::loadApplicationAndFetchServiceKey)
                 .andRoute(POST(contextPath + "/a/workflow/inbox/list"), preProcessingController::getWFPInbox)
         		.andRoute(POST(contextPath + "/a/inbox/applications"), preProcessingController::getPendingApplications)
-                .andRoute(POST(contextPath + "/a/form/open"), handlerController::open);
+                .andRoute(POST(contextPath + "/a/form/open"), handlerController::open)
+        		.andRoute(POST(contextPath + "/a/dsc/sign"),dscSignController::sign);
     }
     
     
