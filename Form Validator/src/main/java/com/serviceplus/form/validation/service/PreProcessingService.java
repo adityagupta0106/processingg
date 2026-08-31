@@ -11,6 +11,8 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.CustomAnnotation.SanitizeRequest;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.DocumentGenerationRequest;
+import com.serviceplus.form.validation.dto.InboxApplReqDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 
@@ -24,128 +26,152 @@ import java.util.Optional;
 @SanitizeRequest
 public class PreProcessingService {
 
-    @Autowired
-    private PreProcessingFacade preProcessingFacade;
+	@Autowired
+	private PreProcessingFacade preProcessingFacade;
 
-    public Mono<ServerResponse> serviceList(ServerHttpRequest request) {
+	public Mono<ServerResponse> serviceList(ServerHttpRequest request) {
 		try {
 			UserSessionObject user = getUserSessionDetails(request);
 
 			Mono<ServerResponse> map = preProcessingFacade.getServiceList(user)
-														.flatMap(response -> ServerResponse.ok().bodyValue(response));
+					.flatMap(response -> ServerResponse.ok().bodyValue(response));
 
 			return map;
 
 		} catch (Exception e) {
 			e.printStackTrace();
-            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR,""));
-        }
-    }
+			return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, ""));
+		}
+	}
 
-    public Mono<ServerResponse> apply(ServerRequest fluxRequest) {
-        try {
+	public Mono<ServerResponse> apply(ServerRequest fluxRequest) {
+		try {
 
-            Optional<String> applyKeyOpt = fluxRequest.queryParam("serviceKey");
-            Optional<String> serviceIdOpt = fluxRequest.queryParam("serviceId");
+			Optional<String> applyKeyOpt = fluxRequest.queryParam("serviceKey");
+			Optional<String> serviceIdOpt = fluxRequest.queryParam("serviceId");
 
-            if (applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
-                return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST,null));
-            }
+			if (applyKeyOpt.isEmpty() || serviceIdOpt.isEmpty()) {
+				return Mono.error(new SPRuntimeError("Parameters missing", HttpStatus.BAD_REQUEST, null));
+			}
 
-            String applyKey = applyKeyOpt.get();
-            String serviceId = serviceIdOpt.get();
+			String applyKey = applyKeyOpt.get();
+			String serviceId = serviceIdOpt.get();
 
-            ServerHttpRequest request = fluxRequest.exchange().getRequest();
+			ServerHttpRequest request = fluxRequest.exchange().getRequest();
 
-            UserSessionObject user = getUserSessionDetails(request);
-            //APPID,TASKID
-            ServiceMeta service = preProcessingFacade.decryptApplyKey(applyKey);
+			UserSessionObject user = getUserSessionDetails(request);
+			// APPID,TASKID
+			ServiceMeta service = preProcessingFacade.decryptApplyKey(applyKey);
 
-            if(!service.getServiceId().toString().equals(serviceId)){
-                return Mono.error(new SPRuntimeError("Key mismatch", HttpStatus.NOT_ACCEPTABLE,null));
-            }
+			if (!service.getServiceId().toString().equals(serviceId)) {
+				return Mono.error(new SPRuntimeError("Key mismatch", HttpStatus.NOT_ACCEPTABLE, null));
+			}
 
-            return preProcessingFacade.getFormDataAndSaveTempTxn(service, user,request)
-            									.flatMap(response -> {
-                                                    //FEResponse re
-                                                    return ServerResponse.ok().bodyValue(response);
+			return preProcessingFacade.getFormDataAndSaveTempTxn(service, user, request).flatMap(response -> {
+				// FEResponse re
+				return ServerResponse.ok().bodyValue(response);
 
-                                                })
-                                                .onErrorResume(Exception.class, ex -> {
-                                                    Throwable actual = Exceptions.unwrap(ex);
-                                                    if (actual instanceof SPRuntimeError spr) {
-                                                        return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(),null));
-                                                    }
-                                                    ex.printStackTrace();
-                                                    return Mono.error(new SPRuntimeError("Internal server error [REN - 01]", HttpStatus.INTERNAL_SERVER_ERROR,null));
-                                            });
+			}).onErrorResume(Exception.class, ex -> {
+				Throwable actual = Exceptions.unwrap(ex);
+				if (actual instanceof SPRuntimeError spr) {
+					return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(), null));
+				}
+				ex.printStackTrace();
+				return Mono.error(
+						new SPRuntimeError("Internal server error [REN - 01]", HttpStatus.INTERNAL_SERVER_ERROR, null));
+			});
 
-        } catch (Exception e) {
-        	e.printStackTrace();
-        	return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR,null));
-        }
-    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
+		}
+	}
 
-    public Mono<ServerResponse> fetchServiceKey(ServerHttpRequest request, String baseServiceId, String appId, String taskId, String serviceId) {
-        try {
-            UserSessionObject user = getUserSessionDetails(request);
+	public Mono<ServerResponse> fetchServiceKey(ServerHttpRequest request, String baseServiceId, String appId,
+			String taskId, String serviceId) {
+		try {
+			UserSessionObject user = getUserSessionDetails(request);
 
-            return preProcessingFacade.fetchServiceKey(Integer.parseInt(baseServiceId), user,request,appId,taskId,Integer.parseInt(serviceId));
+			return preProcessingFacade.fetchServiceKey(Integer.parseInt(baseServiceId), user, request, appId, taskId,
+					Integer.parseInt(serviceId));
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            return Mono.error(new SPRuntimeError("Internal Server Error",HttpStatus.INTERNAL_SERVER_ERROR,null));
-        }
-    }
+		} catch (Exception e) {
+			e.printStackTrace();
+			return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
+		}
+	}
 
-    public Mono<ServerResponse> getWFPInbox(ServerHttpRequest request) {
+	public Mono<ServerResponse> getWFPInbox(ServerHttpRequest request) {
 
-        try {
+		try {
 
-            UserSessionObject user = getUserSessionDetails(request);
+			UserSessionObject user = getUserSessionDetails(request);
 
-            return preProcessingFacade.getWFPInbox(request,user).flatMap(response -> ServerResponse.ok().bodyValue(response))
-                                        .onErrorResume(Exception.class, ex -> {
+			return preProcessingFacade.getWFPInbox(request, user)
+					.flatMap(response -> ServerResponse.ok().bodyValue(response)).onErrorResume(Exception.class, ex -> {
 
-                                            Throwable actual = Exceptions.unwrap(ex);
-                                            if (actual instanceof SPRuntimeError spr) {
-                                                return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(), null));
-                                            }
+						Throwable actual = Exceptions.unwrap(ex);
+						if (actual instanceof SPRuntimeError spr) {
+							return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(), null));
+						}
 
-                                            ex.printStackTrace();
-                                            return Mono.error(new SPRuntimeError("Internal server error [WFP-INBOX-01]", HttpStatus.INTERNAL_SERVER_ERROR, null));
-                                        });
+						ex.printStackTrace();
+						return Mono.error(new SPRuntimeError("Internal server error [WFP-INBOX-01]",
+								HttpStatus.INTERNAL_SERVER_ERROR, null));
+					});
 
-        } catch (Exception e) {
+		} catch (Exception e) {
 
-            e.printStackTrace();
-            return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
-        }
-    }
-    public Mono<ServerResponse> getPendingApplications(ServerHttpRequest request) {
-    	
-    	try {
-    		
-    		UserSessionObject user = getUserSessionDetails(request);
-    		
-    		return preProcessingFacade.getInboxApplications(request,user).flatMap(response -> ServerResponse.ok().bodyValue(response))
-    				.onErrorResume(Exception.class, ex -> {
-    					
-    					Throwable actual = Exceptions.unwrap(ex);
-    					if (actual instanceof SPRuntimeError spr) {
-    						return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(), null));
-    					}
-    					
-    					ex.printStackTrace();
-    					return Mono.error(new SPRuntimeError("Internal server error [WFP-INBOX-01]", HttpStatus.INTERNAL_SERVER_ERROR, null));
-    				});
-    		
-    	} catch (Exception e) {
-    		
-    		e.printStackTrace();
-    		return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
-    	}
-    }
+			e.printStackTrace();
+			return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
+		}
+	}
+
+	public Mono<ServerResponse> getWFPInboxFilterApplications(ServerHttpRequest request,
+			InboxApplReqDTO inboxApplReqDTO) {
+		try {
+			UserSessionObject user = getUserSessionDetails(request);
+
+			return preProcessingFacade.getWFPInboxFilterApplications(request, user, inboxApplReqDTO)
+					.flatMap(response -> ServerResponse.ok().bodyValue(response)).onErrorResume(Exception.class, ex -> {
+						Throwable actual = Exceptions.unwrap(ex);
+						if (actual instanceof SPRuntimeError spr) {
+							return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(), null));
+						}
+						ex.printStackTrace();
+						return Mono.error(new SPRuntimeError("Internal server error [WFP-INBOX-01]",
+								HttpStatus.INTERNAL_SERVER_ERROR, null));
+					});
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
+		}
+	}
+
+	public Mono<ServerResponse> getPendingApplications(ServerHttpRequest request) {
+
+		try {
+
+			UserSessionObject user = getUserSessionDetails(request);
+
+			return preProcessingFacade.getInboxApplications(request, user)
+					.flatMap(response -> ServerResponse.ok().bodyValue(response)).onErrorResume(Exception.class, ex -> {
+
+						Throwable actual = Exceptions.unwrap(ex);
+						if (actual instanceof SPRuntimeError spr) {
+							return Mono.error(new SPRuntimeError(spr.getMessage(), spr.getErrorCode(), null));
+						}
+
+						ex.printStackTrace();
+						return Mono.error(new SPRuntimeError("Internal server error [WFP-INBOX-01]",
+								HttpStatus.INTERNAL_SERVER_ERROR, null));
+					});
+
+		} catch (Exception e) {
+
+			e.printStackTrace();
+			return Mono.error(new SPRuntimeError("Internal Server Error", HttpStatus.INTERNAL_SERVER_ERROR, null));
+		}
+	}
 }
-
-
