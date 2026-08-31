@@ -2,7 +2,6 @@ package com.serviceplus.form.validation.controller;
 
 import java.util.Optional;
 
-import com.serviceplus.form.validation.dto.ServiceMeta;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -10,11 +9,10 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.InboxApplReqDTO;
 import com.serviceplus.form.validation.service.PreProcessingService;
 
 import reactor.core.publisher.Mono;
-
-import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 
 @Component
 public class PreProcessingController {
@@ -53,6 +51,11 @@ public class PreProcessingController {
     public Mono<ServerResponse> getWFPInbox(ServerRequest request) {
         return preProcessingService.getWFPInbox(request.exchange().getRequest());
     }
+
+	public Mono<ServerResponse> getWFPInboxFilterApplications(ServerRequest request) {
+		return request.bodyToMono(InboxApplReqDTO.class).defaultIfEmpty(new InboxApplReqDTO()).flatMap(
+				dto -> preProcessingService.getWFPInboxFilterApplications(request.exchange().getRequest(), dto));
+	}
     public Mono<ServerResponse> getPendingApplications(ServerRequest request) {
     	return preProcessingService.getPendingApplications(request.exchange().getRequest());
     }

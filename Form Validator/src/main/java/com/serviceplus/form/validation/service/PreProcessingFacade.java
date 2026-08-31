@@ -30,6 +30,7 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.FormPreparationContext;
 import com.serviceplus.form.validation.dto.HandlerResponse;
+import com.serviceplus.form.validation.dto.InboxApplReqDTO;
 import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
 import com.serviceplus.form.validation.dto.ServerSidePaginationRecord;
 import com.serviceplus.form.validation.dto.ServiceMeta;
@@ -333,6 +334,26 @@ public class PreProcessingFacade {
             return inboxList;
         });
     }
+
+	public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getWFPInboxFilterApplications(
+			ServerHttpRequest request, UserSessionObject user, InboxApplReqDTO inboxApplReqDTO) {
+
+		return reactiveApiClient.getWFPInboxFilterApplications(request, user, inboxApplReqDTO).map(inboxList -> {
+			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM yyyy hh:mm a");
+			List<WorkflowInboxResponse> data = inboxList.getData();
+			data.forEach(inbox -> {
+				ServiceMeta service = getServiceMeta(inbox);
+				inbox.setTaskType(OFFICIAL_TASK_FLAG);
+				inbox.setServiceKey(encryptServiceKeys(service));
+				if (inbox.getApplRecievedOn() != null) {
+					String formattedDate = inbox.getApplRecievedOn().toInstant().atZone(ZoneId.systemDefault())
+							.format(formatter);
+					inbox.setReceivedDate(formattedDate);
+				}
+			});
+			return inboxList;
+		});
+	}
 
     private static ServiceMeta getServiceMeta(WorkflowInboxResponse inbox) {
         ServiceMeta service = new ServiceMeta();

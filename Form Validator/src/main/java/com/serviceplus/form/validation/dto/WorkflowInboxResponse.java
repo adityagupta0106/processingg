@@ -1,10 +1,10 @@
 package com.serviceplus.form.validation.dto;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-
 import java.util.Date;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class WorkflowInboxResponse {
@@ -45,6 +45,16 @@ public class WorkflowInboxResponse {
     private String receivedDate;
     
     private Boolean isPriority;
+    
+    private List<MatchedOutputAttr> matchedOutputAttrs;
+
+    public List<MatchedOutputAttr> getMatchedOutputAttrs() {
+        return matchedOutputAttrs;
+    }
+
+    public void setMatchedOutputAttrs(List<MatchedOutputAttr> matchedOutputAttrs) {
+        this.matchedOutputAttrs = matchedOutputAttrs;
+    }
 
     public String getApplId() {
         return applId;

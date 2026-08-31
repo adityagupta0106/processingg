@@ -533,6 +533,59 @@ public class ReactiveApiClient {
         });
     }
 
+	@SuppressWarnings("unchecked")
+	public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getWFPInboxFilterApplications(
+			ServerHttpRequest request, UserSessionObject user, InboxApplReqDTO inboxApplReqDTO) {
+
+		applicationFlowLogs.info("getWFPInboxFilterApplications called | serviceId={}, taskId={}, filters={}",
+				inboxApplReqDTO.getServiceId(), inboxApplReqDTO.getTaskId(), inboxApplReqDTO.getFilters());
+
+		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+		String url = TRACKING_SERVICE.concat("/a/workflow/inbox/filter/applications");
+
+		Map<String, Object> params = new HashMap<>();
+		request.getQueryParams().forEach((key, value) -> params.put(key, value.size() == 1 ? value.getFirst() : value));
+
+		applicationFlowLogs.debug("Query params for tracking service call | url={}, params={}", url, params);
+
+		String requestBody;
+		try {
+			requestBody = mapper.writeValueAsString(inboxApplReqDTO);
+		} catch (JsonProcessingException e) {
+			applicationFlowLogs.error("Failed to serialize InboxApplReqDTO to JSON | serviceId={}, taskId={}",
+					inboxApplReqDTO.getServiceId(), inboxApplReqDTO.getTaskId(), e);
+			return Mono.error(new SPRuntimeError("Invalid request payload", HttpStatus.BAD_REQUEST, null));
+		}
+
+		applicationFlowLogs.debug("Serialized request body for tracking service | body={}", requestBody);
+
+		Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(String.class,
+				HttpMethod.POST, headers, params, url, requestBody, MediaType.APPLICATION_JSON);
+
+		return callExternalEndpoint.flatMap(apiResponse -> {
+			String body = apiResponse.getBody();
+
+			applicationFlowLogs.debug("Tracking service responded | status={}", apiResponse.getStatusCode());
+
+			if (body == null || body.isBlank()) {
+				applicationFlowLogs.warn("Empty/blank response body from tracking service | url={}, status={}", url,
+						apiResponse.getStatusCode());
+				return Mono.error(new SPRuntimeError("Unable to fetch inbox", HttpStatus.FAILED_DEPENDENCY, null));
+			}
+
+			Type listType = new TypeToken<ServerSidePaginationRecord<WorkflowInboxResponse>>() {
+			}.getType();
+			ServerSidePaginationRecord<WorkflowInboxResponse> inboxList = (ServerSidePaginationRecord<WorkflowInboxResponse>) stringToEntityUsingType(
+					body, listType);
+
+			applicationFlowLogs.info("Successfully parsed inbox filter response | recordCount={}, totalRecords={}",
+					inboxList.getData() != null ? inboxList.getData().size() : 0, inboxList.getTotalRecords());
+
+			return Mono.just(inboxList);
+		}).doOnError(err -> applicationFlowLogs
+				.error("Error occurred while calling tracking service inbox filter endpoint | url={}", url, err));
+	}
 	public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getInboxApplications(ServerHttpRequest request, UserSessionObject user) {
 
 		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
