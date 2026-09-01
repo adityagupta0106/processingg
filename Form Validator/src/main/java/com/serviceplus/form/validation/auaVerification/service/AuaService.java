@@ -242,12 +242,12 @@ public class AuaService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        if (logEntry.getCreatedAt() == null) {
-            logEntry.setCreatedAt(now);
+        if (logEntry.getCrDate() == null) {
+            logEntry.setCrDate(now);
         }
 
         logEntry.setRequestedAt(now);
-        logEntry.setUpdatedAt(now);
+        logEntry.setUpDate(now);
 
         log.info("AUA transaction log initialized. serviceId={}, taskId={}, txnId={}, attributeId={}, operationType={}",
                 request.getServiceId(),
@@ -266,7 +266,7 @@ public class AuaService {
 
             logEntry.setStatus("FAILED");
             logEntry.setCompletedAt(LocalDateTime.now());
-            logEntry.setUpdatedAt(LocalDateTime.now());
+            logEntry.setUpDate(LocalDateTime.now());
 
             return;
         }
@@ -298,7 +298,7 @@ public class AuaService {
 
         logEntry.setCompletedAt(LocalDateTime.now());
 
-        logEntry.setUpdatedAt(LocalDateTime.now());
+        logEntry.setUpDate(LocalDateTime.now());
     }
 
 
