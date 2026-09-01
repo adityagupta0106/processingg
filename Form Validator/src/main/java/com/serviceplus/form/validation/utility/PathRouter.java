@@ -1,5 +1,6 @@
 package com.serviceplus.form.validation.utility;
 
+import com.serviceplus.form.validation.auaVerification.controller.AuaController;
 import com.serviceplus.form.validation.controller.ApplicationFetchController;
 import com.serviceplus.form.validation.controller.DSCSignController;
 import com.serviceplus.form.validation.controller.HandlerController;
@@ -18,19 +19,25 @@ import com.serviceplus.form.validation.controller.PreProcessingController;
 @Configuration
 public class PathRouter {
 
-	@Autowired
-    private PreProcessingController preProcessingController;
+    private final PreProcessingController preProcessingController;
 
-    @Autowired
-    private HandlerController handlerController;
+    private final HandlerController handlerController;
 
-    @Autowired
-    private ApplicationFetchController applicationFetchController;
-    
-    @Autowired
-    private DSCSignController dscSignController;
+    private final ApplicationFetchController applicationFetchController;
 
-	@Value("${service.context.path}")
+    private final DSCSignController dscSignController;
+
+    private final AuaController auaController;
+
+    public PathRouter(PreProcessingController preProcessingController, HandlerController handlerController, ApplicationFetchController applicationFetchController, DSCSignController dscSignController, AuaController auaController) {
+        this.preProcessingController = preProcessingController;
+        this.handlerController = handlerController;
+        this.applicationFetchController = applicationFetchController;
+        this.dscSignController = dscSignController;
+        this.auaController = auaController;
+    }
+
+    @Value("${service.context.path}")
 	private String contextPath;
 	
     /**
@@ -52,7 +59,10 @@ public class PathRouter {
                 .andRoute(POST(contextPath + "/a/workflow/inbox/filter/list"), preProcessingController::getWFPInboxFilterApplications)
         		.andRoute(POST(contextPath + "/a/inbox/applications"), preProcessingController::getPendingApplications)
                 .andRoute(POST(contextPath + "/a/form/open"), handlerController::open)
-        		.andRoute(POST(contextPath + "/a/dsc/sign"),dscSignController::sign);
+        		.andRoute(POST(contextPath + "/a/dsc/sign"),dscSignController::sign)
+                .andRoute(POST(contextPath + "/a/aua/request"), auaController::request)
+                .andRoute(POST(contextPath + "/a/aua/validate"), auaController::validate)
+                .andRoute(POST(contextPath + "/a/aua/getPublicKey"), auaController::getPublicKey);
     }
     
     

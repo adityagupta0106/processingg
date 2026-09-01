@@ -1,5 +1,7 @@
 package com.serviceplus.form.validation.dto;
 
+import com.serviceplus.form.validation.auaVerification.dto.AuaApiConfigurationDTO;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,6 +59,8 @@ public class ServiceJSONDTO {
 	private List<TimerTaskDTO> timerTaskDetails;
 
     private List<DocumentGenerationDetails> documentGenerationDetails;
+
+    private List<AuaApiConfigurationDTO> auaApiConfigurations;
 
     public List<DocumentGenerationDetails> getDocumentGenerationDetails() {
         return documentGenerationDetails;
@@ -265,6 +269,12 @@ public class ServiceJSONDTO {
 	public void setTimerTaskDetails(List<TimerTaskDTO> timerTaskDetails) {
 		this.timerTaskDetails = timerTaskDetails;
 	}
-	
-	
+
+    public List<AuaApiConfigurationDTO> getAuaApiConfigurations() {
+        return auaApiConfigurations;
+    }
+
+    public void setAuaApiConfigurations(List<AuaApiConfigurationDTO> auaApiConfigurations) {
+        this.auaApiConfigurations = auaApiConfigurations;
+    }
 }

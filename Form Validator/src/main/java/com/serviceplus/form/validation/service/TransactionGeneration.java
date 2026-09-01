@@ -6,8 +6,10 @@ import com.serviceplus.form.validation.dto.ActivityMapDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
+import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
 import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepository;
+import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,11 +34,17 @@ import static com.serviceplus.form.validation.utility.Utility.getUserSessionDeta
 @SanitizeRequest
 public class TransactionGeneration {
 
-    @Autowired
-    private TransactionalDBExecutor transactionalDBExecutor;
+    private final TransactionalDBExecutor transactionalDBExecutor;
 
-    @Autowired
-    private ApplicationFlowRouterRepository applicationFlowRepository;
+    private final ApplicationFlowRouterRepository applicationFlowRepository;
+
+    private final CurrentProcessRepository currentProcessRepository;
+
+    public TransactionGeneration(TransactionalDBExecutor transactionalDBExecutor, ApplicationFlowRouterRepository applicationFlowRepository, CurrentProcessRepository currentProcessRepository) {
+        this.transactionalDBExecutor = transactionalDBExecutor;
+        this.applicationFlowRepository = applicationFlowRepository;
+        this.currentProcessRepository = currentProcessRepository;
+    }
 
     private static final Logger applicationFlowLogs = LogManager.getLogger("applicationFlowLogger");
 
@@ -103,43 +111,205 @@ public class TransactionGeneration {
         return transactionalDBExecutor.execute(txnLog.getTxnId(),txnLog,flowStatusEntity).thenReturn(txnLog);
     }
 
-    public Mono<ProcessingTxn> editApplication(ServiceMeta service, String appId,String txnId, ServerHttpRequest request) {
+    public Mono<ProcessingTxn> editApplication(ServiceMeta service, String appId, String txnId, ServerHttpRequest request) {
 
         UserSessionObject user = Objects.requireNonNull(getUserSessionDetails(request));
 
-        Mono<ApplicationFlowStatusEntity> flow = applicationFlowRepository.findFirstByApplicationIdAndCompletedAndTaskIdAndServiceIdAndTenantIdAndActivityTypeOrderByIdDesc(
-                appId,1, service.getTaskId(), service.getServiceId(), user.getTenantId(),ACTIVITY_FORM_STATUS_KEY
-        );
-
+        Mono<ApplicationFlowStatusEntity> flow =
+                applicationFlowRepository
+                        .findFirstByApplicationIdAndCompletedAndTaskIdAndServiceIdAndTenantIdAndActivityTypeOrderByIdDesc(
+                                appId,
+                                1,
+                                service.getTaskId(),
+                                service.getServiceId(),
+                                user.getTenantId(),
+                                ACTIVITY_FORM_STATUS_KEY
+                        );
 
         return flow
                 .switchIfEmpty(
-                        Mono.error(new SPRuntimeError("Unable to process the request check parameter",HttpStatus.BAD_REQUEST,txnId))
+                        Mono.error(
+                                new SPRuntimeError(
+                                        "Unable to process the request check parameter",
+                                        HttpStatus.BAD_REQUEST,
+                                        txnId
+                                )
+                        )
                 )
-                .flatMap(result -> {
+                .flatMap(result ->
 
-            applicationFlowLogs.info("Updating the flow status to completed by system for application {} txnId {}",appId,txnId);
+                        currentProcessRepository
+                                .findByApplicationIdAndCurrentTaskAndActionTaken(
+                                        appId,
+                                        service.getTaskId(),
+                                        "N"
+                                )
+                                .switchIfEmpty(
+                                        Mono.error(
+                                                new SPRuntimeError(
+                                                        "Current process not found",
+                                                        HttpStatus.BAD_REQUEST,
+                                                        txnId
+                                                )
+                                        )
+                                )
+                                .flatMap(currentProcess -> {
 
-            String string = """
-                 UPDATE %s SET completed = 2 WHERE task_id = :taskId AND service_id = :serviceId AND application_id = :applicationId AND txn_id = :txnId 
-                 AND completed = 0 AND tenant_id = :tenantId;
-                """;
+                                    String processId = currentProcess.getProcessId();
 
-            String sql = String.format(string, SP_SCHEMA_NAME.concat(".application_flow_status"));
+                                    applicationFlowLogs.info("EDIT | TxnId: {} | ApplicationId: {} | ProcessId: {}", txnId, appId, processId);
 
-            return transactionalDBExecutor.executeRawSql(sql, Map.of("taskId", service.getTaskId(),
-                    "serviceId", service.getServiceId(), "applicationId", appId,"txnId",txnId,"tenantId",user.getTenantId()),txnId
-            ).flatMap(rows -> {
+                                    /*
+                                     * 1. Change status to system execution code
+                                     */
+                                    String flowUpdate = """
+                                        UPDATE %s
+                                        SET completed = 2
+                                        WHERE task_id = :taskId
+                                          AND service_id = :serviceId
+                                          AND application_id = :applicationId
+                                          AND txn_id = :txnId
+                                          AND completed = 0
+                                          AND tenant_id = :tenantId
+                                        """;
 
-                applicationFlowLogs.info("Updated the flow status to completed by system for application {} txnId {} rows {}",appId,txnId,rows);
+                                    String flowSql = String.format(
+                                            flowUpdate,
+                                            SP_SCHEMA_NAME.concat(".application_flow_status")
+                                    );
 
-                if(rows == 0){
-                    return Mono.error(new SPRuntimeError("Unable to process request [EDIT - 01]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
-                }
-                return createNewTransactionAndFlow(
-                        service, appId, new ActivityMapDTO.ActivityData(ACTIVITY_FORM_STATUS_KEY), user,request, result.getDataId()
-                        );
-            });
-        });
+                                    return transactionalDBExecutor.executeRawSql(
+                                            flowSql,
+                                            Map.of(
+                                                    "taskId", service.getTaskId(),
+                                                    "serviceId", service.getServiceId(),
+                                                    "applicationId", appId,
+                                                    "txnId", txnId,
+                                                    "tenantId", user.getTenantId()
+                                            ),
+                                            txnId
+                                    ).flatMap(rows -> {
+
+                                        applicationFlowLogs.info("EDIT | Flow updated | ApplicationId: {} | TxnId: {} | Rows: {}", appId, txnId, rows);
+
+                                        if (rows == 0) {
+                                            return Mono.error(new SPRuntimeError("Unable to process request [EDIT - 01]", HttpStatus.INTERNAL_SERVER_ERROR, txnId));
+                                        }
+
+                                        /*
+                                         * 2. Document Log -> R
+                                         */
+                                        String documentLogUpdate = """
+                                            UPDATE %s
+                                            SET status = 'R',
+                                                updated_by = :userId,
+                                                updated_on = CURRENT_TIMESTAMP
+                                            WHERE application_id = :applicationId
+                                              AND process_id = :processId
+                                              AND tenant_id = :tenantId
+                                              AND status = 'P'
+                                            """;
+
+                                        String documentLogSql = String.format(
+                                                documentLogUpdate,
+                                                SP_SCHEMA_NAME.concat(".application_document_log")
+                                        );
+
+                                        return transactionalDBExecutor.executeRawSql(
+                                                documentLogSql,
+                                                Map.of(
+                                                        "applicationId", appId,
+                                                        "processId", processId,
+                                                        "tenantId", user.getTenantId(),
+                                                        "userId", user.getUserID()
+                                                ),
+                                                txnId
+                                        );
+                                    }).flatMap(documentRows -> {
+
+                                        applicationFlowLogs.info("EDIT | Document logs marked R | ApplicationId: {} | ProcessId: {} | Rows: {}", appId, processId, documentRows);
+
+                                        /*
+                                         * 3. Document Merge -> R
+                                         */
+                                        String mergeUpdate = """
+                                            UPDATE %s
+                                            SET status = 'R',
+                                                updated_by = :userId,
+                                                updated_on = CURRENT_TIMESTAMP
+                                            WHERE application_id = :applicationId
+                                              AND process_id = :processId
+                                              AND tenant_id = :tenantId
+                                              AND status = 'P'
+                                            """;
+
+                                        String mergeSql = String.format(
+                                                mergeUpdate,
+                                                SP_SCHEMA_NAME.concat(".application_document_merge")
+                                        );
+
+                                        return transactionalDBExecutor.executeRawSql(
+                                                mergeSql,
+                                                Map.of(
+                                                        "applicationId", appId,
+                                                        "processId", processId,
+                                                        "tenantId", user.getTenantId(),
+                                                        "userId", user.getUserID()
+                                                ),
+                                                txnId
+                                        );
+                                    }).flatMap(mergeRows -> {
+
+                                        applicationFlowLogs.info("EDIT | Merge records marked R | ApplicationId: {} | ProcessId: {} | Rows: {}", appId, processId, mergeRows);
+
+                                        /*
+                                         * 4. Document Submission -> R
+                                         */
+                                        String submissionUpdate = """
+                                            UPDATE %s
+                                            SET status = 'R'
+                                            WHERE application_id = :applicationId
+                                              AND process_id = :processId
+                                              AND tenant_id = :tenantId
+                                              AND status = 'P'
+                                            """;
+
+                                        String submissionSql = String.format(
+                                                submissionUpdate,
+                                                SP_SCHEMA_NAME.concat(".application_document_submission")
+                                        );
+
+                                        return transactionalDBExecutor.executeRawSql(
+                                                submissionSql,
+                                                Map.of(
+                                                        "applicationId", appId,
+                                                        "processId", processId,
+                                                        "tenantId", user.getTenantId()
+                                                ),
+                                                txnId
+                                        );
+                                    }).flatMap(submissionRows -> {
+
+                                        applicationFlowLogs.info(
+                                                "EDIT | Submission records marked R | ApplicationId: {} | ProcessId: {} | Rows: {}",
+                                                appId,
+                                                processId,
+                                                submissionRows
+                                        );
+
+                                        return createNewTransactionAndFlow(
+                                                service,
+                                                appId,
+                                                new ActivityMapDTO.ActivityData(
+                                                        ACTIVITY_FORM_STATUS_KEY
+                                                ),
+                                                user,
+                                                request,
+                                                result.getDataId()
+                                        );
+                                    });
+                                })
+                );
     }
+
 }

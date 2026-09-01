@@ -71,7 +71,7 @@ public class Utility {
 		if(header == null || header.isEmpty())
 			return null;
 			
-		return (UserSessionObject) stringToEntity(header.get(0),UserSessionObject.class);
+		return (UserSessionObject) stringToEntity(header.getFirst(),UserSessionObject.class);
 	}
 	
 	public static Object stringToEntity(String data,Class<?> classs) {
