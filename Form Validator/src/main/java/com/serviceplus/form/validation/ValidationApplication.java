@@ -14,7 +14,7 @@ import org.springframework.web.reactive.config.EnableWebFlux;
 @EnableDiscoveryClient
 @EnableAspectJAutoProxy
 @EnableWebFlux
-@EnableR2dbcRepositories(basePackages = "com.serviceplus.form.validation.repository")
+@EnableR2dbcRepositories(basePackages = {"com.serviceplus.form.validation.repository","com.serviceplus.form.validation.auaVerification.repository"})
 @EnableScheduling
 public class ValidationApplication {
 

@@ -43,5 +43,6 @@ public class ApplicationConstants {
     public static final Integer ACTION_REJECT = 10;
     public static final String ACTIVITY_DOCUMENT_GENERATION = "DG";
 	public static final String ACTIVITY_NOTIFICATION_GENERATION = "NG";
+    public static final String ACTIVITY_PAYMENT = "PAY";
 
 }
