@@ -235,6 +235,6 @@ CREATE TABLE schm_sp.aua_transaction_log (
     error_message VARCHAR,
     requested_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+    cr_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    up_date TIMESTAMP WITH TIME ZONE NOT NULL
 );

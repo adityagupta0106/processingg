@@ -43,9 +43,9 @@ public class AuaTransactionLog implements Persistable<Long> {
 
     private LocalDateTime completedAt;
 
-    private LocalDateTime createdAt;
+    private LocalDateTime crDate;
 
-    private LocalDateTime updatedAt;
+    private LocalDateTime upDate;
 
 
     @Transient
@@ -193,24 +193,21 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.completedAt = completedAt;
     }
 
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public LocalDateTime getUpDate() {
+        return upDate;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    public void setUpDate(LocalDateTime upDate) {
+        this.upDate = upDate;
     }
 
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+    public LocalDateTime getCrDate() {
+        return crDate;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    public void setCrDate(LocalDateTime crDate) {
+        this.crDate = crDate;
     }
-
 
     public boolean isNewEntity() {
         return newEntity;
