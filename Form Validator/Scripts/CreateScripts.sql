@@ -219,178 +219,22 @@ ALTER TABLE IF EXISTS schm_sp.application_details ADD COLUMN is_priority boolean
 
 ----------------------------- AUA------------------
 
--- Table: schm_sp.aua_providers
-
--- DROP TABLE IF EXISTS schm_sp.aua_providers;
-
-CREATE TABLE IF NOT EXISTS schm_sp.aua_providers
-(
-    id bigserial,
-    provider_name character varying COLLATE pg_catalog."default" NOT NULL,
-    description character varying COLLATE pg_catalog."default",
-    active boolean NOT NULL DEFAULT true,
-    cr_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    up_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    tenant_id character varying COLLATE pg_catalog."default",
-    CONSTRAINT aua_providers_pkey PRIMARY KEY (id),
-    CONSTRAINT uk_aua_providers_name UNIQUE (provider_name)
-)
-
-TABLESPACE pg_default;
-
-ALTER TABLE IF EXISTS schm_sp.aua_providers
-    OWNER to postgres;
-
-
-
--- Table: schm_sp.aua_api_definitions
-
--- DROP TABLE IF EXISTS schm_sp.aua_api_definitions;
-
-CREATE TABLE IF NOT EXISTS schm_sp.aua_api_definitions
-(
-    id bigserial,
-    provider_id bigint NOT NULL,
-    api_code character varying COLLATE pg_catalog."default" NOT NULL,
-    api_name character varying COLLATE pg_catalog."default" NOT NULL,
-    operation_type character varying COLLATE pg_catalog."default" NOT NULL,
-    api_version character varying COLLATE pg_catalog."default",
-    protocol character varying COLLATE pg_catalog."default" NOT NULL DEFAULT 'HTTPS'::character varying,
-    http_method character varying COLLATE pg_catalog."default" NOT NULL DEFAULT 'POST'::character varying,
-    endpoint character varying COLLATE pg_catalog."default",
-    description character varying COLLATE pg_catalog."default",
-    active boolean NOT NULL DEFAULT true,
-    cr_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    up_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    tenant_id character varying COLLATE pg_catalog."default",
-    xml_namespace character varying COLLATE pg_catalog."default",
-    xml_namespace_version character varying COLLATE pg_catalog."default",
-    CONSTRAINT aua_api_definitions_pkey PRIMARY KEY (id),
-    CONSTRAINT uk_aua_api_definition UNIQUE (provider_id, api_code, api_version),
-    CONSTRAINT fk_aua_api_def_provider FOREIGN KEY (provider_id)
-        REFERENCES schm_sp.aua_providers (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-)
-
-TABLESPACE pg_default;
-
-ALTER TABLE IF EXISTS schm_sp.aua_api_definitions
-    OWNER to postgres;
-
-
-
--- Table: schm_sp.aua_api_messages
-
--- DROP TABLE IF EXISTS schm_sp.aua_api_messages;
-
-CREATE TABLE IF NOT EXISTS schm_sp.aua_api_messages
-(
-    id bigserial,
-    api_definition_id bigint NOT NULL,
-    message_type character varying COLLATE pg_catalog."default" NOT NULL,
-    root_element character varying COLLATE pg_catalog."default" NOT NULL,
-    xsd_content text COLLATE pg_catalog."default",
-    xsd_version character varying COLLATE pg_catalog."default",
-    xsd_hash character varying COLLATE pg_catalog."default",
-    description character varying COLLATE pg_catalog."default",
-    active boolean NOT NULL DEFAULT true,
-    cr_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    up_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    tenant_id character varying COLLATE pg_catalog."default",
-    CONSTRAINT aua_api_messages_pkey PRIMARY KEY (id),
-    CONSTRAINT uk_aua_api_message UNIQUE (api_definition_id, message_type),
-    CONSTRAINT fk_aua_api_message_definition FOREIGN KEY (api_definition_id)
-        REFERENCES schm_sp.aua_api_definitions (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-)
-
-TABLESPACE pg_default;
-
-ALTER TABLE IF EXISTS schm_sp.aua_api_messages
-    OWNER to postgres;
-
-
--- Table: schm_sp.aua_api_fields
-
--- DROP TABLE IF EXISTS schm_sp.aua_api_fields;
-
-CREATE TABLE IF NOT EXISTS schm_sp.aua_api_fields
-(
-    id bigserial,
-    message_id bigint NOT NULL,
-    field_code character varying COLLATE pg_catalog."default" NOT NULL,
-    field_name character varying COLLATE pg_catalog."default" NOT NULL,
-    xpath character varying COLLATE pg_catalog."default" NOT NULL,
-    data_type character varying COLLATE pg_catalog."default" NOT NULL,
-    field_type character varying COLLATE pg_catalog."default" NOT NULL,
-    required boolean NOT NULL DEFAULT false,
-    multiple boolean NOT NULL DEFAULT false,
-    sensitive boolean NOT NULL DEFAULT false,
-    default_value character varying COLLATE pg_catalog."default",
-    allowed_values jsonb,
-    description character varying COLLATE pg_catalog."default",
-    display_order integer,
-    active boolean NOT NULL DEFAULT true,
-    cr_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    up_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    tenant_id character varying COLLATE pg_catalog."default",
-    displayable boolean NOT NULL DEFAULT true,
-    generation_type character varying COLLATE pg_catalog."default",
-    CONSTRAINT aua_api_fields_pkey PRIMARY KEY (id),
-    CONSTRAINT uk_aua_api_field UNIQUE (message_id, field_code),
-    CONSTRAINT fk_aua_api_field_message FOREIGN KEY (message_id)
-        REFERENCES schm_sp.aua_api_messages (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-)
-
-TABLESPACE pg_default;
-
-ALTER TABLE IF EXISTS schm_sp.aua_api_fields
-    OWNER to postgres;
-
-
-
--- Table: schm_sp.aua_api_field_mappings
-
--- DROP TABLE IF EXISTS schm_sp.aua_api_field_mappings;
-
-CREATE TABLE IF NOT EXISTS schm_sp.aua_api_field_mappings
-(
-    id bigserial,
-    api_definition_id bigint NOT NULL,
-    api_field_id bigint NOT NULL,
-    source_type character varying COLLATE pg_catalog."default" NOT NULL,
-    source_path character varying COLLATE pg_catalog."default",
-    transformation character varying COLLATE pg_catalog."default",
-    default_value character varying COLLATE pg_catalog."default",
-    cr_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    up_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    tenant_id character varying COLLATE pg_catalog."default",
-    response_attribute_type character varying COLLATE pg_catalog."default",
-    desired_response character varying COLLATE pg_catalog."default",
-    service_id bigint,
-    cr_by bigint,
-    provider_id bigint,
-    CONSTRAINT aua_api_field_mappings_pkey PRIMARY KEY (id),
-    CONSTRAINT uk_aua_api_mapping UNIQUE (api_definition_id, api_field_id, service_id),
-    CONSTRAINT fk_aua_mapping_definition FOREIGN KEY (api_definition_id)
-        REFERENCES schm_sp.aua_api_definitions (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION,
-    CONSTRAINT fk_aua_mapping_field FOREIGN KEY (api_field_id)
-        REFERENCES schm_sp.aua_api_fields (id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION,
-    CONSTRAINT fk_aua_mapping_service FOREIGN KEY (service_id)
-        REFERENCES schm_sp.service_definition (service_id) MATCH SIMPLE
-        ON UPDATE NO ACTION
-        ON DELETE NO ACTION
-)
-
-TABLESPACE pg_default;
-
-ALTER TABLE IF EXISTS schm_sp.aua_api_field_mappings
-    OWNER to postgres;
+CREATE TABLE schm_sp.aua_transaction_log (
+    id BIGSERIAL PRIMARY KEY,
+    txn_id VARCHAR NOT NULL,
+    attribute_id VARCHAR NOT NULL,
+    service_id INTEGER NOT NULL,
+    task_id VARCHAR,
+    tenant_id VARCHAR NOT NULL,
+    operation_type VARCHAR NOT NULL,
+    status VARCHAR NOT NULL DEFAULT 'INITIATED',
+    provider_id BIGINT,
+    api_id BIGINT,
+    provider_txn_id VARCHAR,
+    error_code VARCHAR,
+    error_message VARCHAR,
+    requested_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
