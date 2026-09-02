@@ -222,6 +222,7 @@ public class AuaRequestBuilder {
 
             if (AuaGenerationType.GENERATE_TXN.name().equalsIgnoreCase(transformation)) {
                 String txn = isNull(logEntry.getProviderTxnId()) ? generateTransactionId() : logEntry.getProviderTxnId();
+                logEntry.setProviderTxnId(txn);
                 log.debug("AUA transaction ID resolved. fieldCode={}", field.getFieldCode());
                 return txn;
             }
@@ -275,7 +276,8 @@ public class AuaRequestBuilder {
         }
 
 
-        throw new IllegalArgumentException("Unsupported AUA source type: " + field.getSourceType() + " for field: " + field.getFieldCode());
+        return "";
+        //throw new IllegalArgumentException("Unsupported AUA source type: " + field.getSourceType() + " for field: " + field.getFieldCode());
     }
 
 

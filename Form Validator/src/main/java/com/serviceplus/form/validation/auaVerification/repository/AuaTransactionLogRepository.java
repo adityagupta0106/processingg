@@ -13,4 +13,6 @@ public interface AuaTransactionLogRepository extends ReactiveCrudRepository<AuaT
     Mono<AuaTransactionLog> findByTxnIdAndAttributeIdAndServiceIdAndTenantId(String txnId, String attributeId, Integer serviceId, String tenantId);
 
     Mono<AuaTransactionLog> findByTxnIdAndAttributeIdAndServiceIdAndTenantIdAndOperationType(String txnId, String attributeId, Integer serviceId, String tenantId, String operationType);
+
+    Mono<AuaTransactionLog> findFirstByTxnIdAndAttributeIdAndServiceIdAndTenantIdAndStatusOrderByCrDateDesc(String txnId, String attributeId, Integer serviceId, String tenantId, String success);
 }
