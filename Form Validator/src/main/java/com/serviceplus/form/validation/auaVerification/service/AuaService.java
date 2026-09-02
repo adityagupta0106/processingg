@@ -65,12 +65,13 @@ public class AuaService {
                 )
                 .flatMap(metadata ->
 
-                        transactionLogRepository.findByTxnIdAndAttributeIdAndServiceIdAndTenantIdAndOperationType(
+                        transactionLogRepository
+                                .findFirstByTxnIdAndAttributeIdAndServiceIdAndTenantIdAndStatusOrderByCrDateDesc(
                                         request.getTxnId(),
                                         request.getAttributeId(),
                                         request.getServiceId(),
                                         tenantId,
-                                        request.getOperationType()
+                                        "SUCCESS"
                                 )
 
                                 .defaultIfEmpty(new AuaTransactionLog())
@@ -235,7 +236,6 @@ public class AuaService {
 
             logEntry.setProviderId(null);
             logEntry.setApiId(null);
-            logEntry.setProviderTxnId(null);
             logEntry.setErrorCode(null);
             logEntry.setErrorMessage(null);
         }
@@ -293,8 +293,6 @@ public class AuaService {
                     response.getErrorCode()
             );
         }
-
-        logEntry.setProviderTxnId(response.getTransactionId());
 
         logEntry.setCompletedAt(LocalDateTime.now());
 
