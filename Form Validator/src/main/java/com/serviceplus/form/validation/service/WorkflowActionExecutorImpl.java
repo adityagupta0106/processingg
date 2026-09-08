@@ -151,7 +151,7 @@ public class WorkflowActionExecutorImpl implements WorkflowActionExecutor {
 
 						return gatewayService.processGateway(currentNode, next, wf, serviceMeta, application, txn, user,
 								now, currentProcess, baseProcess, officeLocations, finalTaskLocationUserHolderMap, null,
-								timerDueDate, taskRelationMap);
+								timerDueDate, taskRelationMap,serviceJson.getOfficeDetails(),serviceJson.getApplicationRoutingMap());
 					}
 
 					return Mono.just(baseProcess);

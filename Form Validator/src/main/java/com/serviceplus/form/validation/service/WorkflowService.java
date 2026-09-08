@@ -1,16 +1,15 @@
 package com.serviceplus.form.validation.service;
 
-import static com.serviceplus.form.validation.utility.ApplicationConstants.SERVICE_WORKFLOW_REDIS_KEY_APPENDER;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_GATEWAY;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -18,12 +17,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import com.google.gson.reflect.TypeToken;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.Helpers.CurrentProcessBuilder;
 import com.serviceplus.form.validation.Helpers.WorkflowHelper;
+import com.serviceplus.form.validation.dto.ApplicationRouting;
 import com.serviceplus.form.validation.dto.EscalationDetailsDTO;
 import com.serviceplus.form.validation.dto.InboxKafka;
+import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
@@ -87,7 +87,7 @@ public class WorkflowService {
 				.switchIfEmpty(Mono.error(new SPRuntimeError("Workflow Exception [ERR - 01]",
 						HttpStatus.FAILED_DEPENDENCY, savedLog.getTxnId())))
 				.flatMap(serviceJson -> generate(serviceJson.getProcessFlowMap(), serviceJson.getTimerTaskDetails(),serviceJson.getEscalationDetails(), ad,
-						savedLog, service, user, cp))
+						savedLog, service, user, cp,serviceJson.getOfficeDetails(),serviceJson.getApplicationRoutingMap()))
 				.onErrorResume(ex -> {
 					ex.printStackTrace();
 					return Mono.error(new SPRuntimeError("Workflow Error [ERR -01]", HttpStatus.INTERNAL_SERVER_ERROR,
@@ -96,7 +96,7 @@ public class WorkflowService {
 	}
 
     private Mono<?> generate(ServiceProcessFlowDTO response, List<TimerTaskDTO> timerTaskDetails,List<EscalationDetailsDTO> escalationDetails,ApplicationDetails ad, ProcessingTxn savedLog,
-                             ServiceMeta service, UserSessionObject user, CurrentProcess cp) {
+                             ServiceMeta service, UserSessionObject user, CurrentProcess cp,List<OfficeDetailsDTO> officeDetails,Map<String, ApplicationRouting> applicationRoutingMap) {
         List<ServiceProcessFlowDTO.Data> wf =  response.getData();
         String currentTask = service.getTaskId();
 
@@ -108,101 +108,145 @@ public class WorkflowService {
             applicationFlowLogs.info("Generating workflow for txnId {} currentTask {} nextNode {}"
                     ,savedLog.getTxnId(),currentTask,data.toString());
 
-            return calculateNextWorkflow(data.getNode(), data, service, ad, savedLog, user, wf,cp,timerTaskDetails,escalationDetails,response.getTaskRelation());
+            return calculateNextWorkflow(data.getNode(), data, service, ad, savedLog, user, wf,cp,timerTaskDetails,escalationDetails,response.getTaskRelation(),officeDetails,applicationRoutingMap);
         }
 
         return Mono.empty();
     }
-
+    
     private Mono<InboxKafka> calculateNextWorkflow(ServiceProcessFlowDTO.Data.Nodes node, ServiceProcessFlowDTO.Data data,
-                                                   ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
-                                                   List<ServiceProcessFlowDTO.Data> wf, CurrentProcess currentActionProcess,List<TimerTaskDTO> timerTaskDetails,List<EscalationDetailsDTO> escalationDetails, Map<String, TaskRelationDTO> taskRelationMap) {
+            ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
+            List<ServiceProcessFlowDTO.Data> wf, CurrentProcess currentActionProcess,
+            List<TimerTaskDTO> timerTaskDetails,List<EscalationDetailsDTO> escalationDetails,
+			Map<String, TaskRelationDTO> taskRelationMap, List<OfficeDetailsDTO> officeDetails,Map<String, ApplicationRouting> applicationRoutingMap) {
 
-        ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow = service.getSelectedWorkflowElementData();
+		ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow = service.getSelectedWorkflowElementData();
 
-        LocalDateTime now = LocalDateTime.now();
+		LocalDateTime now = LocalDateTime.now();
 
-        List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations = new ArrayList<>();
-        List<CurrentProcess> pList = new ArrayList<>();
+		List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations = new ArrayList<>();
+		List<CurrentProcess> pList = new ArrayList<>();
 
-        Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
-        Map<String, LocalDateTime> timerDueDate=new HashMap<String, LocalDateTime>();
+		Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
+		Map<String, LocalDateTime> timerDueDate = new HashMap<String, LocalDateTime>();
 
-        applicationFlowLogs.info("calculateNextWorkflow started txnId={}, currentNode={}, mappedTasks={}",
-                txn.getTxnId(), node.getId(), data.getMappedTasks().size());
+		applicationFlowLogs.info("calculateNextWorkflow started txnId={}, currentNode={}, mappedTasks={}",
+				txn.getTxnId(), node.getId(), data.getMappedTasks().size());
 
-        return Flux.fromIterable(data.getMappedTasks())
+		return Flux.fromIterable(data.getMappedTasks())
 
-                .concatMap(task -> {
+				.concatMap(task -> {
 
-                	ServiceProcessFlowDTO.Data.Nodes next = task.getNode();
+					ServiceProcessFlowDTO.Data.Nodes next = task.getNode();
 
-                    applicationFlowLogs.info("Processing taskId={}, taskType={}, txnId={}", next.getId(),
-                            next.getType(), txn.getTxnId());
+					applicationFlowLogs.info("Processing taskId={}, taskType={}, txnId={}", next.getId(),
+							next.getType(), txn.getTxnId());
 
-                    return taskAssignmentService.nextAllowedOfficeLocation(wf, next, txn.getTxnId(), service.getServiceId(), user,
-                            taskLocationUserHolderMap,service)
+					return taskAssignmentService
+							.nextAllowedOfficeLocation(wf, next, txn.getTxnId(), service.getServiceId(), user,
+									taskLocationUserHolderMap, service)
 
-                            .flatMapMany(nextAllowedOfficeLocation -> {
+							.flatMapMany(nextAllowedOfficeLocation -> {
 
-                                applicationFlowLogs.info("nextAllowedOfficeLocation resolved for taskId={} : {}",
-                                        next.getId(), nextAllowedOfficeLocation);
+								applicationFlowLogs.info("nextAllowedOfficeLocation resolved for taskId={} : {}",
+										next.getId(), nextAllowedOfficeLocation);
 
-                                taskAvailableOfficeLocations.add(nextAllowedOfficeLocation);
+								applicationFlowLogs.info("Executing After Task MVEL for taskId={}, currentMap={}",
+										next.getId(), taskLocationUserHolderMap);
 
-                                applicationFlowLogs.info("Executing After Task MVEL for taskId={}, currentMap={}",
-                                        next.getId(), taskLocationUserHolderMap);
+								return taskAssignmentService
+										.executeAfterTaskMvel(user, service, ad, txn, "", currentActionProcess,
+												node.getId(), taskLocationUserHolderMap, timerDueDate)
 
-                                return taskAssignmentService.executeAfterTaskMvel(user,service, ad, txn, "", currentActionProcess, next.getId(),
-                                        taskLocationUserHolderMap,timerDueDate)
+										.thenMany(Flux.defer(() -> {
 
-                                        .thenMany(Flux.defer(() -> {
+											applicationFlowLogs.info(
+													"After Task MVEL completed for taskId={}, updatedMap={}",
+													next.getId(), taskLocationUserHolderMap);
+											Integer sourceLevelCode;
+											Long sourceLocationId;
 
-                                            applicationFlowLogs.info(
-                                                    "After Task MVEL completed for taskId={}, updatedMap={}",
-                                                    next.getId(), taskLocationUserHolderMap);
+											if (user.getEntityLevelId() != null) {
+											    sourceLevelCode = user.getEntityLevelId();
+											    sourceLocationId = user.getLocationId().longValue();
+											} else {
+											    OfficeDetailsDTO sourceOfficeDetails = officeDetails.stream()
+											            .filter(Objects::nonNull)
+											            .filter(detail -> node.getId().equals(detail.getTaskId()))
+											            .findFirst()
+											            .orElse(null);
+											    if (sourceOfficeDetails != null) {
 
-                                            taskAssignmentService.refreshTaskAvailableOfficeLocation(nextAllowedOfficeLocation,
-                                                    taskLocationUserHolderMap);
+											        sourceLevelCode = sourceOfficeDetails.getOfficeLevelIds() != null
+											                ? sourceOfficeDetails.getOfficeLevelIds()
+											                        .stream()
+											                        .findFirst()
+											                        .orElse(null)
+											                : null;
 
-                                            applicationFlowLogs.info("Office locations refreshed for taskId={} : {}",
-                                                    next.getId(), nextAllowedOfficeLocation);
+											        sourceLocationId = sourceOfficeDetails.getAllowedOffices() != null
+											                ? sourceOfficeDetails.getAllowedOffices()
+											                        .stream()
+											                        .filter(Objects::nonNull)
+											                        .map(OfficeDetailsDTO.OfficeUnitData::getOrgUnitCode)
+											                        .filter(Objects::nonNull)
+											                        .map(Integer::longValue)
+											                        .findFirst()
+											                        .orElse(null)
+											                : null;
 
-                                            CurrentProcess baseProcess = currentProcessBuilder.buildBaseProcess(currentActionProcess, node,
-                                                    next, service, ad, user, now, taskAvailableOfficeLocations, wf,
-                                                    txn);
+											    }else {
+											        sourceLevelCode = null;
+											        sourceLocationId = null;
+											    }
+											}
+											Integer destinationLevelCode = officeDetails.stream()
+													.filter(Objects::nonNull)
+													.filter(detail -> next.getId().equals(detail.getTaskId()))
+													.map(OfficeDetailsDTO::getOfficeLevelIds).filter(Objects::nonNull)
+													.flatMap(Set::stream).findFirst().orElse(null);
 
-                                            applicationFlowLogs.info("Base process created for taskId={}, process={}",
-                                                    next.getId(), baseProcess);
+											return taskAssignmentService
+													.refreshTaskAvailableOfficeLocation(nextAllowedOfficeLocation,
+															taskLocationUserHolderMap, sourceLocationId,
+															sourceLevelCode, destinationLevelCode, user,ad.getApplicationId(),applicationRoutingMap)
 
-                                            pList.add(baseProcess);
+													.thenMany(Flux.defer(() -> {
 
-                                            if (TYPE_GATEWAY.equals(next.getType())) {
+														applicationFlowLogs.info(
+																"Office locations refreshed for taskId={} : {}",
+																next.getId(), nextAllowedOfficeLocation);
 
-                                                return gatewayService.processGateway(
-                                                        node,
-                                                        next,
-                                                        wf,
-                                                        service,
-                                                        ad,
-                                                        txn,
-                                                        user,
-                                                        now,
-                                                        currentActionProcess,
-                                                        baseProcess,
-                                                        taskAvailableOfficeLocations,
-                                                        taskLocationUserHolderMap,
-                                                        selectedWorkflow,timerDueDate,taskRelationMap
-                                                        );
-                                            }
+														taskAvailableOfficeLocations.add(nextAllowedOfficeLocation);
 
-                                            return Flux.just(baseProcess);
-                                        }));
-                            });
+														CurrentProcess baseProcess = currentProcessBuilder
+																.buildBaseProcess(currentActionProcess, node, next,
+																		service, ad, user, now,
+																		taskAvailableOfficeLocations, wf, txn);
 
-                })
+														applicationFlowLogs.info(
+																"Base process created for taskId={}, process={}",
+																next.getId(), baseProcess);
 
-                .collectList()
+														pList.add(baseProcess);
+
+														if (TYPE_GATEWAY.equals(next.getType())) {
+
+															return gatewayService.processGateway(node, next, wf,
+																	service, ad, txn, user, now, currentActionProcess,
+																	baseProcess, taskAvailableOfficeLocations,
+																	taskLocationUserHolderMap, selectedWorkflow,
+																	timerDueDate, taskRelationMap, officeDetails,applicationRoutingMap);
+														}
+
+														return Flux.just(baseProcess);
+													}));
+										}));
+							});
+
+				})
+
+				.collectList()
 
 				.flatMap(processList -> {
 
@@ -219,7 +263,7 @@ public class WorkflowService {
 						processList.add(pList.getFirst());
 					}
 
-					return saveTimerAndEscalationDetails(processList, timerDueDate, timerTaskDetails,escalationDetails)
+					return saveTimerAndEscalationDetails(processList, timerDueDate, timerTaskDetails, escalationDetails)
 
 							.then(Mono.fromSupplier(() -> {
 
@@ -246,8 +290,154 @@ public class WorkflowService {
 							}));
 				}).doOnError(
 						ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
-    }
-    
+	}
+
+//    private Mono<InboxKafka> calculateNextWorkflow(ServiceProcessFlowDTO.Data.Nodes node, ServiceProcessFlowDTO.Data data,
+//                                                   ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
+//                                                   List<ServiceProcessFlowDTO.Data> wf, CurrentProcess currentActionProcess,
+//                                                   List<TimerTaskDTO> timerTaskDetails,List<EscalationDetailsDTO> escalationDetails,
+//                                                   Map<String, TaskRelationDTO> taskRelationMap,List<OfficeDetailsDTO> officeDetails) {
+//
+//        ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow = service.getSelectedWorkflowElementData();
+//
+//        LocalDateTime now = LocalDateTime.now();
+//
+//        List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations = new ArrayList<>();
+//        List<CurrentProcess> pList = new ArrayList<>();
+//
+//        Map<String, Map<String, List<String>>> taskLocationUserHolderMap = new HashMap<>();
+//        Map<String, LocalDateTime> timerDueDate=new HashMap<String, LocalDateTime>();
+//
+//        applicationFlowLogs.info("calculateNextWorkflow started txnId={}, currentNode={}, mappedTasks={}",
+//                txn.getTxnId(), node.getId(), data.getMappedTasks().size());
+//
+//        return Flux.fromIterable(data.getMappedTasks())
+//
+//                .concatMap(task -> {
+//
+//                	ServiceProcessFlowDTO.Data.Nodes next = task.getNode();
+//
+//                    applicationFlowLogs.info("Processing taskId={}, taskType={}, txnId={}", next.getId(),
+//                            next.getType(), txn.getTxnId());
+//
+//                    return taskAssignmentService.nextAllowedOfficeLocation(wf, next, txn.getTxnId(), service.getServiceId(), user,
+//                            taskLocationUserHolderMap,service)
+//
+//                            .flatMapMany(nextAllowedOfficeLocation -> {
+//
+//                                applicationFlowLogs.info("nextAllowedOfficeLocation resolved for taskId={} : {}",
+//                                        next.getId(), nextAllowedOfficeLocation);
+//
+//                                taskAvailableOfficeLocations.add(nextAllowedOfficeLocation);
+//
+//                                applicationFlowLogs.info("Executing After Task MVEL for taskId={}, currentMap={}",
+//                                        next.getId(), taskLocationUserHolderMap);
+//
+//                                return taskAssignmentService.executeAfterTaskMvel(user,service, ad, txn, "", currentActionProcess, node.getId(),
+//                                        taskLocationUserHolderMap,timerDueDate)
+//
+//                                        .thenMany(Flux.defer(() -> {
+//
+//                                            applicationFlowLogs.info(
+//                                                    "After Task MVEL completed for taskId={}, updatedMap={}",
+//                                                    next.getId(), taskLocationUserHolderMap);
+//                                            
+//                                            Integer destinationLevelCode = officeDetails.stream()
+//                                                    .filter(Objects::nonNull)
+//                                                    .filter(detail -> next.getId().equals(detail.getTaskId()))
+//                                                    .map(OfficeDetailsDTO::getOfficeLevelIds)
+//                                                    .filter(Objects::nonNull)
+//                                                    .flatMap(Set::stream)
+//                                                    .findFirst()
+//                                                    .orElse(null);
+//                                            taskAssignmentService.refreshTaskAvailableOfficeLocation(nextAllowedOfficeLocation,
+//                                                    taskLocationUserHolderMap,user.getLocationId().longValue(),user.getEntityLevelId(),destinationLevelCode,user).subscribe();
+////                                            taskAssignmentService.refreshTaskAvailableOfficeLocation(nextAllowedOfficeLocation,
+////                                                    taskLocationUserHolderMap);
+//
+//                                            applicationFlowLogs.info("Office locations refreshed for taskId={} : {}",
+//                                                    next.getId(), nextAllowedOfficeLocation);
+//
+//                                            CurrentProcess baseProcess = currentProcessBuilder.buildBaseProcess(currentActionProcess, node,
+//                                                    next, service, ad, user, now, taskAvailableOfficeLocations, wf,
+//                                                    txn);
+//
+//                                            applicationFlowLogs.info("Base process created for taskId={}, process={}",
+//                                                    next.getId(), baseProcess);
+//
+//                                            pList.add(baseProcess);
+//
+//                                            if (TYPE_GATEWAY.equals(next.getType())) {
+//
+//                                                return gatewayService.processGateway(
+//                                                        node,
+//                                                        next,
+//                                                        wf,
+//                                                        service,
+//                                                        ad,
+//                                                        txn,
+//                                                        user,
+//                                                        now,
+//                                                        currentActionProcess,
+//                                                        baseProcess,
+//                                                        taskAvailableOfficeLocations,
+//                                                        taskLocationUserHolderMap,
+//                                                        selectedWorkflow,timerDueDate,taskRelationMap,officeDetails
+//                                                        );
+//                                            }
+//
+//                                            return Flux.just(baseProcess);
+//                                        }));
+//                            });
+//
+//                })
+//
+//                .collectList()
+//
+//				.flatMap(processList -> {
+//
+//					applicationFlowLogs.info("Workflow processing completed. Generated process count={}",
+//							processList.size());
+//
+//					processList.add(currentActionProcess);
+//
+//					TaskRelationDTO taskRelationDTO = taskRelationMap.get(currentActionProcess.getCurrentTask());
+//
+//					if (taskRelationDTO != null && taskRelationDTO.getNextTask() != null
+//							&& taskRelationDTO.getNextTask().size() > 1 && !pList.isEmpty()) {
+//
+//						processList.add(pList.getFirst());
+//					}
+//
+//					return saveTimerAndEscalationDetails(processList, timerDueDate, timerTaskDetails,escalationDetails)
+//
+//							.then(Mono.fromSupplier(() -> {
+//
+//								InboxKafka inboxKafkaDto = new InboxKafka();
+//
+//								inboxKafkaDto.setProcessList(processList);
+//								inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
+//								inboxKafkaDto.setServiceName(service.getServiceName());
+//								inboxKafkaDto.setAppliedBy(ad.getBeneficiaryId());
+//								inboxKafkaDto.setBeneficiaryName(ad.getBeneficiaryName());
+//								inboxKafkaDto.setApplyDate(ad.getApplyDate());
+//								inboxKafkaDto.setLoggedInUserId(user.getUserID());
+//								inboxKafkaDto.setLoggedInUserLocation(user.getLocationId());
+//
+//								applicationFlowLogs.info(
+//										"InboxKafka prepared txnId={}, processCount={}, officeLocationCount={}",
+//										txn.getTxnId(), inboxKafkaDto.getProcessList().size(),
+//										inboxKafkaDto.getOfficeDetails().size());
+//
+//								applicationFlowLogs.info("Final taskLocationUserHolderMap={}",
+//										taskLocationUserHolderMap);
+//
+//								return inboxKafkaDto;
+//							}));
+//				}).doOnError(
+//						ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
+//    }
+//    
 	private Mono<Void> saveTimerAndEscalationDetails(List<CurrentProcess> processList,
 			Map<String, LocalDateTime> timerDueDate, List<TimerTaskDTO> timerTaskDetails,
 			List<EscalationDetailsDTO> escalationDetails) {

@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -21,6 +23,8 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.Helpers.CurrentProcessBuilder;
 import com.serviceplus.form.validation.Helpers.WorkflowHelper;
 import com.serviceplus.form.validation.config.ConvergentGatewayFactory;
+import com.serviceplus.form.validation.dto.ApplicationRouting;
+import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
@@ -63,184 +67,183 @@ public class GatewayService {
 		this.currentProcessRepository = currentProcessRepository;
     }
 
-    public Flux<CurrentProcess> processGateway(
-            ServiceProcessFlowDTO.Data.Nodes node,
-            ServiceProcessFlowDTO.Data.Nodes gatewayNode,
-            List<ServiceProcessFlowDTO.Data> workflow,
-            ServiceMeta service,
-            ApplicationDetails ad,
-            ProcessingTxn txn,
-            UserSessionObject user,
-            LocalDateTime now,
-            CurrentProcess currentActionProcess,
-            CurrentProcess baseProcess,
-            List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
-            Map<String, Map<String,List<String>>> taskLocationUserHolderMap,
-            ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow, Map<String, LocalDateTime> timerDueDate,Map<String,TaskRelationDTO> taskRelationMap){
+	public Flux<CurrentProcess> processGateway(ServiceProcessFlowDTO.Data.Nodes node,
+			ServiceProcessFlowDTO.Data.Nodes gatewayNode, List<ServiceProcessFlowDTO.Data> workflow, ServiceMeta service,
+			ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user, LocalDateTime now,
+			CurrentProcess currentActionProcess, CurrentProcess baseProcess,
+			List<TaskAvailableOfficeLocation> taskAvailableOfficeLocations,
+			Map<String, Map<String, List<String>>> taskLocationUserHolderMap,
+			ServiceProcessFlowDTO.Data.WorkflowElementData selectedWorkflow, Map<String, LocalDateTime> timerDueDate,
+			Map<String, TaskRelationDTO> taskRelationMap, List<OfficeDetailsDTO> officeDetails,
+			Map<String, ApplicationRouting> applicationRoutingMap) {
+	
+		applicationFlowLogs.info("Gateway encountered gatewayId={}, behaviour={}", gatewayNode.getId(),
+				gatewayNode.getBehaviour());
+	
+		ServiceProcessFlowDTO.Data nextToGatewayData = workflowHelper.fetchNode(workflow, gatewayNode.getId());
+	
+		List<ServiceProcessFlowDTO.Data.MappedTask> nextToGateway = nextToGatewayData.getMappedTasks();
+	
+		applicationFlowLogs.info("Gateway next nodes={}", nextToGateway.stream().map(t -> t.getNode().getId()).toList());
+	
+		String behaviour = gatewayNode.getBehaviour();
+	
+		if (workflowHelper.isDivergentGateway(behaviour)) {
+	
+			applicationFlowLogs.info("Processing Divergent Gateway gatewayId={}", gatewayNode.getId());
+	
+			return Flux.fromIterable(nextToGateway)
+					.doOnNext(mappedTask -> applicationFlowLogs.info("Resolving gateway child task={}",
+							mappedTask.getNode().getId()))
+					.flatMap(mappedTask -> taskAssignmentService.nextAllowedOfficeLocation(workflow, mappedTask.getNode(),
+							txn.getTxnId(), service.getServiceId(), user, taskLocationUserHolderMap, service))
+					.collectList().doOnNext(gatewayLocations -> applicationFlowLogs
+							.info("Gateway child locations resolved={}", gatewayLocations))
+					.flatMap(gatewayLocations -> {
+	
+						applicationFlowLogs.info("Executing Gateway MVEL gatewayId={}, map={}", gatewayNode.getId(),
+								taskLocationUserHolderMap);
+	
+						return executeGatewayMvel(user, service, ad, txn, "", currentActionProcess, gatewayNode.getId(),
+								nextToGateway, taskLocationUserHolderMap, timerDueDate).map(mvelTasks -> {
+	
+									applicationFlowLogs.info("Gateway selected taskIds={}",
+											mvelTasks.stream().map(t -> t.getNode().getId()).toList());
+	
+									List<ServiceProcessFlowDTO.Data.MappedTask> filteredTasks = mvelTasks;
+	
+									String gatewayBehaviour = gatewayNode.getBehaviour();
+	
+									List<String> nextNodeIds = workflowHelper.extractNextNodeIds(nextToGateway);
+	
+									boolean taskSelectionPresent = selectedWorkflow != null
+											&& selectedWorkflow.getTaskAttribute() != null
+											&& !selectedWorkflow.getTaskAttribute().getTaskNodes().isEmpty();
+	
+									if ((GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT.equals(gatewayBehaviour)
+											|| GATEWAY_BEHAVIOUR_INCLUSIVE_DIVERGENT.equals(gatewayBehaviour))
+											&& taskSelectionPresent && mvelTasks.size() == nextNodeIds.size()) {
+	
+										List<String> selectedTaskIds = selectedWorkflow.getTaskAttribute().getTaskNodes()
+												.stream().map(ServiceProcessFlowDTO.Data.TaskNode::getTaskId).toList();
+	
+										applicationFlowLogs.info(
+												"Gateway MVEL executed. Overriding task selection with user selection {}",
+												selectedTaskIds);
+	
+										filteredTasks = nextToGateway.stream()
+												.filter(t -> selectedTaskIds.contains(t.getNode().getId())).toList();
+									}
+	
+									if (GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT.equals(gatewayBehaviour)
+											&& filteredTasks.size() != 1) {
+	
+										throw new SPRuntimeError("Multiple task selection not allowed",
+												HttpStatus.BAD_REQUEST, txn.getTxnId());
+									}
+	
+									applicationFlowLogs.info("Gateway final taskIds={}",
+											filteredTasks.stream().map(t -> t.getNode().getId()).toList());
+	
+									return Map.entry(gatewayLocations, filteredTasks);
+								});
+					}).flatMapMany(entry -> {
+	
+						List<TaskAvailableOfficeLocation> gatewayLocations = entry.getKey();
+	
+						List<ServiceProcessFlowDTO.Data.MappedTask> filteredTasks = entry.getValue();
+	
+						applicationFlowLogs.info("Refreshing gateway office locations using map={}",
+								taskLocationUserHolderMap);
+	
+						Map<String, TaskAvailableOfficeLocation> locationByTaskId = gatewayLocations.stream()
+								.collect(Collectors.toMap(TaskAvailableOfficeLocation::getTaskId, Function.identity()));
+	
+						return Flux.fromIterable(filteredTasks).flatMap(filteredTask -> {
+	
+							String taskId = filteredTask.getNode().getId();
+	
+							TaskAvailableOfficeLocation location = locationByTaskId.get(taskId);
+	
+							if (location == null) {
+	
+								applicationFlowLogs.warn("No office location found for gateway taskId={}", taskId);
+	
+								return Mono.empty();
+							}
+	
+							applicationFlowLogs.info("Refreshing location for selected gateway task={}", taskId);
+	
+							Integer sourceLevelCode = user.getEntityLevelId();
+	
+							Long sourceLocationId = user.getLocationId() != null ? user.getLocationId().longValue() : null;
+	
+							if (sourceLevelCode == null) {
+	
+								OfficeDetailsDTO sourceOfficeDetails = officeDetails.stream().filter(Objects::nonNull)
+										.filter(detail -> node.getId().equals(detail.getTaskId())).findFirst().orElse(null);
+	
+								if (sourceOfficeDetails != null) {
+	
+									sourceLevelCode = sourceOfficeDetails.getOfficeLevelIds() != null
+											? sourceOfficeDetails.getOfficeLevelIds().stream().findFirst().orElse(null)
+											: null;
+	
+									sourceLocationId = sourceOfficeDetails.getAllowedOffices() != null ? sourceOfficeDetails
+											.getAllowedOffices().stream().filter(Objects::nonNull)
+											.map(OfficeDetailsDTO.OfficeUnitData::getOrgUnitCode).filter(Objects::nonNull)
+											.map(Integer::longValue).findFirst().orElse(null) : null;
+								}
+							}
+	
+							Integer destinationLevelCode = officeDetails.stream().filter(Objects::nonNull)
+									.filter(detail -> taskId.equals(detail.getTaskId()))
+									.map(OfficeDetailsDTO::getOfficeLevelIds).filter(Objects::nonNull).flatMap(Set::stream)
+									.findFirst().orElse(null);
+	
+							applicationFlowLogs.info(
+									"Gateway refresh taskId={}, defaultSourceLocationId={}, defaultSourceLevelCode={}, destinationLevelCode={}",
+									taskId, sourceLocationId, sourceLevelCode, destinationLevelCode);
+	
+							return taskAssignmentService.refreshTaskAvailableOfficeLocation(location,
+									taskLocationUserHolderMap, sourceLocationId, sourceLevelCode, destinationLevelCode,
+									user, ad.getApplicationId(), applicationRoutingMap).then(Mono.fromSupplier(() -> {
+	
+										applicationFlowLogs.info("Office locations refreshed for gateway taskId={} : {}",
+												taskId, location);
+	
+										taskAvailableOfficeLocations.add(location);
+	
+										return location;
+									}));
+						}).thenMany(Flux.fromIterable(filteredTasks).map(filteredTask -> {
+	
+							applicationFlowLogs.info("Creating gateway process for nodeId={}",
+									filteredTask.getNode().getId());
+	
+							return currentProcessBuilder.buildGatewayNextProcess(baseProcess, gatewayNode,
+									filteredTask.getNode(), service, ad, user, now, taskAvailableOfficeLocations, workflow,
+									txn);
+						}));
+					});
+		}
+	
+		if (workflowHelper.isConvergentGateway(behaviour)) {
+	
+			applicationFlowLogs.info("Processing Convergent Gateway gatewayId={}, behaviour={}", gatewayNode.getId(),
+					behaviour);
+	
+			return processConvergentGateway(gatewayNode, nextToGatewayData, workflow, service, ad, txn, user, now,
+					currentActionProcess, baseProcess, taskAvailableOfficeLocations, taskRelationMap,
+					taskLocationUserHolderMap, timerDueDate);
+		}
+	
+		applicationFlowLogs.info("Returning normal base process for taskId={}", gatewayNode.getId());
+	
+		return Flux.just(baseProcess);
+	
+	}
 
-
-            applicationFlowLogs.info(
-                    "Gateway encountered gatewayId={}, behaviour={}", gatewayNode.getId(),
-                    gatewayNode.getBehaviour());
-
-            ServiceProcessFlowDTO.Data nextToGatewayData = workflowHelper.fetchNode(workflow, gatewayNode.getId());
-
-            List<ServiceProcessFlowDTO.Data.MappedTask> nextToGateway = nextToGatewayData
-                    .getMappedTasks();
-
-            applicationFlowLogs.info("Gateway next nodes={}",
-                    nextToGateway.stream().map(t -> t.getNode().getId()).toList());
-
-            String behaviour = gatewayNode.getBehaviour();
-
-            if (workflowHelper.isDivergentGateway(behaviour)) {
-
-                applicationFlowLogs.info(
-                        "Processing Divergent Gateway gatewayId={}", gatewayNode.getId());
-
-                return Flux.fromIterable(nextToGateway)
-
-                        .doOnNext(mappedTask -> applicationFlowLogs.info("Resolving gateway child task={}", mappedTask.getNode().getId()))
-
-                        .flatMap(mappedTask -> taskAssignmentService.nextAllowedOfficeLocation(workflow,
-                                mappedTask.getNode(), txn.getTxnId(),
-                                service.getServiceId(), user,
-                                taskLocationUserHolderMap,service))
-
-                        .collectList().doOnNext(gatewayLocations -> applicationFlowLogs.info("Gateway child locations resolved={}", gatewayLocations))
-
-                        .flatMap(gatewayLocations -> {
-
-                            applicationFlowLogs.info("Executing Gateway MVEL gatewayId={}, map={}", gatewayNode.getId(), taskLocationUserHolderMap);
-
-
-                            return executeGatewayMvel(user,service, ad, txn, "",
-                                    currentActionProcess, gatewayNode.getId(),
-                                    nextToGateway, taskLocationUserHolderMap,timerDueDate)
-
-                                    .map(mvelTasks -> {
-
-                                        applicationFlowLogs.info("Gateway selected taskIds={}", mvelTasks.stream().map(t -> t.getNode().getId()).toList());
-
-                                        List<ServiceProcessFlowDTO.Data.MappedTask> filteredTasks = mvelTasks;
-
-                                        String gatewayBehaviour = gatewayNode.getBehaviour();
-                                        List<String> nextNodeIds = workflowHelper.extractNextNodeIds(nextToGateway);
-
-                                        boolean taskSelectionPresent =
-                                                selectedWorkflow != null
-                                                        && selectedWorkflow.getTaskAttribute() != null
-                                                        && !selectedWorkflow.getTaskAttribute().getTaskNodes().isEmpty();
-
-                                        if ((GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT.equals(gatewayBehaviour)
-                                                || GATEWAY_BEHAVIOUR_INCLUSIVE_DIVERGENT.equals(gatewayBehaviour))
-                                                && taskSelectionPresent && mvelTasks.size() == nextNodeIds.size()) {
-
-                                            List<String> selectedTaskIds = selectedWorkflow.getTaskAttribute()
-                                                    .getTaskNodes()
-                                                    .stream()
-                                                    .map(ServiceProcessFlowDTO.Data.TaskNode::getTaskId)
-                                                    .toList();
-
-                                            applicationFlowLogs.info(
-                                                    "Gateway MVEL executed. Overriding task selection with user selection {}",
-                                                    selectedTaskIds);
-
-                                            filteredTasks = nextToGateway.stream()
-                                                    .filter(t -> selectedTaskIds.contains(t.getNode().getId()))
-                                                    .toList();
-                                        }
-
-                                        if ((GATEWAY_BEHAVIOUR_EXCLUSIVE_DIVERGENT.equals(gatewayBehaviour))
-                                                        && (filteredTasks.size() != 1)){
-                                            throw new SPRuntimeError("Multiple task selection not allowed",HttpStatus.BAD_REQUEST,txn.getTxnId());
-                                        }
-
-                                        applicationFlowLogs.info("Gateway final taskIds={}", filteredTasks.stream().map(t -> t.getNode().getId()).toList());
-
-                                        return Map.entry(gatewayLocations, filteredTasks);
-                                    });
-                        })
-
-                        .flatMapMany(entry -> {
-
-                            List<TaskAvailableOfficeLocation> gatewayLocations = entry
-                                    .getKey();
-
-                            List<ServiceProcessFlowDTO.Data.MappedTask> filteredTasks = entry
-                                    .getValue();
-
-                            applicationFlowLogs.info(
-                                    "Refreshing gateway office locations using map={}",
-                                    taskLocationUserHolderMap);
-
-                            Map<String, TaskAvailableOfficeLocation> locationByTaskId = gatewayLocations
-                                    .stream()
-                                    .collect(Collectors.toMap(
-                                            TaskAvailableOfficeLocation::getTaskId,
-                                            Function.identity()));
-
-                            filteredTasks.forEach(filteredTask -> {
-
-                                TaskAvailableOfficeLocation location = locationByTaskId
-                                        .get(filteredTask.getNode().getId());
-
-                                if (location != null) {
-
-                                    applicationFlowLogs.info(
-                                            "Refreshing location for selected gateway task={}",
-                                            filteredTask.getNode().getId());
-
-                                    taskAssignmentService.refreshTaskAvailableOfficeLocation(location,
-                                            taskLocationUserHolderMap);
-
-                                    taskAvailableOfficeLocations.add(location);
-                                }
-                            });
-
-                            return Flux.fromIterable(filteredTasks);
-                        })
-
-                        .map(filteredTask -> {
-
-                            applicationFlowLogs.info(
-                                    "Creating gateway process for nodeId={}",
-                                    filteredTask.getNode().getId());
-
-                            return currentProcessBuilder.buildGatewayNextProcess(baseProcess, gatewayNode,
-                                    filteredTask.getNode(), service, ad, user, now,
-                                    taskAvailableOfficeLocations, workflow, txn);
-                        });
-            }
-
-            if (workflowHelper.isConvergentGateway(behaviour)) {
-
-                applicationFlowLogs.info(
-                        "Processing Convergent Gateway gatewayId={}, behaviour={}",
-                        gatewayNode.getId(),
-                        behaviour);
-
-                return processConvergentGateway(
-                        gatewayNode,
-                        nextToGatewayData,
-                        workflow,
-                        service,
-                        ad,
-                        txn,
-                        user,
-                        now,
-                        currentActionProcess,
-                        baseProcess,
-                        taskAvailableOfficeLocations,
-                        taskRelationMap,
-                        taskLocationUserHolderMap,
-                        timerDueDate);
-            }
-
-            applicationFlowLogs.info("Returning normal base process for taskId={}",gatewayNode.getId());
-
-            return Flux.just(baseProcess);
-    }
     
     private Flux<CurrentProcess> processConvergentGateway(Nodes gatewayNode, ServiceProcessFlowDTO.Data nextToGatewayData, List<ServiceProcessFlowDTO.Data> workflow,
 			ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user, LocalDateTime now,
