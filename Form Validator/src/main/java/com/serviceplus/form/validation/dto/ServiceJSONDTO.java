@@ -61,6 +61,17 @@ public class ServiceJSONDTO {
     private List<DocumentGenerationDetails> documentGenerationDetails;
 
     private List<AuaApiConfigurationDTO> auaApiConfigurations;
+    
+    private Map<String, ApplicationRouting> applicationRoutingMap;
+
+    public Map<String, ApplicationRouting> getApplicationRoutingMap() {
+        return applicationRoutingMap;
+    }
+
+    public void setApplicationRoutingMap(
+            Map<String, ApplicationRouting> applicationRoutingMap) {
+        this.applicationRoutingMap = applicationRoutingMap;
+    }
 
     public List<DocumentGenerationDetails> getDocumentGenerationDetails() {
         return documentGenerationDetails;

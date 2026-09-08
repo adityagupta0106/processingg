@@ -64,6 +64,9 @@ public class ReactiveApiClient {
     
     @Value("${notification.service}")
     private String NOTIFICATION_SERVICE;
+    
+    @Value("${spgd.service}")
+    private String SPGD_SERVICE_URL;
 
     @Autowired
     private ObjectMapper mapper;
@@ -972,6 +975,94 @@ public class ReactiveApiClient {
 								HttpStatus.BAD_GATEWAY, null));
 					}
 				});
+	}
+	
+	public Mono<Set<String>> getRelatedLocationIds(Integer sourceLevelCode, Long sourceUnitCode, Integer destLevelCode,
+			UserSessionObject user) {
+
+		String url = SPGD_SERVICE_URL.concat("/spgd/hierarchy/related-units");
+		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+		Map<String, Object> params = new HashMap<>();
+		params.put("sourceLevelCode", sourceLevelCode);
+		params.put("sourceUnitCode", sourceUnitCode);
+		params.put("destLevelCode", destLevelCode);
+
+		return AsynchronousApiExecutor.callExternalEndpoint(String.class, HttpMethod.GET, headers, params, url, null,
+				MediaType.APPLICATION_JSON).flatMap(apiResponse -> {
+
+					if (apiResponse == null || apiResponse.getBody() == null || apiResponse.getBody().isBlank()) {
+
+						return Mono.error(new SPRuntimeError("Unable to fetch related locations from SPGD",
+								HttpStatus.FAILED_DEPENDENCY, null));
+					}
+
+					try {
+
+						UnitDTO[] units = (UnitDTO[]) stringToEntityUsingType(apiResponse.getBody(),
+								new TypeToken<UnitDTO[]>() {
+								}.getType());
+						Set<String> locationIds=new HashSet<>();
+						Set<String> childLocationIds = Arrays.stream(units).map(UnitDTO::getChildEntityUnitCode)
+								.filter(Objects::nonNull).map(String::valueOf).collect(Collectors.toSet());
+						Set<String> parentLocationIds = Arrays.stream(units).map(UnitDTO::getParentEntityUnitCode)
+								.filter(Objects::nonNull).map(String::valueOf).collect(Collectors.toSet());
+						
+						locationIds.addAll(childLocationIds);
+						locationIds.addAll(parentLocationIds);
+						applicationFlowLogs.info("SPGD related locations response location ids: {} ", locationIds.toArray());
+
+						return Mono.just(locationIds);
+
+					} catch (Exception ex) {
+
+						applicationFlowLogs.error("Failed to parse SPGD related locations response", ex);
+
+						return Mono
+								.error(new SPRuntimeError("Invalid response from SPGD", HttpStatus.BAD_GATEWAY, null));
+					}
+				});
+	}
+	
+	public Mono<Map<String, Object>> fetchApplicationAttributeValues(String applicationId, String taskId,
+			String holderId, List<String> attributeIds, UserSessionObject user) {
+
+		String url = FORM_MANAGEMENT_SERVICE.concat("getApplicationAttributeValue");
+
+		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+		Map<String, Object> requestBody = Map.of("applicationId", applicationId, "taskId", taskId, "holderId", holderId,
+				"attributeIds", List.of());
+
+		Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(String.class,
+				HttpMethod.POST, headers, Collections.emptyMap(), url, entityToString(requestBody),
+				MediaType.APPLICATION_JSON);
+
+		return callExternalEndpoint.flatMap(apiResponse -> {
+
+			String body = apiResponse.getBody();
+
+			if (body == null || body.isBlank()) {
+				return Mono.error(
+						new SPRuntimeError("Unable to process your request", HttpStatus.FAILED_DEPENDENCY, applicationId));
+			}
+
+			try {
+				Map<String, Object> responseJson = new ObjectMapper().readValue(body,
+						new TypeReference<Map<String, Object>>() {
+						});
+
+				Map<String, Object> attributeValues = (Map<String, Object>) responseJson.get("attributeValues");
+
+				return Mono.just(attributeValues != null ? attributeValues : Collections.emptyMap());
+
+			} catch (JsonProcessingException e) {
+
+				e.printStackTrace();
+
+				return Mono.error(new SPRuntimeError("Issue while processing the request [ERR - 002]",
+						HttpStatus.INTERNAL_SERVER_ERROR, applicationId));
+			}
+		});
 	}
 }
 
