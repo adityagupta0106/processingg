@@ -83,6 +83,7 @@ public class WorkflowActionExecutorImpl implements WorkflowActionExecutor {
 		currentProcess.setActionCode(action != null ? Integer.parseInt(action) : FALLBACK_ACTION_NO);
 		ServiceProcessFlowDTO.Data.ActionAttribute actionAttribute = findActionAttribute(serviceJson,
 				currentProcess.getCurrentTask(), action);
+		currentProcess.setActionName(actionAttribute.getTrackLabel());
 
 		boolean completeClosure = actionAttribute != null && Boolean.TRUE.equals(actionAttribute.getCompleteClosure());
 
