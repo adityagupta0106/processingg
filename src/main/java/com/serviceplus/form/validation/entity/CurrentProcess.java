@@ -1,0 +1,296 @@
+package com.serviceplus.form.validation.entity;
+
+import com.serviceplus.form.validation.dto.TrackingDocument;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
+import org.springframework.data.relational.core.mapping.Table;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
+
+@Table(name = "current_process", schema = SP_SCHEMA_NAME)
+public class CurrentProcess implements Persistable<String> {
+
+    @Id
+    private String processId;
+
+    private Integer serviceId;
+
+    private String currentTask;
+    
+    private Integer currentTaskType;
+    
+    private String currentTaskName;
+
+    private String previousTask;
+
+    private String previousTaskName;
+
+    private String previousProcessId;
+
+    private Integer actionCode;
+
+    private String actionTaken="N";
+
+    private String isParallel;
+
+    private LocalDateTime actionOn;
+
+    private LocalDateTime initiatedOn;
+
+    private Long userId;
+
+    private String userIp;
+
+    private String tenantId;
+
+    private String applicationId;
+
+    private String dataId;
+
+    private Integer baseServiceId;
+
+    @Transient
+    private String formId;
+
+    @Transient
+    private boolean newEntity = false;
+
+    @Transient
+    private Boolean gateway = false;
+
+    @Transient
+    private Boolean applicantTask = false;
+
+    @Transient
+    private String actionName;
+
+    @Transient
+    private List<TrackingDocument> documents;
+
+    @Transient
+    private Boolean isPriority;
+
+    @Override
+    @Transient
+    public boolean isNew() {
+        return this.newEntity;
+    }
+
+    @Override
+    public String getId() {
+        return processId;
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    public String getProcessId() {
+        return processId;
+    }
+
+    public void setProcessId(String processId) {
+        this.processId = processId;
+    }
+
+    public Integer getServiceId() {
+        return serviceId;
+    }
+
+    public void setServiceId(Integer serviceId) {
+        this.serviceId = serviceId;
+    }
+
+    public String getCurrentTask() {
+        return currentTask;
+    }
+
+    public void setCurrentTask(String currentTask) {
+        this.currentTask = currentTask;
+    }
+    
+    public Integer getCurrentTaskType() {
+		return currentTaskType;
+	}
+
+	public void setCurrentTaskType(Integer currentTaskType) {
+		this.currentTaskType = currentTaskType;
+	}
+
+	public String getCurrentTaskName() {
+        return currentTaskName;
+    }
+
+    public void setCurrentTaskName(String currentTaskName) {
+        this.currentTaskName = currentTaskName;
+    }
+
+    public String getPreviousTask() {
+        return previousTask;
+    }
+
+    public void setPreviousTask(String previousTask) {
+        this.previousTask = previousTask;
+    }
+
+    public String getPreviousTaskName() {
+        return previousTaskName;
+    }
+
+    public void setPreviousTaskName(String previousTaskName) {
+        this.previousTaskName = previousTaskName;
+    }
+
+    public String getPreviousProcessId() {
+        return previousProcessId;
+    }
+
+    public void setPreviousProcessId(String previousProcessId) {
+        this.previousProcessId = previousProcessId;
+    }
+
+    public Integer getActionCode() {
+        return actionCode;
+    }
+
+    public void setActionCode(Integer actionCode) {
+        this.actionCode = actionCode;
+    }
+
+    public String getActionTaken() {
+        return actionTaken;
+    }
+
+    public void setActionTaken(String actionTaken) {
+        this.actionTaken = actionTaken;
+    }
+
+    public String getIsParallel() {
+        return isParallel;
+    }
+
+    public void setIsParallel(String isParallel) {
+        this.isParallel = isParallel;
+    }
+
+    public LocalDateTime getActionOn() {
+        return actionOn;
+    }
+
+    public void setActionOn(LocalDateTime actionOn) {
+        this.actionOn = actionOn;
+    }
+
+    public LocalDateTime getInitiatedOn() {
+        return initiatedOn;
+    }
+
+    public void setInitiatedOn(LocalDateTime initiatedOn) {
+        this.initiatedOn = initiatedOn;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getUserIp() {
+        return userIp;
+    }
+
+    public void setUserIp(String userIp) {
+        this.userIp = userIp;
+    }
+
+    public boolean isNewEntity() {
+        return newEntity;
+    }
+
+    public void setNewEntity(boolean newEntity) {
+        this.newEntity = newEntity;
+    }
+
+    public String getApplicationId() {
+        return applicationId;
+    }
+
+    public void setApplicationId(String applicationId) {
+        this.applicationId = applicationId;
+    }
+
+    public String getDataId() {
+        return dataId;
+    }
+
+    public void setDataId(String dataId) {
+        this.dataId = dataId;
+    }
+
+    public Integer getBaseServiceId() {
+        return baseServiceId;
+    }
+
+    public void setBaseServiceId(Integer baseServiceId) {
+        this.baseServiceId = baseServiceId;
+    }
+
+    public String getFormId() {
+        return formId;
+    }
+
+    public void setFormId(String formId) {
+        this.formId = formId;
+    }
+
+    public Boolean getGateway() {
+        return gateway;
+    }
+
+    public void setGateway(Boolean gateway) {
+        this.gateway = gateway;
+    }
+
+    public Boolean getApplicantTask() {
+        return applicantTask;
+    }
+
+    public void setApplicantTask(Boolean applicantTask) {
+        this.applicantTask = applicantTask;
+    }
+
+    public String getActionName() {
+        return actionName;
+    }
+
+    public void setActionName(String actionName) {
+        this.actionName = actionName;
+    }
+
+    public List<TrackingDocument> getDocuments() {
+        return documents;
+    }
+
+    public void setDocuments(List<TrackingDocument> documents) {
+        this.documents = documents;
+    }
+
+	public Boolean getIsPriority() {
+		return isPriority;
+	}
+
+	public void setIsPriority(Boolean isPriority) {
+		this.isPriority = isPriority;
+	}
+}
+

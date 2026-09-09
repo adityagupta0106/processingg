@@ -1,0 +1,219 @@
+package com.serviceplus.form.validation.auaVerification.entity;
+
+import java.time.LocalDateTime;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
+import org.springframework.data.domain.Persistable;
+import org.springframework.data.relational.core.mapping.Table;
+
+import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
+
+@Table(name = "aua_transaction_log", schema = SP_SCHEMA_NAME)
+public class AuaTransactionLog implements Persistable<Long> {
+
+    @Id
+    private Long id;
+
+    private String txnId;
+
+    private String attributeId;
+
+    private Integer serviceId;
+
+    private String taskId;
+
+    private String tenantId;
+
+    private String operationType;
+
+    private String status;
+
+    private Long providerId;
+
+    private Long apiId;
+
+    private String providerTxnId;
+
+    private String errorCode;
+
+    private String errorMessage;
+
+    private LocalDateTime requestedAt;
+
+    private LocalDateTime completedAt;
+
+    private LocalDateTime crDate;
+
+    private LocalDateTime upDate;
+
+
+    @Transient
+    private boolean newEntity = false;
+
+
+    @Override
+    public Long getId() {
+        return id;
+    }
+
+    @Override
+    @Transient
+    public boolean isNew() {
+        return newEntity;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+
+    public String getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(String txnId) {
+        this.txnId = txnId;
+    }
+
+
+    public String getAttributeId() {
+        return attributeId;
+    }
+
+    public void setAttributeId(String attributeId) {
+        this.attributeId = attributeId;
+    }
+
+
+    public Integer getServiceId() {
+        return serviceId;
+    }
+
+    public void setServiceId(Integer serviceId) {
+        this.serviceId = serviceId;
+    }
+
+
+    public String getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(String taskId) {
+        this.taskId = taskId;
+    }
+
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+
+    public String getOperationType() {
+        return operationType;
+    }
+
+    public void setOperationType(String operationType) {
+        this.operationType = operationType;
+    }
+
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+
+    public Long getProviderId() {
+        return providerId;
+    }
+
+    public void setProviderId(Long providerId) {
+        this.providerId = providerId;
+    }
+
+
+    public Long getApiId() {
+        return apiId;
+    }
+
+    public void setApiId(Long apiId) {
+        this.apiId = apiId;
+    }
+
+
+    public String getProviderTxnId() {
+        return providerTxnId;
+    }
+
+    public void setProviderTxnId(String providerTxnId) {
+        this.providerTxnId = providerTxnId;
+    }
+
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
+    }
+
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
+    }
+
+
+    public LocalDateTime getRequestedAt() {
+        return requestedAt;
+    }
+
+    public void setRequestedAt(LocalDateTime requestedAt) {
+        this.requestedAt = requestedAt;
+    }
+
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
+    }
+
+    public LocalDateTime getUpDate() {
+        return upDate;
+    }
+
+    public void setUpDate(LocalDateTime upDate) {
+        this.upDate = upDate;
+    }
+
+    public LocalDateTime getCrDate() {
+        return crDate;
+    }
+
+    public void setCrDate(LocalDateTime crDate) {
+        this.crDate = crDate;
+    }
+
+    public boolean isNewEntity() {
+        return newEntity;
+    }
+
+    public void setNewEntity(boolean newEntity) {
+        this.newEntity = newEntity;
+    }
+}
