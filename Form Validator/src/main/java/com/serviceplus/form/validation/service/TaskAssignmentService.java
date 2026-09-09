@@ -274,7 +274,7 @@ public class TaskAssignmentService {
 
                     if (resolvedSourceLocationId == null
                             || resolvedSourceLevelCode == null
-                            || destinationLevelCode == null) {
+                            || destinationLevelCode == null || (resolvedSourceLevelCode.equals(destinationLevelCode))) {
 
                         applicationFlowLogs.warn(
                                 "Unable to refresh office locations. Missing routing values taskId={}, sourceLocationId={}, sourceLevelCode={}, destinationLevelCode={}",
