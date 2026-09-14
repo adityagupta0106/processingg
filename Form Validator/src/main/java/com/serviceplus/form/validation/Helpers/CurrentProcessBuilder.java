@@ -2,6 +2,7 @@ package com.serviceplus.form.validation.Helpers;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.*;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
+import static java.util.Objects.isNull;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.List;
 import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
+import com.serviceplus.form.validation.enums.TaskType;
 import org.springframework.stereotype.Component;
 
 import com.serviceplus.form.validation.dto.ServiceMeta;
@@ -54,6 +56,10 @@ public class CurrentProcessBuilder {
             cp.setInitiatedOn(now);
         }
 
+        if(!isNull(cp.getCurrentTaskType()) && cp.getCurrentTaskType().equals(TaskType.APPLICANT_TASK.getType())){
+            cp.setApplicantTask(Boolean.TRUE);
+        }
+
         cp.setProcessId(createUniqueId());
         cp.setNewEntity(true);
         cp.setActionCode(FALLBACK_ACTION_NO);
@@ -91,6 +97,10 @@ public class CurrentProcessBuilder {
         cp.setNewEntity(true);
         cp.setActionTaken("N");
         cp.setActionCode(FALLBACK_ACTION_NO);
+
+        if(cp.getCurrentTaskType().equals(TaskType.APPLICANT_TASK.getType())){
+            cp.setApplicantTask(Boolean.TRUE);
+        }
 
         return cp;
     }

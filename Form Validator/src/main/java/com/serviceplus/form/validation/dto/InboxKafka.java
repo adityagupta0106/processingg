@@ -20,6 +20,7 @@ public class InboxKafka {
 
     private List<TaskAvailableOfficeLocation> officeDetails;
     private List<CurrentProcess> processList;
+    private List<ApplicantTaskDetails> applicantTaskDetails;
     private boolean completeClosure=false;
 
     public String getLocationName() {
@@ -117,4 +118,12 @@ public class InboxKafka {
 	public void setCompleteClosure(boolean completeClosure) {
 		this.completeClosure = completeClosure;
 	}
+
+    public List<ApplicantTaskDetails> getApplicantTaskDetails() {
+        return applicantTaskDetails;
+    }
+
+    public void setApplicantTaskDetails(List<ApplicantTaskDetails> applicantTaskDetails) {
+        this.applicantTaskDetails = applicantTaskDetails;
+    }
 }

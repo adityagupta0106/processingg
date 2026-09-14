@@ -201,9 +201,7 @@ public class TransactionGeneration {
                                          */
                                         String documentLogUpdate = """
                                             UPDATE %s
-                                            SET status = 'R',
-                                                updated_by = :userId,
-                                                updated_on = CURRENT_TIMESTAMP
+                                            SET status = 'R'
                                             WHERE application_id = :applicationId
                                               AND process_id = :processId
                                               AND tenant_id = :tenantId
@@ -220,8 +218,7 @@ public class TransactionGeneration {
                                                 Map.of(
                                                         "applicationId", appId,
                                                         "processId", processId,
-                                                        "tenantId", user.getTenantId(),
-                                                        "userId", user.getUserID()
+                                                        "tenantId", user.getTenantId()
                                                 ),
                                                 txnId
                                         );
@@ -311,5 +308,6 @@ public class TransactionGeneration {
                                 })
                 );
     }
+
 
 }

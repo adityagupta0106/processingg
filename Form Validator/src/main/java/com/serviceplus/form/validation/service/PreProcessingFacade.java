@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import com.serviceplus.form.validation.dto.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,15 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
-import com.serviceplus.form.validation.dto.FormPreparationContext;
-import com.serviceplus.form.validation.dto.HandlerResponse;
-import com.serviceplus.form.validation.dto.InboxApplReqDTO;
-import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
-import com.serviceplus.form.validation.dto.ServerSidePaginationRecord;
-import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
-import com.serviceplus.form.validation.dto.UserSessionObject;
-import com.serviceplus.form.validation.dto.WorkflowInboxResponse;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
@@ -310,49 +302,49 @@ public class PreProcessingFacade {
 
     public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getWFPInbox(ServerHttpRequest request, UserSessionObject user) {
 
-        return reactiveApiClient.fetchWFPInbox(request,user).map(inboxList -> {
-            DateTimeFormatter formatter =  DateTimeFormatter.ofPattern("dd MMM yyyy hh:mm a");
-            List<WorkflowInboxResponse> data = inboxList.getData();
-            data.forEach(inbox -> {
+        return reactiveApiClient.fetchWFPInbox(request,user)
+                .map(inboxList ->
+                        enrichInbox(inboxList, OFFICIAL_TASK_FLAG)
+                );
+    }
 
-                ServiceMeta service = getServiceMeta(inbox);
-                inbox.setTaskType(OFFICIAL_TASK_FLAG);
-                inbox.setServiceKey(encryptServiceKeys(service));
-                if(inbox.getApplRecievedOn() != null) {
+    public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getApplicantInbox(
+            String requestBody,
+            ServerHttpRequest request,
+            UserSessionObject user) {
 
-                    String formattedDate =
-                            inbox.getApplRecievedOn()
-                                    .toInstant()
-                                    .atZone(
-                                            ZoneId.systemDefault())
-                                    .format(formatter);
+        return reactiveApiClient
+                .fetchApplicantInbox(requestBody, request, user)
+                .map(inboxList ->
+                        enrichInbox(inboxList, OFFICIAL_TASK_FLAG)
+                );
+    }
 
-                    inbox.setReceivedDate(formattedDate);
-                }
-            });
+    private ServerSidePaginationRecord<WorkflowInboxResponse> enrichInbox(ServerSidePaginationRecord<WorkflowInboxResponse> inboxList, String taskType) {
 
+        List<WorkflowInboxResponse> data = inboxList.getData();
+
+        if (data == null || data.isEmpty()) {
             return inboxList;
+        }
+
+        data.forEach(inbox -> {
+
+            ServiceMeta service = getServiceMeta(inbox);
+            inbox.setTaskType(taskType);
+            inbox.setServiceKey(encryptServiceKeys(service));
         });
+
+        return inboxList;
     }
 
 	public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getWFPInboxFilterApplications(
 			ServerHttpRequest request, UserSessionObject user, InboxApplReqDTO inboxApplReqDTO) {
 
-		return reactiveApiClient.getWFPInboxFilterApplications(request, user, inboxApplReqDTO).map(inboxList -> {
-			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM yyyy hh:mm a");
-			List<WorkflowInboxResponse> data = inboxList.getData();
-			data.forEach(inbox -> {
-				ServiceMeta service = getServiceMeta(inbox);
-				inbox.setTaskType(OFFICIAL_TASK_FLAG);
-				inbox.setServiceKey(encryptServiceKeys(service));
-				if (inbox.getApplRecievedOn() != null) {
-					String formattedDate = inbox.getApplRecievedOn().toInstant().atZone(ZoneId.systemDefault())
-							.format(formatter);
-					inbox.setReceivedDate(formattedDate);
-				}
-			});
-			return inboxList;
-		});
+		return reactiveApiClient.getWFPInboxFilterApplications(request, user, inboxApplReqDTO)
+                .map(inboxList ->
+                        enrichInbox(inboxList, OFFICIAL_TASK_FLAG)
+                );
 	}
 
     private static ServiceMeta getServiceMeta(WorkflowInboxResponse inbox) {
@@ -367,7 +359,7 @@ public class PreProcessingFacade {
         service.setCurrentProcessId(inbox.getCurrentProcessId());
 
         ServiceMeta.AvailableApplyLocations location = new ServiceMeta.AvailableApplyLocations();
-        location.setOrgUnitCode(inbox.getLocationId().longValue());
+        location.setOrgUnitCode(isNull(inbox.getLocationId()) ? null : inbox.getLocationId().longValue());
         location.setLocationName("");
 
         service.setLocations(List.of(location));
@@ -376,29 +368,10 @@ public class PreProcessingFacade {
 
 	public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> getInboxApplications(ServerHttpRequest request, UserSessionObject user) {
 
-        return reactiveApiClient.getInboxApplications(request,user).map(inboxList -> {
-            DateTimeFormatter formatter =  DateTimeFormatter.ofPattern("dd MMM yyyy hh:mm a");
-            List<WorkflowInboxResponse> data = inboxList.getData();
-            data.forEach(inbox -> {
-
-                ServiceMeta service = getServiceMeta(inbox);
-                inbox.setTaskType(OFFICIAL_TASK_FLAG);
-                inbox.setServiceKey(encryptServiceKeys(service));
-                if(inbox.getApplRecievedOn() != null) {
-
-                    String formattedDate =
-                            inbox.getApplRecievedOn()
-                                    .toInstant()
-                                    .atZone(
-                                            ZoneId.systemDefault())
-                                    .format(formatter);
-
-                    inbox.setReceivedDate(formattedDate);
-                }
-            });
-
-            return inboxList;
-        });
+        return reactiveApiClient.getInboxApplications(request,user)
+                .map(inboxList ->
+                        enrichInbox(inboxList, OFFICIAL_TASK_FLAG)
+                );
     }
 
     public Mono<FormPreparationContext> prepareForm(ServiceMeta service, UserSessionObject user, String txnId) {

@@ -122,7 +122,6 @@ public class ApplicationRepositoryCustomImpl implements ApplicationRepositoryCus
         dto.setServiceId(entity.getServiceId());
         dto.setApplicationRefNo(entity.getReferenceNo());
         dto.setStatus(entity.getStatus());
-        dto.setDraftRefNo(entity.getDraftReferenceNo());
         dto.setServiceName(entity.getServiceName());
         dto.setApplyDate(entity.getApplyDate());
 

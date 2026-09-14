@@ -17,7 +17,6 @@ public class Applications {
 
     private String status;
     private Integer serviceId;
-    private String draftRefNo;
     private String serviceName;
 
     public Integer getServiceId() {
@@ -50,14 +49,6 @@ public class Applications {
 
     public void setApplicationId(String applicationId) {
         this.applicationId = applicationId;
-    }
-
-    public String getDraftRefNo() {
-        return draftRefNo;
-    }
-
-    public void setDraftRefNo(String draftRefNo) {
-        this.draftRefNo = draftRefNo;
     }
 
     public String getServiceName() {

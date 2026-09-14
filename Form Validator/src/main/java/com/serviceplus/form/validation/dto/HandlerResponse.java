@@ -9,6 +9,8 @@ import java.util.Map;
 public class HandlerResponse {
 
     private Map<String,Object> response;
+    private Map<String,Object> applicationData;
+
 
     private String txnId;
     private String applicationId;
@@ -185,5 +187,13 @@ public class HandlerResponse {
 
     public void setWorkflowKey(String workflowKey) {
         this.workflowKey = workflowKey;
+    }
+
+    public Map<String, Object> getApplicationData() {
+        return applicationData;
+    }
+
+    public void setApplicationData(Map<String, Object> applicationData) {
+        this.applicationData = applicationData;
     }
 }
