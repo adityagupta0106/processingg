@@ -5,8 +5,10 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.dto.WorkFlowDataDTO;
+import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
+import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 import com.serviceplus.form.validation.service.FormService;
 import com.serviceplus.form.validation.service.PreProcessingFacade;
@@ -43,6 +45,9 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
     @Autowired
     private PreProcessingFacade preProcessingFacade;
 
+    @Autowired
+    private ApplicationDetailsRepository applicationDetailsRepository;
+
     @Override
     public String getActivityType() {
         return ACTIVITY_FORM_STATUS_KEY;
@@ -70,67 +75,56 @@ public class FormSubmissionHandler implements ApplicationFlowHandler {
 
         Mono<String> bodyMono = request.bodyToMono(String.class).cache();
 
-        return bodyMono.hasElement()
-                .flatMap(hasBody -> {
+		return bodyMono.hasElement().flatMap(hasBody -> {
 
-                    if (hasBody) {
+			if (hasBody) {
 
-                        return bodyMono.flatMap(body -> {
+				return bodyMono.flatMap(body -> {
 
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> requestBody = (Map<String, Object>) stringToEntity(body, Map.class);
-                            String workflowKey = (String) requestBody.remove("workflowKey");
-                            Boolean isPriority = (Boolean) requestBody.remove("isPriority");
-                            
+					Map<String, Object> requestBody = (Map<String, Object>) stringToEntity(body, Map.class);
+					String workflowKey = (String) requestBody.remove("workflowKey");
+					Mono<Boolean> priorityMono;
 
-                            if (!isEmpty(workflowKey)) {
-                                service.setWorkflowElementData(decryptWorkflowKey(workflowKey));
-                            }
+					if (requestBody.containsKey("isPriority")) {
 
-                            service.setIsPriority(Objects.requireNonNullElse(isPriority, Boolean.FALSE));
+						Boolean isPriority = (Boolean) requestBody.remove("isPriority");
+						priorityMono = Mono.just(Objects.requireNonNullElse(isPriority, Boolean.FALSE));
 
-                            String formData = entityToString(requestBody);
+					} else {
 
-                            return reactiveApiClient
-                                    .fetchServiceMetadata(
-                                            getUserSessionDetails(request.exchange().getRequest()),
-                                            service.getServiceId(),
-                                            txnId
-                                    )
-                                    .flatMap(metadataService -> {
+						priorityMono = applicationDetailsRepository.findByApplicationId(applicationId)
+								.map(ApplicationDetails::getIsPriority)
+								.map(priority -> Objects.requireNonNullElse(priority, Boolean.FALSE))
+								.defaultIfEmpty(Boolean.FALSE);
+					}
 
-                                        populateActionAndLocation(metadataService,service);
+					return priorityMono.flatMap(isPriority -> {
+						service.setIsPriority(isPriority);
 
-                                        return formService.applicationSubmission(
-                                                request.exchange().getRequest(),
-                                                txnId,
-                                                formData,
-                                                applId,
-                                                fromDraft,
-                                                request,
-                                                flowStatus,
-                                                serviceIdOpt.get(),
-                                                service,
-                                                newEntityFlag
-                                        );
-                                    });
-                        });
+						if (!isEmpty(workflowKey)) {
+							service.setWorkflowElementData(decryptWorkflowKey(workflowKey));
+						}
 
-                    } else {
+						String formData = entityToString(requestBody);
 
-                        return fetch(
-                                applicationId,
-                                request,
-                                statusKey,
-                                txnId,
-                                tempLog,
-                                flowStatus,
-                                service,
-                                fromDraft
-                        );
-                    }
+						return reactiveApiClient
+								.fetchServiceMetadata(getUserSessionDetails(request.exchange().getRequest()),
+										service.getServiceId(), txnId)
+								.flatMap(metadataService -> {
 
-                });
+									populateActionAndLocation(metadataService, service);
+
+									return formService.applicationSubmission(request.exchange().getRequest(), txnId,
+											formData, applId, fromDraft, request, flowStatus, serviceIdOpt.get(),
+											service, newEntityFlag);
+								});
+					});
+				});
+
+			} else {
+				return fetch(applicationId, request, statusKey, txnId, tempLog, flowStatus, service, fromDraft);
+			}
+		});
 
     }
 
