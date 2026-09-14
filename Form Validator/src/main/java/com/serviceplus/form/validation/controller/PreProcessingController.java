@@ -52,6 +52,10 @@ public class PreProcessingController {
         return preProcessingService.getWFPInbox(request.exchange().getRequest());
     }
 
+    public Mono<ServerResponse> getApplicantInbox(ServerRequest request) {
+        return preProcessingService.getApplicantInbox(request.exchange().getRequest());
+    }
+
 	public Mono<ServerResponse> getWFPInboxFilterApplications(ServerRequest request) {
 		return request.bodyToMono(InboxApplReqDTO.class).defaultIfEmpty(new InboxApplReqDTO()).flatMap(
 				dto -> preProcessingService.getWFPInboxFilterApplications(request.exchange().getRequest(), dto));

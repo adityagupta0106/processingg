@@ -28,7 +28,7 @@ public class GlobalExceptionHandler {
     public Mono<ResponseEntity<ErrorDetails>> global(Exception ex) {
         ex.printStackTrace();
         ErrorDetails err = new ErrorDetails(
-                ex.getLocalizedMessage(),
+                "Something went wrong",
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 null

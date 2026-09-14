@@ -47,7 +47,7 @@ public class PathRouter {
     RouterFunction<ServerResponse> httpRoutes() {
         return RouterFunctions
                 .route(POST(contextPath + "/a/serviceList"), preProcessingController::getServiceList)
-        		.andRoute(POST(contextPath + "/a/form/render"), preProcessingController::render)
+        		.andRoute(POST(contextPath + "/a/form/render"), handlerController::open)
         		//.andRoute(POST(contextPath + "/a/form/submission"), preProcessingController::submitApplication)
                 .andRoute(POST(contextPath + "/a/form/handler/action"), handlerController::processAction)
                 .andRoute(POST(contextPath + "/a/form/handler/loadDraft"), handlerController::draft)
@@ -58,11 +58,12 @@ public class PathRouter {
                 .andRoute(POST(contextPath + "/a/workflow/inbox/list"), preProcessingController::getWFPInbox)
                 .andRoute(POST(contextPath + "/a/workflow/inbox/filter/list"), preProcessingController::getWFPInboxFilterApplications)
         		.andRoute(POST(contextPath + "/a/inbox/applications"), preProcessingController::getPendingApplications)
-                .andRoute(POST(contextPath + "/a/form/open"), handlerController::open)
         		.andRoute(POST(contextPath + "/a/dsc/sign"),dscSignController::sign)
                 .andRoute(POST(contextPath + "/a/aua/request"), auaController::request)
                 .andRoute(POST(contextPath + "/a/aua/validate"), auaController::validate)
-                .andRoute(POST(contextPath + "/a/aua/getPublicKey"), auaController::getPublicKey);
+                .andRoute(POST(contextPath + "/a/aua/getPublicKey"), auaController::getPublicKey)
+                .andRoute(POST(contextPath + "/a/form/initializeDraft"), handlerController::initializeDraft)
+                .andRoute(POST(contextPath + "/a/applicant/inbox"), preProcessingController::getApplicantInbox);
     }
     
     

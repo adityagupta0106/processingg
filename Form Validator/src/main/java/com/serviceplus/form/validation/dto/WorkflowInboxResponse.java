@@ -1,10 +1,12 @@
 package com.serviceplus.form.validation.dto;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import org.springframework.cglib.core.Local;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class WorkflowInboxResponse {
@@ -35,14 +37,11 @@ public class WorkflowInboxResponse {
     @JsonIgnore
     private Integer locationId;
 
-    @JsonIgnore
-    private Date applRecievedOn;
+    private String receivedDate;
 
     private String serviceKey;
 
     private List<String> locations;
-
-    private String receivedDate;
     
     private Boolean isPriority;
     
@@ -136,12 +135,12 @@ public class WorkflowInboxResponse {
         this.locationId = locationId;
     }
 
-    public Date getApplRecievedOn() {
-        return applRecievedOn;
+    public String getReceivedDate() {
+        return receivedDate;
     }
 
-    public void setApplRecievedOn(Date applRecievedOn) {
-        this.applRecievedOn = applRecievedOn;
+    public void setReceivedDate(String receivedDate) {
+        this.receivedDate = receivedDate;
     }
 
     public List<String> getLocations() {
@@ -166,14 +165,6 @@ public class WorkflowInboxResponse {
 
     public void setTaskName(String taskName) {
         this.taskName = taskName;
-    }
-
-    public String getReceivedDate() {
-        return receivedDate;
-    }
-
-    public void setReceivedDate(String receivedDate) {
-        this.receivedDate = receivedDate;
     }
 
 	public Boolean getIsPriority() {

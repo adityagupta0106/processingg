@@ -3,10 +3,12 @@ package com.serviceplus.form.validation.repository;
 import com.serviceplus.form.validation.entity.CurrentProcess;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -27,4 +29,8 @@ public interface CurrentProcessRepository extends ReactiveCrudRepository<Current
 
 	Mono<CurrentProcess> findByProcessIdAndApplicationIdAndTenantId(String triggeringProcessId, String applicationId,
 			String tenantId);
+
+    Mono<CurrentProcess> findByApplicationIdAndTenantId(String appId, String tenantId);
+
+    Mono<Boolean> existsByApplicationIdAndTenantId(String appId, String tenantId);
 }

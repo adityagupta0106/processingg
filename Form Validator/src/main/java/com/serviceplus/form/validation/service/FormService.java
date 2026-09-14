@@ -1,5 +1,6 @@
 package com.serviceplus.form.validation.service;
 
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_SUBMISSION_TASK_FLAG;
 import static com.serviceplus.form.validation.utility.Utility.*;
 import static java.util.Objects.isNull;
@@ -212,7 +213,8 @@ public class FormService {
                                         appData,
                                         user,
                                         flowStatus.getDataId(),
-                                        appId
+                                        appId,
+                                        Boolean.FALSE
                                 )
                                 .flatMap(body ->
                                         handleSuccessfulResponse(
@@ -272,7 +274,7 @@ public class FormService {
                                                     txnLog,
                                                     appId,
                                                     dataId,
-                                                    "FS",
+                                                    ACTIVITY_FORM_STATUS_KEY,
                                                     newEntityFlag,
                                                     flowStatus,
                                                     referenceNo);

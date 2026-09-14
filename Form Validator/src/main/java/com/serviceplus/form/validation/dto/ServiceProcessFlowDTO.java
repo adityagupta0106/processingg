@@ -40,6 +40,7 @@ public class ServiceProcessFlowDTO {
         private List<MappedTask> mappedTasks;
         private List<OfficeUnitData> allowedOffices;
         private WorkflowElementData workflowElementData;
+        private PaymentDetailsDTO paymentDetails;
 
         public static class WorkflowElementData {
 
@@ -302,6 +303,8 @@ public class ServiceProcessFlowDTO {
             private String name;
             private String behaviour;
             private String formId;
+            private Applicant applicant;
+            private TaskPaymentMappingDTO payment;
 
             public String getId() {
                 return id;
@@ -351,6 +354,51 @@ public class ServiceProcessFlowDTO {
                 this.formId = formId;
             }
 
+            public Applicant getApplicant() {
+                return applicant;
+            }
+
+            public void setApplicant(Applicant applicant) {
+                this.applicant = applicant;
+            }
+
+            public TaskPaymentMappingDTO getPayment() {
+                return payment;
+            }
+
+            public void setPayment(TaskPaymentMappingDTO payment) {
+                this.payment = payment;
+            }
+        }
+
+        public static class Applicant {
+            private boolean deoSubmit;
+            private boolean uploadRejectedEnclosures;
+            private boolean submissionToSameOfficial;
+
+            public boolean isDeoSubmit() {
+                return deoSubmit;
+            }
+
+            public void setDeoSubmit(boolean deoSubmit) {
+                this.deoSubmit = deoSubmit;
+            }
+
+            public boolean isUploadRejectedEnclosures() {
+                return uploadRejectedEnclosures;
+            }
+
+            public void setUploadRejectedEnclosures(boolean uploadRejectedEnclosures) {
+                this.uploadRejectedEnclosures = uploadRejectedEnclosures;
+            }
+
+            public boolean isSubmissionToSameOfficial() {
+                return submissionToSameOfficial;
+            }
+
+            public void setSubmissionToSameOfficial(boolean submissionToSameOfficial) {
+                this.submissionToSameOfficial = submissionToSameOfficial;
+            }
         }
 
         public Nodes getNode() {
@@ -383,6 +431,14 @@ public class ServiceProcessFlowDTO {
 
         public void setWorkflowElementData(WorkflowElementData workflowElementData) {
             this.workflowElementData = workflowElementData;
+        }
+
+        public PaymentDetailsDTO getPaymentDetails() {
+            return paymentDetails;
+        }
+
+        public void setPaymentDetails(PaymentDetailsDTO paymentDetails) {
+            this.paymentDetails = paymentDetails;
         }
     }
 

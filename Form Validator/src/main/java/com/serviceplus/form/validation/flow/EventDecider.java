@@ -387,7 +387,7 @@ public class EventDecider {
                     userNode.setHolderId(String.valueOf(holderId));
                     Object holderName = userData.get("label");
                     userNode.setHolderName(holderName != null ? String.valueOf(holderName) : null);
-                    Long locationIdLong;
+                    long locationIdLong;
 
                     if (locationId instanceof Number) {
                         locationIdLong = ((Number) locationId).longValue();

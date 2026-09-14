@@ -145,7 +145,7 @@ public class ReactiveApiClient {
             });
     }
 
-	public Mono<ResponseEntity<String>> saveFormData(String txnId, ServiceMeta service, String appData, UserSessionObject user, String dataId,String applId) {
+	public Mono<ResponseEntity<String>> saveFormData(String txnId, ServiceMeta service, String appData, UserSessionObject user, String dataId,String applId,boolean draft) {
     	String url = FORM_MANAGEMENT_SERVICE.concat("addApplicationData");
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
         dataId = isEmpty(dataId) ? "" : dataId;
@@ -154,8 +154,14 @@ public class ReactiveApiClient {
 											                String.class,
 											                HttpMethod.POST,
                                                             headers,
-											                Map.of("txnId", txnId, "formId", service.getFormId(),
-                                                                 "serviceId",service.getServiceId(),"taskId",service.getTaskId(),"dataId",dataId,"applId",applId
+											                Map.of(
+                                                                    "txnId", txnId,
+                                                                    "formId", service.getFormId(),
+                                                                    "serviceId",service.getServiceId(),
+                                                                    "taskId",service.getTaskId(),
+                                                                    "dataId",dataId,
+                                                                    "applId",applId,
+                                                                    "draft", String.valueOf(draft)
                                                              ),
 											                url,
 											                appData,
@@ -360,6 +366,7 @@ public class ReactiveApiClient {
 		return fetchServiceMetadata(user, serviceId, txnId);
 	}
 
+    @SuppressWarnings("unchecked")
     public Mono<HandlerResponse> fetchApplicantData(String dataId, String formId,UserSessionObject user,String txnId,String applicationId) {
         String url = FORM_MANAGEMENT_SERVICE.concat("getApplicationData?");
         Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
@@ -390,10 +397,17 @@ public class ReactiveApiClient {
                 return Mono.error(new SPRuntimeError(
                         "Issue while processing the request [ERR - 002]", HttpStatus.INTERNAL_SERVER_ERROR,txnId));
             }
+
+            Map<String, Object> formData = (Map<String, Object>) responseJson.get("formData");
+            Map<String, Object> applicationData = (Map<String, Object>) responseJson.get("applicationData");
+            Map<String, Object> actualResponse = new HashMap<>(formData);
+
+
             HandlerResponse hr = new HandlerResponse();
             responseJson.remove("applicationId");
             responseJson.remove("status");
-            hr.setData(responseJson);
+            hr.setData(actualResponse);
+            hr.setApplicationData(applicationData);
             hr.setTxnId(txnId);
             hr.setApplicationId(applicationId);
             return Mono.just(hr);
@@ -534,6 +548,72 @@ public class ReactiveApiClient {
             ServerSidePaginationRecord<WorkflowInboxResponse> inboxList = (ServerSidePaginationRecord<WorkflowInboxResponse>) stringToEntityUsingType(body, listType);
             return Mono.just(inboxList);
         });
+    }
+
+    @SuppressWarnings("unchecked")
+    public Mono<ServerSidePaginationRecord<WorkflowInboxResponse>> fetchApplicantInbox(
+            String requestBody,
+            ServerHttpRequest request,
+            UserSessionObject user) {
+
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+        String url = TRACKING_SERVICE.concat("/a/appl/applicant/inbox");
+
+        Mono<ResponseEntity<String>> callExternalEndpoint =
+                AsynchronousApiExecutor.callExternalEndpoint(
+                        String.class,
+                        HttpMethod.POST,
+                        headers,
+                        Collections.emptyMap(),
+                        url,
+                        requestBody,
+                        MediaType.APPLICATION_JSON
+                );
+
+        return callExternalEndpoint.flatMap(apiResponse -> {
+
+            String body = apiResponse.getBody();
+
+            if (body == null || body.isBlank()) {
+                return Mono.error(new SPRuntimeError("Unable to fetch applicant inbox", HttpStatus.FAILED_DEPENDENCY, null));
+            }
+
+            Type responseType = new TypeToken<ServerSidePaginationRecord<ApplicationApplicantTrackingResponse.ApplicantApplicationDTO>>() {
+            }.getType();
+
+            ServerSidePaginationRecord<ApplicationApplicantTrackingResponse.ApplicantApplicationDTO> applicantInbox =
+                    (ServerSidePaginationRecord<ApplicationApplicantTrackingResponse.ApplicantApplicationDTO>) stringToEntityUsingType(body, responseType);
+
+            ServerSidePaginationRecord<WorkflowInboxResponse> response = new ServerSidePaginationRecord<>();
+
+            List<WorkflowInboxResponse> data = applicantInbox.getData().stream().map(this::convertApplicantInbox).toList();
+
+            response.setData(data);
+            response.setTotalRecords(applicantInbox.getTotalRecords());
+            response.setCurrentPage(applicantInbox.getCurrentPage());
+            response.setPageSize(applicantInbox.getPageSize());
+            response.setTotalPages(applicantInbox.getTotalPages());
+
+            return Mono.just(response);
+
+        });
+    }
+
+    private WorkflowInboxResponse convertApplicantInbox(ApplicationApplicantTrackingResponse.ApplicantApplicationDTO applicant) {
+
+        WorkflowInboxResponse response = new WorkflowInboxResponse();
+
+        response.setApplId(applicant.getApplId());
+        response.setApplRefNo(applicant.getApplRefNo());
+        response.setServiceId(applicant.getServiceId());
+        response.setServiceName(applicant.getServiceName());
+        response.setReceivedDate(applicant.getReceivedDate());
+        response.setTaskName(applicant.getTaskName());
+        response.setTaskId(applicant.getTaskId());
+        response.setFormId(applicant.getFormId());
+
+        return response;
     }
 
 	@SuppressWarnings("unchecked")

@@ -4,13 +4,10 @@ import static com.serviceplus.form.validation.utility.ApplicationConstants.TYPE_
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
+import com.serviceplus.form.validation.dto.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,17 +17,7 @@ import org.springframework.stereotype.Service;
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.Helpers.CurrentProcessBuilder;
 import com.serviceplus.form.validation.Helpers.WorkflowHelper;
-import com.serviceplus.form.validation.dto.ApplicationRouting;
-import com.serviceplus.form.validation.dto.EscalationDetailsDTO;
-import com.serviceplus.form.validation.dto.InboxKafka;
-import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
-import com.serviceplus.form.validation.dto.ServiceMeta;
-import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
 import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO.TaskRelationDTO;
-import com.serviceplus.form.validation.dto.TaskAvailableOfficeLocation;
-import com.serviceplus.form.validation.dto.TimePeriod;
-import com.serviceplus.form.validation.dto.TimerTaskDTO;
-import com.serviceplus.form.validation.dto.UserSessionObject;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.CurrentProcess;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
@@ -166,7 +153,7 @@ public class WorkflowService {
 											Integer sourceLevelCode;
 											Long sourceLocationId;
 
-											if (user.getEntityLevelId() != null) {
+											if (user.getEntityLevelId() != null  && !user.getEntityLevelId().equals(0)) {
 											    sourceLevelCode = user.getEntityLevelId();
 											    sourceLocationId = user.getLocationId().longValue();
 											} else {
@@ -269,6 +256,8 @@ public class WorkflowService {
 
 								InboxKafka inboxKafkaDto = new InboxKafka();
 
+                                inboxKafkaDto.setApplicantTaskDetails(buildApplicantTaskDetails(processList, wf, service));
+
 								inboxKafkaDto.setProcessList(processList);
 								inboxKafkaDto.setOfficeDetails(taskAvailableOfficeLocations);
 								inboxKafkaDto.setServiceName(service.getServiceName());
@@ -291,6 +280,84 @@ public class WorkflowService {
 				}).doOnError(
 						ex -> applicationFlowLogs.error("Error in calculateNextWorkflow txnId={}", txn.getTxnId(), ex));
 	}
+
+    private List<ApplicantTaskDetails> buildApplicantTaskDetails(
+            List<CurrentProcess> processList,
+            List<ServiceProcessFlowDTO.Data> wf,
+            ServiceMeta service) {
+
+        if (processList == null || processList.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return processList.stream()
+                .filter(process ->
+                        "N".equals(process.getActionTaken()))
+                .filter(process ->
+                        TaskType.APPLICANT_TASK.getType().equals(process.getCurrentTaskType()))
+
+                .map(process ->
+                        buildApplicantTaskDetail(
+                                process,
+                                wf
+                        ))
+
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private ApplicantTaskDetails buildApplicantTaskDetail(
+            CurrentProcess process,
+            List<ServiceProcessFlowDTO.Data> wf) {
+
+        ServiceProcessFlowDTO.Data taskData = wf.stream()
+                .filter(Objects::nonNull)
+                .filter(data -> data.getNode() != null)
+                .filter(data ->
+                        process.getCurrentTask()
+                                .equals(data.getNode().getId()))
+                .findFirst()
+                .orElse(null);
+
+        if (taskData == null || taskData.getNode().getApplicant() == null) {
+
+            applicationFlowLogs.warn("Applicant configuration not found. taskId={}, applicationId={}", process.getCurrentTask(), process.getApplicationId());
+            return null;
+        }
+
+        ServiceProcessFlowDTO.Data.Nodes node = taskData.getNode();
+
+        ServiceProcessFlowDTO.Data.Applicant applicant = node.getApplicant();
+
+        ApplicantTaskDetails details = new ApplicantTaskDetails();
+
+        details.setCurrentProcessId(process.getProcessId());
+
+        details.setTaskId(process.getCurrentTask());
+
+        details.setApplicationId(process.getApplicationId());
+
+        details.setSubmissionToSameOfficial(applicant.isSubmissionToSameOfficial());
+
+        details.setUploadRejectedEnclosures(applicant.isUploadRejectedEnclosures());
+
+        details.setDeoSubmit(applicant.isDeoSubmit());
+
+        details.setRequiresForm(node.getFormId() != null && !node.getFormId().isBlank());
+
+        details.setRequiresPayment(node.getPayment() != null && node.getPayment().getEnabled());
+
+        return details;
+    }
+
+    private boolean hasFormAttached(ServiceProcessFlowDTO.Data taskData, ServiceMeta service) {
+
+        if (taskData == null || taskData.getNode() == null) {
+            return false;
+        }
+
+        return taskData.getNode().getFormId() != null && !taskData.getNode().getFormId().isBlank();
+    }
 
 //    private Mono<InboxKafka> calculateNextWorkflow(ServiceProcessFlowDTO.Data.Nodes node, ServiceProcessFlowDTO.Data data,
 //                                                   ServiceMeta service, ApplicationDetails ad, ProcessingTxn txn, UserSessionObject user,
