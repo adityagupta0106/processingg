@@ -171,51 +171,58 @@ public class HandlerController {
                 .existsByApplicationIdAndTenantId(appId, tenantId)
                 .flatMap(applicationExists -> {
 
+                    /*
+                     * First-time application.
+                     *
+                     * No current process exists for this application.
+                     */
                     if (!applicationExists) {
 
                         applicationFlowLogs.info("Application {} does not exist in current process for tenant {}. Calling apply", appId, tenantId);
                         return preProcessingService.apply(request);
                     }
 
+                    /*
+                     * Application already exists.
+                     *
+                     * Only allow opening the draft when the requested
+                     * task is still active.
+                     */
                     return currentProcessRepository
                             .findByApplicationIdAndCurrentTaskAndActionTaken(
                                     appId,
                                     taskId,
-                                    "Y"
+                                    "N"
                             )
-                            .flatMap(process -> {
-
-                                applicationFlowLogs.info("Action already taken for application {} and task {}", appId, taskId);
-                                return Mono.<ServerResponse>error(new SPRuntimeError("Action already taken", HttpStatus.CONFLICT, null));
-                            })
                             .switchIfEmpty(
-                                    currentProcessRepository
-                                            .findByApplicationIdAndCurrentTaskAndActionTaken(
+                                    Mono.error(new SPRuntimeError("Action already taken", HttpStatus.CONFLICT, null))
+                            )
+                            .flatMap(currentProcess ->
+
+                                    applicationFlowRouterRepository
+                                            .findFirstByApplicationIdAndTaskIdAndServiceIdAndTenantIdAndActivityTypeAndLastUpdateAfterOrderByIdDesc(
                                                     appId,
                                                     taskId,
-                                                    "N"
+                                                    service.getServiceId(),
+                                                    tenantId,
+                                                    ACTIVITY_FORM_STATUS_KEY,
+                                                    currentProcess.getInitiatedOn()
                                             )
-                                            .flatMap(currentProcess ->
+                                            .flatMap(flow -> {
 
-                                                    applicationFlowRouterRepository
-                                                            .findFirstByApplicationIdAndTaskIdAndServiceIdAndTenantIdAndActivityTypeAndLastUpdateAfterOrderByIdDesc(
-                                                                    appId,
-                                                                    taskId,
-                                                                    service.getServiceId(),
-                                                                    tenantId,
-                                                                    ACTIVITY_FORM_STATUS_KEY,
-                                                                    currentProcess.getInitiatedOn()
-                                                            )
-                                            )
-                                            .flatMap(flow ->
-                                                    draft(request)
-                                            )
+                                                applicationFlowLogs.info("Opening draft for application {} taskId {} txnId {}", appId, taskId, flow.getTxnId());
+                                                return draft(request);
+                                            })
                                             .switchIfEmpty(
-                                                    Mono.<ServerResponse>error(new SPRuntimeError("No active task found", HttpStatus.NOT_FOUND, null))
+                                                    Mono.defer(() -> {
+                                                        applicationFlowLogs.info("No draft flow found for application {} taskId {}. Calling apply", appId, taskId);
+                                                        return preProcessingService.apply(request);
+                                                    })
                                             )
                             );
                 });
     }
+
 
     public Mono<ServerResponse> initializeDraft(ServerRequest request) {
 
