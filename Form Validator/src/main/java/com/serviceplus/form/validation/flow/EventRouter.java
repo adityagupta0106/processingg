@@ -5,9 +5,11 @@ import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.dto.ActivityMapDTO;
 import com.serviceplus.form.validation.dto.ServiceMeta;
 import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.TempTransactionLogs;
 import com.serviceplus.form.validation.handlers.ApplicationFlowHandler;
+import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.ApplicationFlowRouterRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
@@ -17,7 +19,6 @@ import com.serviceplus.form.validation.service.TransactionGeneration;
 import com.serviceplus.form.validation.utility.HandlerMapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -26,7 +27,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.Comparator;
 
-import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.APPLICATION_STATUS_DRAFT;
 import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 import static java.util.Objects.isNull;
@@ -49,13 +50,16 @@ public class EventRouter {
 
     private final ActivityMapService activityMapService;
 
-    public EventRouter(ApplicationFlowRouterRepository applicationFlowRouterRepository, TempTransactionLogService tempTransactionLogService, TransactionGeneration transactionGeneration, ProcessingTxnRepository processingTxnRepository, CurrentProcessRepository currentProcessRepository, ActivityMapService activityMapService) {
+    private final ApplicationDetailsRepository applicationDetailsRepository;
+
+    public EventRouter(ApplicationFlowRouterRepository applicationFlowRouterRepository, TempTransactionLogService tempTransactionLogService, TransactionGeneration transactionGeneration, ProcessingTxnRepository processingTxnRepository, CurrentProcessRepository currentProcessRepository, ActivityMapService activityMapService, ApplicationDetailsRepository applicationDetailsRepository) {
         this.applicationFlowRouterRepository = applicationFlowRouterRepository;
         this.tempTransactionLogService = tempTransactionLogService;
         this.transactionGeneration = transactionGeneration;
         this.processingTxnRepository = processingTxnRepository;
         this.currentProcessRepository = currentProcessRepository;
         this.activityMapService = activityMapService;
+        this.applicationDetailsRepository = applicationDetailsRepository;
     }
 
     public Mono<ServerResponse> route(String statusKey, String applicationId, ServerRequest request, String txnId,
@@ -104,14 +108,15 @@ public class EventRouter {
                                             services,
                                             true,
                                             fromDraft,
-                                            data.getUserId()
+                                            data.getUserId(),
+                                            user
                                     );
                                 })
                 )
                 .switchIfEmpty(
                         flow.switchIfEmpty(Mono.error(new SPRuntimeError("Invalid Form Request [H - 01]", HttpStatus.BAD_REQUEST,txnId)))
                             .flatMap(fl ->
-                                generate(fl.getActivityType(), applicationId, request, txnId, Mono.empty(), fl,services,false,fromDraft,0l)
+                                generate(fl.getActivityType(), applicationId, request, txnId, Mono.empty(), fl,services,false,fromDraft,0l,user)
                              )
                 );
 
@@ -170,7 +175,7 @@ public class EventRouter {
                 });
     }
 
-    public Mono<ServerResponse> generate(String statusKey, String applicationId, ServerRequest request, String txnId, Mono<TempTransactionLogs> fetch, ApplicationFlowStatusEntity flow, ServiceMeta service, boolean cache, boolean fromDraft, Long userId) {
+    public Mono<ServerResponse> generate(String statusKey, String applicationId, ServerRequest request, String txnId, Mono<TempTransactionLogs> fetch, ApplicationFlowStatusEntity flow, ServiceMeta service, boolean cache, boolean fromDraft, Long userId, UserSessionObject user) {
 
         ApplicationFlowHandler handler = HandlerMapper.getHandler(statusKey);
 
@@ -186,20 +191,37 @@ public class EventRouter {
             flowMono = Mono.just(flow);
         } else {
 
-            flowMono = currentProcessRepository
-                    .findByApplicationIdAndCurrentTaskAndActionTaken(
+            Mono<ApplicationDetails> appDetails =
+                    applicationDetailsRepository.findByApplicationIdAndTenantId(
                             applicationId,
-                            service.getTaskId(),
-                            "N")
-                    .map(currentProcess -> {
-                        flow.setCurrentProcess(currentProcess);
-                        return flow;
-                    })
-                    .switchIfEmpty(Mono.fromSupplier(() -> {
-                        // First applicant task - CurrentProcess does not exist yet
-                        flow.setCurrentProcess(null);
-                        return flow;
-                    }));
+                            user.getTenantId()
+                    );
+
+            flowMono = appDetails
+                    .switchIfEmpty(
+                            Mono.error(new SPRuntimeError("Action not allowed", HttpStatus.CONFLICT, txnId))
+                    )
+                    .flatMap(app -> {
+
+                        if (APPLICATION_STATUS_DRAFT.equals(app.getStatus())) {
+                            flow.setCurrentProcess(null);
+                            return Mono.just(flow);
+                        }
+
+                        return currentProcessRepository
+                                .findByApplicationIdAndCurrentTaskAndActionTaken(
+                                        applicationId,
+                                        service.getTaskId(),
+                                        "N"
+                                )
+                                .map(currentProcess -> {
+                                    flow.setCurrentProcess(currentProcess);
+                                    return flow;
+                                })
+                                .switchIfEmpty(
+                                        Mono.error(new SPRuntimeError("Action not allowed", HttpStatus.CONFLICT, txnId))
+                                );
+                    });
         }
 
         return flowMono.flatMap(updatedFlow -> {
