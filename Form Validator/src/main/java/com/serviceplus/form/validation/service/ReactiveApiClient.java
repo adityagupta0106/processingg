@@ -1144,5 +1144,29 @@ public class ReactiveApiClient {
 			}
 		});
 	}
+
+    public Mono<String> getFileBase64(UserSessionObject user, String uploadId) {
+
+        String url = FILE_MANAGEMENT_SERVICE.concat("b/").concat(uploadId).concat("/base64");
+
+        Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
+
+        return AsynchronousApiExecutor.callExternalEndpoint(
+                        String.class,
+                        HttpMethod.GET,
+                        headers,
+                        Collections.emptyMap(),
+                        url,
+                        null,
+                        MediaType.APPLICATION_JSON
+                )
+                .flatMap(response -> {
+
+                    Base64FileResponse result = (Base64FileResponse) stringToEntityUsingType(response.getBody(), new TypeToken<Base64FileResponse>() {
+                    }.getType());
+
+                    return Mono.just(result.getBase64());
+                });
+    }
 }
 

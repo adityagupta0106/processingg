@@ -216,12 +216,10 @@ public class SystemGeneratedDocumentResolver {
                             || "optional".equalsIgnoreCase(mapping.getDigitalSignatureRequired())) {
 
                         return reactiveApiClient
-                                .downloadFromPresignedUrl(document.getPreviewUrl())
+                                .getFileBase64(user,entity.getUploadId())
                                 .map(bytes -> {
 
-                                    document.setBase64Content(
-                                            Base64.getEncoder().encodeToString(bytes));
-
+                                    document.setBase64Content(bytes);
                                     document.setDigitalSignatureModes(List.of());
 
                                     return List.of(document);

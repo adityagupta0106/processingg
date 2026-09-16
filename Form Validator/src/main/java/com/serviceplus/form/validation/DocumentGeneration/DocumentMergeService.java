@@ -19,6 +19,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
@@ -38,19 +39,39 @@ public class DocumentMergeService {
         this.applicationDocumentMergeRepository = applicationDocumentMergeRepository;
     }
 
-    public Mono<byte[]> fetchDocumentBytes(UserSessionObject user, ResolvedDocument document, String txnId) {
+    public Mono<byte[]> fetchDocumentBytes(
+            UserSessionObject user,
+            ResolvedDocument document,
+            String txnId) {
 
-        if (document == null || document.getDownloadUrl() == null) {
-            return Mono.error(new SPRuntimeError("Document download URL not available.", HttpStatus.BAD_REQUEST, txnId));
+        if (document == null || document.getUploadId() == null) {
+            return Mono.error(
+                    new SPRuntimeError(
+                            "Document upload ID not available.",
+                            HttpStatus.BAD_REQUEST,
+                            txnId));
         }
 
         return reactiveApiClient
-                .downloadFromPresignedUrl(document.getDownloadUrl())
-                .doOnNext(bytes ->
-                        applicationFlowLogs.info("TxnId : {} | Downloaded document {} | Size: {} bytes", txnId, document.getDocumentName(), bytes.length)
-                )
+                .getFileBase64(user, document.getUploadId())
+                .map(base64 -> {
+
+                    if (base64 == null || base64.isBlank()) {
+                        throw new SPRuntimeError("Unable to download document.", HttpStatus.BAD_REQUEST, txnId);
+                    }
+
+                    try {
+
+                        return Base64.getDecoder().decode(base64);
+
+                    } catch (IllegalArgumentException ex) {
+
+                        applicationFlowLogs.error("TxnId : {} | Invalid Base64 for document {}", txnId, document.getDocumentName(), ex);
+                        throw new SPRuntimeError("Invalid document content.", HttpStatus.BAD_REQUEST, txnId);
+                    }
+                })
                 .switchIfEmpty(
-                        Mono.error(new SPRuntimeError("Unable to download document.", HttpStatus.BAD_REQUEST, txnId))
+                        Mono.<byte[]>error(new SPRuntimeError("Unable to download document.", HttpStatus.BAD_REQUEST, txnId))
                 );
     }
 

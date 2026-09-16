@@ -33,4 +33,6 @@ public interface CurrentProcessRepository extends ReactiveCrudRepository<Current
     Mono<CurrentProcess> findByApplicationIdAndTenantId(String appId, String tenantId);
 
     Mono<Boolean> existsByApplicationIdAndTenantId(String appId, String tenantId);
+
+    void findFirstByApplicationIdAndTenantId(String applicationId, String tenantId);
 }
