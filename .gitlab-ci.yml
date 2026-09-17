@@ -1,0 +1,42 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: "registry.company.local:5000/processing"
+  K8S_NAMESPACE: "serviceplus"
+
+build_processing:
+  stage: build
+
+  tags:
+    - runner_frontend
+
+  script:
+    - cp /opt/ci-artifacts/applicationprocessing/m2-cache.tar.gz "Form Validator/"
+    - cd "Form Validator"
+    - tar xzf m2-cache.tar.gz
+
+    - docker build -t $IMAGE_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker tag $IMAGE_NAME:$CI_COMMIT_SHORT_SHA $IMAGE_NAME:latest
+
+    - docker push $IMAGE_NAME:$CI_COMMIT_SHORT_SHA
+    - docker push $IMAGE_NAME:latest
+
+  only:
+    - main
+
+
+deploy_processing:
+  stage: deploy
+
+  tags:
+    - runner_frontend
+
+  script:
+    - kubectl set image deployment/processing processing=$IMAGE_NAME:$CI_COMMIT_SHORT_SHA -n $K8S_NAMESPACE
+    - kubectl rollout status deployment/processing -n $K8S_NAMESPACE --timeout=5m
+    - kubectl get pods -n $K8S_NAMESPACE -l app=processing
+
+  only:
+    - main
