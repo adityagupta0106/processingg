@@ -17,11 +17,15 @@ public class InboxKafka {
     private LocalDateTime applyDate;
     private Integer loggedInUserLocation;
     private Long loggedInUserId;
+    
+    
 
     private List<TaskAvailableOfficeLocation> officeDetails;
     private List<CurrentProcess> processList;
     private List<ApplicantTaskDetails> applicantTaskDetails;
     private boolean completeClosure=false;
+    
+ 
 
     public String getLocationName() {
         return locationName;
@@ -126,4 +130,5 @@ public class InboxKafka {
     public void setApplicantTaskDetails(List<ApplicantTaskDetails> applicantTaskDetails) {
         this.applicantTaskDetails = applicantTaskDetails;
     }
+
 }
