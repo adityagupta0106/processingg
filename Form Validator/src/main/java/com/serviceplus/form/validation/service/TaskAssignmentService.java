@@ -239,8 +239,9 @@ public class TaskAssignmentService {
             Long sourceLocationId,
             Integer sourceLevelCode,
             Integer destinationLevelCode,
-            UserSessionObject user,String applicationId,
-            Map<String, ApplicationRouting> applicationRoutingMap) {
+            UserSessionObject user,
+            String applicationId,
+            Map<String, ApplicationRouting> applicationRoutingMap,String txnId) {
 
         applicationFlowLogs.info(
                 "Refreshing office locations for taskId={}, parentLocationId={}, sourceLevel={}, targetLocationLevel={}",
@@ -249,352 +250,832 @@ public class TaskAssignmentService {
                 sourceLevelCode,
                 destinationLevelCode);
 
-        return resolveRoutingSource(
-        		applicationId,
+        return resolveRoutingSources(
+                applicationId,
                 officeLocation.getTaskId(),
                 applicationRoutingMap,
                 sourceLevelCode,
                 sourceLocationId,
-                user)
+                user,
+                txnId)
 
-                .flatMap(routingSource -> {
+                .flatMapMany(routingSources ->
 
-                    Long resolvedSourceLocationId =
-                            routingSource.getSourceLocationId();
+                        Flux.fromIterable(routingSources)
 
-                    Integer resolvedSourceLevelCode =
-                            routingSource.getSourceLevelCode();
+                                .flatMap(routingSource -> {
 
-                    applicationFlowLogs.info(
-                            "Resolved routing source taskId={}, sourceLocationId={}, sourceLevelCode={}, destinationLevelCode={}",
-                            officeLocation.getTaskId(),
-                            resolvedSourceLocationId,
-                            resolvedSourceLevelCode,
-                            destinationLevelCode);
+                                    if (routingSource.getSourceLocationId() == null
+                                            || routingSource.getSourceLevelCode() == null
+                                            || destinationLevelCode == null || (routingSource.getSourceLevelCode().equals(destinationLevelCode))) {
 
-                    if (resolvedSourceLocationId == null
-                            || resolvedSourceLevelCode == null
-                            || destinationLevelCode == null || (resolvedSourceLevelCode.equals(destinationLevelCode))) {
+                                        return Mono.empty();
+                                    }
 
-                        applicationFlowLogs.warn(
-                                "Unable to refresh office locations. Missing routing values taskId={}, sourceLocationId={}, sourceLevelCode={}, destinationLevelCode={}",
-                                officeLocation.getTaskId(),
-                                resolvedSourceLocationId,
-                                resolvedSourceLevelCode,
-                                destinationLevelCode);
+                                    applicationFlowLogs.info(
+                                            "Resolving actual next-task locations "
+                                                    + "sourceLocationId={}, sourceLevelCode={}, destinationLevelCode={}",
+                                            routingSource.getSourceLocationId(),
+                                            routingSource.getSourceLevelCode(),
+                                            destinationLevelCode);
 
-                        return Mono.empty();
+                                    return apiClient.getRelatedLocationIds(
+                                            routingSource.getSourceLevelCode(),
+                                            routingSource.getSourceLocationId(),
+                                            destinationLevelCode,
+                                            user);
+                                })
+
+                                .flatMapIterable(ids -> ids)
+
+                                .filter(Objects::nonNull)
+
+                                .distinct()
+
+                                .collectList()
+
+                                .map(allowedLocationIds -> {
+
+                                    Map<String, List<String>> locationHolderMap =
+                                            taskLocationUserHolderMap.getOrDefault(
+                                                    officeLocation.getTaskId(),
+                                                    Map.of());
+
+                                    List<ServiceMeta.AvailableApplyLocations> filteredOffices =
+                                            officeLocation.getAllowedOffices()
+                                                    .stream()
+                                                    .filter(office -> {
+
+                                                        String locationId =
+                                                                String.valueOf(
+                                                                        office.getOrgUnitCode());
+
+                                                        boolean locationAllowed =
+                                                                allowedLocationIds.contains(
+                                                                        locationId);
+
+                                                        if (!locationAllowed) {
+                                                            return false;
+                                                        }
+
+                                                        List<String> holderIds =
+                                                                locationHolderMap.get(
+                                                                        locationId);
+
+                                                        if (holderIds == null
+                                                                || holderIds.isEmpty()) {
+
+                                                            return false;
+                                                        }
+
+                                                        office.setHolderIds(holderIds);
+
+                                                        return true;
+                                                    })
+                                                    .toList();
+
+                                    officeLocation.setAllowedOffices(
+                                            new ArrayList<>(filteredOffices));
+
+                                    applicationFlowLogs.info(
+                                            "Final routing locations for taskId={} = {}",
+                                            officeLocation.getTaskId(),
+                                            officeLocation.getAllowedOffices());
+
+                                    return officeLocation;
+                                }))
+                .then();
+    }
+//    public Mono<Void> refreshTaskAvailableOfficeLocation(
+//            TaskAvailableOfficeLocation officeLocation,
+//            Map<String, Map<String, List<String>>> taskLocationUserHolderMap,
+//            Long sourceLocationId,
+//            Integer sourceLevelCode,
+//            Integer destinationLevelCode,
+//            UserSessionObject user,String applicationId,
+//            Map<String, ApplicationRouting> applicationRoutingMap) {
+//
+//        applicationFlowLogs.info(
+//                "Refreshing office locations for taskId={}, parentLocationId={}, sourceLevel={}, targetLocationLevel={}",
+//                officeLocation.getTaskId(),
+//                sourceLocationId,
+//                sourceLevelCode,
+//                destinationLevelCode);
+//
+//        return resolveRoutingSource(
+//        		applicationId,
+//                officeLocation.getTaskId(),
+//                applicationRoutingMap,
+//                sourceLevelCode,
+//                sourceLocationId,
+//                user)
+//
+//                .flatMap(routingSource -> {
+//
+//                    Long resolvedSourceLocationId =
+//                            routingSource.getSourceLocationId();
+//
+//                    Integer resolvedSourceLevelCode =
+//                            routingSource.getSourceLevelCode();
+//
+//                    applicationFlowLogs.info(
+//                            "Resolved routing source taskId={}, sourceLocationId={}, sourceLevelCode={}, destinationLevelCode={}",
+//                            officeLocation.getTaskId(),
+//                            resolvedSourceLocationId,
+//                            resolvedSourceLevelCode,
+//                            destinationLevelCode);
+//
+//                    if (resolvedSourceLocationId == null
+//                            || resolvedSourceLevelCode == null
+//                            || destinationLevelCode == null || (resolvedSourceLevelCode.equals(destinationLevelCode))) {
+//
+//                        applicationFlowLogs.warn(
+//                                "Unable to refresh office locations. Missing routing values taskId={}, sourceLocationId={}, sourceLevelCode={}, destinationLevelCode={}",
+//                                officeLocation.getTaskId(),
+//                                resolvedSourceLocationId,
+//                                resolvedSourceLevelCode,
+//                                destinationLevelCode);
+//
+//                        return Mono.empty();
+//                    }
+//
+//                    return apiClient.getRelatedLocationIds(
+//                            resolvedSourceLevelCode,
+//                            resolvedSourceLocationId,
+//                            destinationLevelCode,
+//                            user)
+//
+//                            .doOnNext(allowedLocationIds ->
+//                                    applicationFlowLogs.info(
+//                                            "SPGD returned allowed locations for parentLocationId={}, targetLevel={}: {}",
+//                                            resolvedSourceLocationId,
+//                                            destinationLevelCode,
+//                                            allowedLocationIds))
+//
+//                            .map(allowedLocationIds -> {
+//
+//                                Map<String, List<String>> locationHolderMap =
+//                                        taskLocationUserHolderMap.getOrDefault(
+//                                                officeLocation.getTaskId(),
+//                                                Map.of());
+//
+//                                applicationFlowLogs.info(
+//                                        "Location holder map for taskId {} : {}",
+//                                        officeLocation.getTaskId(),
+//                                        locationHolderMap);
+//
+//                                List<ServiceMeta.AvailableApplyLocations> hierarchyFilteredOffices =
+//                                        officeLocation.getAllowedOffices()
+//                                                .stream()
+//                                                .filter(office -> {
+//
+//                                                    String locationId =
+//                                                            String.valueOf(
+//                                                                    office.getOrgUnitCode());
+//
+//                                                    boolean allowed =
+//                                                            allowedLocationIds.contains(
+//                                                                    locationId);
+//
+//                                                    applicationFlowLogs.info(
+//                                                            "Hierarchy filtering taskId={}, locationId={}, allowed={}",
+//                                                            officeLocation.getTaskId(),
+//                                                            locationId,
+//                                                            allowed);
+//
+//                                                    return allowed;
+//                                                })
+//                                                .toList();
+//
+//                                applicationFlowLogs.info(
+//                                        "Hierarchy filtered offices for taskId={} before={}, after={}",
+//                                        officeLocation.getTaskId(),
+//                                        officeLocation.getAllowedOffices().size(),
+//                                        hierarchyFilteredOffices.size());
+//
+//                                List<ServiceMeta.AvailableApplyLocations> filteredOffices =
+//                                        hierarchyFilteredOffices.stream()
+//                                                .filter(office -> {
+//
+//                                                    String locationId =
+//                                                            String.valueOf(
+//                                                                    office.getOrgUnitCode());
+//
+//                                                    List<String> holderIds =
+//                                                            locationHolderMap.get(
+//                                                                    locationId);
+//
+//                                                    applicationFlowLogs.info(
+//                                                            "Evaluating taskId={}, locationId={}, holderIds={}",
+//                                                            officeLocation.getTaskId(),
+//                                                            locationId,
+//                                                            holderIds);
+//
+//                                                    if (holderIds == null
+//                                                            || holderIds.isEmpty()) {
+//
+//                                                        applicationFlowLogs.info(
+//                                                                "Removing locationId={} for taskId={} because no holders found",
+//                                                                locationId,
+//                                                                officeLocation.getTaskId());
+//
+//                                                        return false;
+//                                                    }
+//
+//                                                    office.setHolderIds(holderIds);
+//
+//                                                    applicationFlowLogs.info(
+//                                                            "Retaining locationId={} for taskId={} with holderIds={}",
+//                                                            locationId,
+//                                                            officeLocation.getTaskId(),
+//                                                            holderIds);
+//
+//                                                    return true;
+//
+//                                                })
+//                                                .toList();
+//
+//                                applicationFlowLogs.info(
+//                                        "Final filtered offices for taskId={} before={}, after={}",
+//                                        officeLocation.getTaskId(),
+//                                        officeLocation.getAllowedOffices().size(),
+//                                        filteredOffices.size());
+//
+//                                officeLocation.setAllowedOffices(
+//                                        new ArrayList<>(filteredOffices));
+//
+//                                applicationFlowLogs.info(
+//                                        "Final office locations for taskId={} : {}",
+//                                        officeLocation.getTaskId(),
+//                                        officeLocation.getAllowedOffices());
+//
+//                                return officeLocation;
+//                            })
+//                            .then();
+//
+//                });
+//    }   
+    
+    private Mono<List<RoutingSource>> resolveRoutingSources(
+            String applicationId,
+            String taskId,
+            Map<String, ApplicationRouting> applicationRoutingMap,
+            Integer defaultSourceLevelCode,
+            Long defaultSourceLocationId,
+            UserSessionObject user,
+            String txnId) {
+
+        ApplicationRouting routing =
+                applicationRoutingMap != null
+                        ? applicationRoutingMap.get(taskId)
+                        : null;
+
+        /*
+         * No routing configuration.
+         */
+        if (routing == null
+                || !Boolean.TRUE.equals(routing.getEnabled())
+                || routing.getSelectedAttributes() == null
+                || routing.getSelectedAttributes().isEmpty()) {
+
+            return Mono.just(
+                    List.of(
+                            new RoutingSource(
+                                    defaultSourceLocationId,
+                                    defaultSourceLevelCode)));
+        }
+
+        String routingMode =routing.getRoutingMode();
+
+        if (routingMode == null || routingMode.isBlank()) {
+
+            applicationFlowLogs.warn(
+                    "Routing mode missing for taskId={}. Using default source.",
+                    taskId);
+
+            return Mono.just(
+                    List.of(
+                            new RoutingSource(
+                                    defaultSourceLocationId,
+                                    defaultSourceLevelCode)));
+        }
+
+        List<RoutingAttribute> selectedAttributes =
+                routing.getSelectedAttributes()
+                        .stream()
+                        .filter(Objects::nonNull)
+                        .filter(attribute -> attribute.getAttributeId() != null)
+                        .sorted(
+                                Comparator.comparing(
+                                        RoutingAttribute::getPriority,
+                                        Comparator.nullsLast(Integer::compareTo)))
+                        .toList();
+
+        if (selectedAttributes.isEmpty()) {
+
+            return Mono.just(
+                    List.of(
+                            new RoutingSource(
+                                    defaultSourceLocationId,
+                                    defaultSourceLevelCode)));
+        }
+
+        applicationFlowLogs.info(
+                "Resolving application routing taskId={}, mode={}, selectedAttributes={}",
+                taskId,
+                routingMode,
+                selectedAttributes);
+
+        switch (routingMode) {
+
+            case "ALL_LOCATIONS":
+
+                return resolveAllLocations(
+                        applicationId,
+                        selectedAttributes,
+                        user,
+                        txnId,
+                        defaultSourceLocationId,
+                        defaultSourceLevelCode);
+
+            case "EXCLUSIVE_LOCATION":
+
+                return resolveExclusiveLocation(
+                        applicationId,
+                        selectedAttributes,
+                        user,
+                        txnId,
+                        defaultSourceLocationId,
+                        defaultSourceLevelCode);
+
+            case "INCLUSIVE_LOCATIONS":
+
+                return resolveInclusiveLocations(
+                        applicationId,
+                        selectedAttributes,
+                        routing.getCombinations(),
+                        user,
+                        txnId,
+                        defaultSourceLocationId,
+                        defaultSourceLevelCode);
+
+            default:
+
+                applicationFlowLogs.warn(
+                        "Unsupported routing mode={} for taskId={}. Using default source.",
+                        routingMode,
+                        taskId);
+
+                return Mono.just(
+                        List.of(
+                                new RoutingSource(
+                                        defaultSourceLocationId,
+                                        defaultSourceLevelCode)));
+        }
+    }
+    private Mono<List<RoutingSource>> resolveAllLocations(
+            String applicationId,
+            List<RoutingAttribute> attributes,
+            UserSessionObject user,
+            String txnId,
+            Long defaultSourceLocationId,
+            Integer defaultSourceLevelCode) {
+
+        return fetchRoutingAttributeValues(
+                applicationId,
+                attributes,
+                user,
+                txnId)
+
+                .map(attributeValues -> {
+
+                    List<RoutingSource> sources = new ArrayList<>();
+
+                    for (RoutingAttribute attribute : attributes) {
+
+                        Object value =
+                                attributeValues.get(attribute.getAttributeId());
+
+                        if (!hasRoutingValue(value)) {
+                            continue;
+                        }
+
+                        Long locationId = parseLocationId(
+                                value,
+                                attribute.getAttributeId(),
+                                txnId);
+
+                        Integer levelCode =
+                                attribute.getHierarchyLevel();
+
+                        if (locationId == null || levelCode == null) {
+                            continue;
+                        }
+
+                        sources.add(
+                                new RoutingSource(
+                                        locationId,
+                                        levelCode));
                     }
 
-                    return apiClient.getRelatedLocationIds(
-                            resolvedSourceLevelCode,
-                            resolvedSourceLocationId,
-                            destinationLevelCode,
-                            user)
+                    if (sources.isEmpty()) {
 
-                            .doOnNext(allowedLocationIds ->
-                                    applicationFlowLogs.info(
-                                            "SPGD returned allowed locations for parentLocationId={}, targetLevel={}: {}",
-                                            resolvedSourceLocationId,
-                                            destinationLevelCode,
-                                            allowedLocationIds))
+                        sources.add(
+                                new RoutingSource(
+                                        defaultSourceLocationId,
+                                        defaultSourceLevelCode));
+                    }
 
-                            .map(allowedLocationIds -> {
+                    applicationFlowLogs.info(
+                            "ALL_LOCATIONS resolved routing sources={}",
+                            sources);
 
-                                Map<String, List<String>> locationHolderMap =
-                                        taskLocationUserHolderMap.getOrDefault(
-                                                officeLocation.getTaskId(),
-                                                Map.of());
-
-                                applicationFlowLogs.info(
-                                        "Location holder map for taskId {} : {}",
-                                        officeLocation.getTaskId(),
-                                        locationHolderMap);
-
-                                List<ServiceMeta.AvailableApplyLocations> hierarchyFilteredOffices =
-                                        officeLocation.getAllowedOffices()
-                                                .stream()
-                                                .filter(office -> {
-
-                                                    String locationId =
-                                                            String.valueOf(
-                                                                    office.getOrgUnitCode());
-
-                                                    boolean allowed =
-                                                            allowedLocationIds.contains(
-                                                                    locationId);
-
-                                                    applicationFlowLogs.info(
-                                                            "Hierarchy filtering taskId={}, locationId={}, allowed={}",
-                                                            officeLocation.getTaskId(),
-                                                            locationId,
-                                                            allowed);
-
-                                                    return allowed;
-                                                })
-                                                .toList();
-
-                                applicationFlowLogs.info(
-                                        "Hierarchy filtered offices for taskId={} before={}, after={}",
-                                        officeLocation.getTaskId(),
-                                        officeLocation.getAllowedOffices().size(),
-                                        hierarchyFilteredOffices.size());
-
-                                List<ServiceMeta.AvailableApplyLocations> filteredOffices =
-                                        hierarchyFilteredOffices.stream()
-                                                .filter(office -> {
-
-                                                    String locationId =
-                                                            String.valueOf(
-                                                                    office.getOrgUnitCode());
-
-                                                    List<String> holderIds =
-                                                            locationHolderMap.get(
-                                                                    locationId);
-
-                                                    applicationFlowLogs.info(
-                                                            "Evaluating taskId={}, locationId={}, holderIds={}",
-                                                            officeLocation.getTaskId(),
-                                                            locationId,
-                                                            holderIds);
-
-                                                    if (holderIds == null
-                                                            || holderIds.isEmpty()) {
-
-                                                        applicationFlowLogs.info(
-                                                                "Removing locationId={} for taskId={} because no holders found",
-                                                                locationId,
-                                                                officeLocation.getTaskId());
-
-                                                        return false;
-                                                    }
-
-                                                    office.setHolderIds(holderIds);
-
-                                                    applicationFlowLogs.info(
-                                                            "Retaining locationId={} for taskId={} with holderIds={}",
-                                                            locationId,
-                                                            officeLocation.getTaskId(),
-                                                            holderIds);
-
-                                                    return true;
-
-                                                })
-                                                .toList();
-
-                                applicationFlowLogs.info(
-                                        "Final filtered offices for taskId={} before={}, after={}",
-                                        officeLocation.getTaskId(),
-                                        officeLocation.getAllowedOffices().size(),
-                                        filteredOffices.size());
-
-                                officeLocation.setAllowedOffices(
-                                        new ArrayList<>(filteredOffices));
-
-                                applicationFlowLogs.info(
-                                        "Final office locations for taskId={} : {}",
-                                        officeLocation.getTaskId(),
-                                        officeLocation.getAllowedOffices());
-
-                                return officeLocation;
-                            })
-                            .then();
-
+                    return sources;
                 });
-    }   
+    }
     
-    private Mono<RoutingSource> resolveRoutingSource(
-    		String applicationId,
-    		String taskId,
-    		Map<String, ApplicationRouting> applicationRoutingMap,
-    		Integer defaultSourceLevelCode,
-    		Long defaultSourceLocationId,
-			UserSessionObject user) {
+    private Mono<List<RoutingSource>> resolveExclusiveLocation(
+            String applicationId,
+            List<RoutingAttribute> attributes,
+            UserSessionObject user,
+            String txnId,
+            Long defaultSourceLocationId,
+            Integer defaultSourceLevelCode) {
 
-		ApplicationRouting routing = applicationRoutingMap != null ? applicationRoutingMap.get(taskId) : null;
+        return fetchRoutingAttributeValues(
+                applicationId,
+                attributes,
+                user,
+                txnId)
 
-		/*
-		 * No application routing configured. Continue with existing/default routing.
-		 */
-		if (routing == null || !Boolean.TRUE.equals(routing.getEnabled()) || routing.getSelectedAttributes() == null
-				|| routing.getSelectedAttributes().isEmpty()) {
+                .map(attributeValues -> {
 
-			applicationFlowLogs.info("Application routing not enabled/configured for taskId={}. Using default source.",
-					taskId);
+                    for (RoutingAttribute attribute : attributes) {
 
-			return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-		}
+                        Object value =
+                                attributeValues.get(
+                                        attribute.getAttributeId());
 
-		/*
-		 * Sort selected attributes by priority.
-		 */
-		List<RoutingAttribute> selectedAttributes = routing.getSelectedAttributes().stream().filter(Objects::nonNull)
-				.filter(attribute -> attribute.getAttributeId() != null)
-				.sorted(Comparator.comparing(RoutingAttribute::getPriority, Comparator.nullsLast(Integer::compareTo)))
-				.toList();
+                        if (!hasRoutingValue(value)) {
+                            continue;
+                        }
 
-		if (selectedAttributes.isEmpty()) {
+                        Long locationId =
+                                parseLocationId(
+                                        value,
+                                        attribute.getAttributeId(),
+                                        txnId);
 
-			return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-		}
+                        Integer levelCode =
+                                attribute.getHierarchyLevel();
 
-		/*
-		 * Routing must be combination based.
-		 */
-		List<ApplicationRouting.RoutingCombination> combinations = routing.getCombinations() == null
-				? Collections.emptyList()
-				: routing.getCombinations().stream().filter(Objects::nonNull)
-						.filter(combination -> combination.getAttributeIds() != null
-								&& !combination.getAttributeIds().isEmpty())
-						.sorted(Comparator.comparing(ApplicationRouting.RoutingCombination::getPriority,
-								Comparator.nullsLast(Integer::compareTo)))
-						.toList();
+                        if (locationId == null || levelCode == null) {
+                            continue;
+                        }
 
-		if (combinations.isEmpty()) {
+                        applicationFlowLogs.info(
+                                "EXCLUSIVE_LOCATION matched priority={}, attributeId={}, locationId={}, levelCode={}",
+                                attribute.getPriority(),
+                                attribute.getAttributeId(),
+                                locationId,
+                                levelCode);
 
-			applicationFlowLogs.warn("No routing combinations configured for taskId={}. Using default source.", taskId);
+                        return List.of(
+                                new RoutingSource(
+                                        locationId,
+                                        levelCode));
+                    }
 
-			return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-		}
+                    return List.of(
+                            new RoutingSource(
+                                    defaultSourceLocationId,
+                                    defaultSourceLevelCode));
+                });
+    }
+    
+    private Mono<List<RoutingSource>> resolveInclusiveLocations(
+            String applicationId,
+            List<RoutingAttribute> selectedAttributes,
+            List<ApplicationRouting.RoutingCombination> combinations,
+            UserSessionObject user,
+            String txnId,
+            Long defaultSourceLocationId,
+            Integer defaultSourceLevelCode) {
 
-		/*
-		 * Collect all attribute IDs needed for all combinations.
-		 */
-		List<String> attributeIds = combinations.stream().flatMap(combination -> combination.getAttributeIds().stream())
-				.filter(Objects::nonNull).filter(attributeId -> !attributeId.isBlank()).distinct().toList();
+        if (combinations == null || combinations.isEmpty()) {
 
-		if (attributeIds.isEmpty()) {
+            applicationFlowLogs.warn(
+                    "No inclusive routing combinations configured. Using default source.");
 
-			return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-		}
+            return Mono.just(
+                    List.of(
+                            new RoutingSource(
+                                    defaultSourceLocationId,
+                                    defaultSourceLevelCode)));
+        }
 
-		/*
-		 * The Form Management API requires taskId + holderId.
-		 *
-		 * Current routing configuration uses:
-		 *
-		 * taskId$holderId$attributeId
-		 *
-		 * in attributeKey.
-		 *
-		 * Therefore resolve those values from the first configured routing attribute
-		 * that contains the encoded key.
-		 */
-		RoutingAttribute requestAttribute = selectedAttributes.stream()
-				.filter(attribute -> attribute.getAttributeKey() != null && !attribute.getAttributeKey().isBlank())
-				.findFirst().orElse(null);
+        List<ApplicationRouting.RoutingCombination> sortedCombinations =
+                combinations.stream()
+                        .filter(Objects::nonNull)
+                        .filter(c -> c.getSourceAttributeIds() != null
+                                && !c.getSourceAttributeIds().isEmpty())
+                        .filter(c -> c.getDestinationAttributeIds() != null
+                                && !c.getDestinationAttributeIds().isEmpty())
+                        .sorted(
+                                Comparator.comparing(
+                                        ApplicationRouting.RoutingCombination::getPriority,
+                                        Comparator.nullsLast(Integer::compareTo)))
+                        .toList();
 
-		if (requestAttribute == null) {
+        if (sortedCombinations.isEmpty()) {
 
-			applicationFlowLogs
-					.warn("No attributeKey available for application routing taskId={}. Using default source.", taskId);
+            return Mono.just(
+                    List.of(
+                            new RoutingSource(
+                                    defaultSourceLocationId,
+                                    defaultSourceLevelCode)));
+        }
 
-			return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-		}
+        /*
+         * Fetch values for all attributes referenced by all combinations.
+         */
+        List<RoutingAttribute> requiredAttributes =
+                selectedAttributes.stream()
+                        .filter(attribute ->
+                                sortedCombinations.stream().anyMatch(
+                                        combination ->
+                                                combination.getSourceAttributeIds()
+                                                        .contains(attribute.getAttributeId())))
+                        .toList();
 
-		String attributeKey = requestAttribute.getAttributeKey();
+        return fetchRoutingAttributeValues(
+                applicationId,
+                requiredAttributes,
+                user,
+                txnId)
 
-		String[] parts = attributeKey.split("\\$");
+                .flatMap(attributeValues ->
+                        Flux.fromIterable(sortedCombinations)
 
-		if (parts.length != 3) {
+                                .concatMap(combination ->
+                                        resolveInclusiveCombination(
+                                                combination,
+                                                selectedAttributes,
+                                                attributeValues,
+                                                user,
+                                                txnId))
 
-			applicationFlowLogs.warn(
-					"Invalid application routing attributeKey={} for taskId={}. Expected taskId$holderId$attributeId.",
-					attributeKey, taskId);
+                                .collectList())
 
-			return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-		}
+                .map(allCombinationSources -> {
 
-		String routingTaskId = parts[0];
-		String holderId = parts[1];
+                    List<RoutingSource> result =
+                            allCombinationSources.stream()
+                                    .flatMap(List::stream)
+                                    .filter(Objects::nonNull)
+                                    .distinct()
+                                    .toList();
 
-		applicationFlowLogs.info(
-				"Fetching application routing values applicationId={}, routingTaskId={}, holderId={}, attributeIds={}",
-				applicationId, routingTaskId, holderId, attributeIds);
+                    if (result.isEmpty()) {
 
-		return apiClient.fetchApplicationAttributeValues(applicationId, routingTaskId, holderId, attributeIds, user)
+                        return List.of(
+                                new RoutingSource(
+                                        defaultSourceLocationId,
+                                        defaultSourceLevelCode));
+                    }
 
-				.flatMap(attributeValues -> {
+                    return result;
+                });
+    }
+    
+    private Mono<List<RoutingSource>> resolveInclusiveCombination(
+            ApplicationRouting.RoutingCombination combination,
+            List<RoutingAttribute> selectedAttributes,
+            Map<String, Object> attributeValues,
+            UserSessionObject user,
+            String txnId) {
 
-					if (attributeValues == null || attributeValues.isEmpty()) {
+        List<RoutingAttribute> sourceAttributes =
+                selectedAttributes.stream()
+                        .filter(attribute ->
+                                combination.getSourceAttributeIds()
+                                        .contains(attribute.getAttributeId()))
+                        .toList();
 
-						applicationFlowLogs.info(
-								"No application attribute values found for applicationId={}, taskId={}", applicationId,
-								taskId);
+        List<RoutingAttribute> destinationAttributes =
+                selectedAttributes.stream()
+                        .filter(attribute ->
+                                combination.getDestinationAttributeIds()
+                                        .contains(attribute.getAttributeId()))
+                        .toList();
 
-						return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-					}
+        if (sourceAttributes.isEmpty()
+                || destinationAttributes.isEmpty()) {
 
-					/*
-					 * Evaluate combinations according to priority.
-					 */
-					for (ApplicationRouting.RoutingCombination combination : combinations) {
+            return Mono.just(Collections.emptyList());
+        }
 
-						List<String> combinationAttributeIds = combination.getAttributeIds();
+        applicationFlowLogs.info(
+                "Resolving inclusive combination priority={}, sourceAttributeIds={}, destinationAttributeIds={}",
+                combination.getPriority(),
+                combination.getSourceAttributeIds(),
+                combination.getDestinationAttributeIds());
 
-						boolean matched = combinationAttributeIds.stream()
-								.allMatch(attributeId -> hasRoutingValue(attributeValues.get(attributeId)));
+        // Use only the first destination attribute
+        RoutingAttribute destinationAttribute =
+                destinationAttributes.get(0);
 
-						applicationFlowLogs.info(
-								"Routing combination evaluated taskId={}, priority={}, attributeIds={}, matched={}",
-								taskId, combination.getPriority(), combinationAttributeIds, matched);
+        Integer destinationLevel =
+                destinationAttribute.getHierarchyLevel();
 
-						if (!matched) {
-							continue;
-						}
+        if (destinationLevel == null) {
 
-						/*
-						 * From the matched combination select the deepest hierarchy attribute.
-						 */
-						RoutingAttribute targetAttribute = selectedAttributes.stream()
-								.filter(attribute -> combinationAttributeIds.contains(attribute.getAttributeId()))
-								.filter(attribute -> hasRoutingValue(attributeValues.get(attribute.getAttributeId())))
-								.max(Comparator.comparing(RoutingAttribute::getHierarchyLevel,
-										Comparator.nullsLast(Integer::compareTo)))
-								.orElse(null);
+            applicationFlowLogs.warn(
+                    "Destination hierarchy level is null for attributeId={}",
+                    destinationAttribute.getAttributeId());
 
-						if (targetAttribute == null) {
-							continue;
-						}
+            return Mono.just(Collections.emptyList());
+        }
 
-						Object attributeValue = attributeValues.get(targetAttribute.getAttributeId());
+        return Flux.fromIterable(sourceAttributes)
+                .flatMap(sourceAttribute -> {
 
-						Long resolvedSourceLocationId;
+                    Object value =
+                            attributeValues.get(
+                                    sourceAttribute.getAttributeId());
 
-						try {
+                    if (!hasRoutingValue(value)) {
 
-							resolvedSourceLocationId = Long.valueOf(String.valueOf(attributeValue));
+                        applicationFlowLogs.warn(
+                                "No routing value found for source attributeId={}",
+                                sourceAttribute.getAttributeId());
 
-						} catch (NumberFormatException e) {
+                        return Mono.<List<String>>empty();
+                    }
 
-							applicationFlowLogs.error(
-									"Invalid routing location value={}, attributeId={}, applicationId={}",
-									attributeValue, targetAttribute.getAttributeId(), applicationId);
+                    Long sourceLocationId =
+                            parseLocationId(
+                                    value,
+                                    sourceAttribute.getAttributeId(),
+                                    txnId);
 
-							return Mono.error(new SPRuntimeError("Invalid application routing location",
-									HttpStatus.BAD_REQUEST, null));
-						}
+                    Integer sourceLevel =
+                            sourceAttribute.getHierarchyLevel();
 
-						Integer resolvedSourceLevelCode = targetAttribute.getHierarchyLevel();
+                    if (sourceLocationId == null
+                            || sourceLevel == null) {
 
-						applicationFlowLogs.info(
-								"Application routing matched taskId={}, combinationPriority={}, attributeId={}, value={}, sourceLocationId={}, sourceLevelCode={}",
-								taskId, combination.getPriority(), targetAttribute.getAttributeId(), attributeValue,
-								resolvedSourceLocationId, resolvedSourceLevelCode);
+                        applicationFlowLogs.warn(
+                                "Invalid routing source for attributeId={}, sourceLocationId={}, sourceLevel={}",
+                                sourceAttribute.getAttributeId(),
+                                sourceLocationId,
+                                sourceLevel);
 
-						return Mono.just(new RoutingSource(resolvedSourceLocationId, resolvedSourceLevelCode));
-					}
+                        return Mono.<List<String>>empty();
+                    }
 
-					/*
-					 * No combination matched. Fall back to existing/default routing.
-					 */
-					applicationFlowLogs.info("No routing combination matched for taskId={}. Using default source.",
-							taskId);
+                    applicationFlowLogs.info(
+                            "Inclusive stage-1 related location: "
+                                    + "sourceAttribute={}, sourceLocationId={}, sourceLevel={}, "
+                                    + "destinationAttribute={}, destinationLevel={}",
+                            sourceAttribute.getAttributeId(),
+                            sourceLocationId,
+                            sourceLevel,
+                            destinationAttribute.getAttributeId(),
+                            destinationLevel);
 
-					return Mono.just(new RoutingSource(defaultSourceLocationId, defaultSourceLevelCode));
-				});
+                    return apiClient.getRelatedLocationIds(
+                            sourceLevel,
+                            sourceLocationId,
+                            destinationLevel,
+                            user);
+                })
+                .collectList()
 
-	}
+                // Intersect the destination locations returned
+                // for all source attributes
+                .map(this::intersectRelatedLocations)
+
+                // Convert resolved locations into RoutingSource
+                .map(resolvedDestinationLocations ->
+                        resolvedDestinationLocations.stream()
+                                .map(locationId ->
+                                        new RoutingSource(
+                                                Long.valueOf(locationId),
+                                                destinationLevel))
+                                .toList());
+    }
+    private Long parseLocationId(
+            Object value,
+            String attributeId,
+            String txnId) {
+
+        if (value == null) {
+            return null;
+        }
+
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException e) {
+
+            applicationFlowLogs.error(
+                    "Invalid routing location value={}, attributeId={}",
+                    value,
+                    attributeId);
+
+            throw new SPRuntimeError(
+                    "Invalid application routing location",
+                    HttpStatus.BAD_REQUEST,
+                    txnId);
+        }
+    }
+    private List<String> intersectRelatedLocations(
+            List<Collection<String>> relatedLocationLists) {
+
+        if (relatedLocationLists == null
+                || relatedLocationLists.isEmpty()) {
+
+            return Collections.emptyList();
+        }
+
+        Set<String> intersection =
+                new HashSet<>(relatedLocationLists.get(0));
+
+        for (int i = 1; i < relatedLocationLists.size(); i++) {
+
+            intersection.retainAll(
+                    relatedLocationLists.get(i));
+
+            if (intersection.isEmpty()) {
+                break;
+            }
+        }
+
+        return new ArrayList<>(intersection);
+    }
+    
+    private Mono<Map<String, Object>> fetchRoutingAttributeValues(
+            String applicationId,
+            List<RoutingAttribute> attributes,
+            UserSessionObject user,
+            String txnId) {
+
+        Map<String, List<RoutingAttribute>> grouped =
+                attributes.stream()
+                        .filter(Objects::nonNull)
+                        .filter(attribute ->
+                                attribute.getAttributeKey() != null
+                                        && !attribute.getAttributeKey().isBlank())
+                        .collect(Collectors.groupingBy(
+                                RoutingAttribute::getAttributeKey));
+
+        return Flux.fromIterable(grouped.values())
+
+                .flatMap(group -> {
+
+                    RoutingAttribute first =
+                            group.get(0);
+
+                    String[] parts =
+                            first.getAttributeKey()
+                                    .split("\\$");
+
+                    if (parts.length != 3) {
+
+                        return Mono.error(
+                                new SPRuntimeError(
+                                        "Invalid application routing attributeKey",
+                                        HttpStatus.BAD_REQUEST,
+                                        txnId));
+                    }
+
+                    String taskId = parts[0];
+                    String holderId = parts[1];
+
+                    List<String> attributeIds =
+                            group.stream()
+                                    .map(RoutingAttribute::getAttributeId)
+                                    .filter(Objects::nonNull)
+                                    .distinct()
+                                    .toList();
+
+                    return apiClient.fetchApplicationAttributeValues(
+                            applicationId,
+                            taskId,
+                            holderId,
+                            attributeIds,
+                            user);
+                })
+
+                .reduce(
+                        new HashMap<>(),
+                        (allValues, currentValues) -> {
+                            if (currentValues != null) {
+                                allValues.putAll(currentValues);
+                            }
+                            return allValues;
+                        });
+    }
 
 	private boolean hasRoutingValue(Object value) {
 		if (value == null) {
