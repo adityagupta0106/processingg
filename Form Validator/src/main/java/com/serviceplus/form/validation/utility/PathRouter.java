@@ -16,6 +16,8 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.controller.PreProcessingController;
 
+import com.serviceplus.form.validation.controller.CallbackController;
+
 @Configuration
 public class PathRouter {
 
@@ -28,13 +30,19 @@ public class PathRouter {
     private final DSCSignController dscSignController;
 
     private final AuaController auaController;
+    
+    private final CallbackController callbackController;
 
-    public PathRouter(PreProcessingController preProcessingController, HandlerController handlerController, ApplicationFetchController applicationFetchController, DSCSignController dscSignController, AuaController auaController) {
+    public PathRouter(PreProcessingController preProcessingController,HandlerController handlerController,ApplicationFetchController applicationFetchController,DSCSignController dscSignController,
+            AuaController auaController,
+            CallbackController callbackController) {
+
         this.preProcessingController = preProcessingController;
         this.handlerController = handlerController;
         this.applicationFetchController = applicationFetchController;
         this.dscSignController = dscSignController;
         this.auaController = auaController;
+        this.callbackController = callbackController;
     }
 
     @Value("${service.context.path}")
@@ -63,7 +71,11 @@ public class PathRouter {
                 .andRoute(POST(contextPath + "/a/aua/validate"), auaController::validate)
                 .andRoute(POST(contextPath + "/a/aua/getPublicKey"), auaController::getPublicKey)
                 .andRoute(POST(contextPath + "/a/form/initializeDraft"), handlerController::initializeDraft)
-                .andRoute(POST(contextPath + "/a/applicant/inbox"), preProcessingController::getApplicantInbox);
+                .andRoute(POST(contextPath + "/a/applicant/inbox"), preProcessingController::getApplicantInbox)
+                .andRoute(POST(contextPath + "/a/aua/getPublicKey"), auaController::getPublicKey) 
+                
+                .andRoute(POST(contextPath + "/a/workflow/callback"),callbackController::callback);
+
     }
     
     
