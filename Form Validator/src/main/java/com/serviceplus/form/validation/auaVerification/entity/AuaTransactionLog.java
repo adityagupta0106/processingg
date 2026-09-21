@@ -1,6 +1,6 @@
 package com.serviceplus.form.validation.auaVerification.entity;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
@@ -16,6 +16,8 @@ public class AuaTransactionLog implements Persistable<Long> {
     private Long id;
 
     private String txnId;
+
+    private Integer rowNo;
 
     private String attributeId;
 
@@ -39,18 +41,14 @@ public class AuaTransactionLog implements Persistable<Long> {
 
     private String errorMessage;
 
-    private LocalDateTime requestedAt;
+    private OffsetDateTime completedAt;
 
-    private LocalDateTime completedAt;
+    private OffsetDateTime crDate;
 
-    private LocalDateTime crDate;
-
-    private LocalDateTime upDate;
-
+    private OffsetDateTime upDate;
 
     @Transient
     private boolean newEntity = false;
-
 
     @Override
     public Long getId() {
@@ -67,7 +65,6 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.id = id;
     }
 
-
     public String getTxnId() {
         return txnId;
     }
@@ -76,6 +73,13 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.txnId = txnId;
     }
 
+    public Integer getRowNo() {
+        return rowNo;
+    }
+
+    public void setRowNo(Integer rowNo) {
+        this.rowNo = rowNo;
+    }
 
     public String getAttributeId() {
         return attributeId;
@@ -85,7 +89,6 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.attributeId = attributeId;
     }
 
-
     public Integer getServiceId() {
         return serviceId;
     }
@@ -93,7 +96,6 @@ public class AuaTransactionLog implements Persistable<Long> {
     public void setServiceId(Integer serviceId) {
         this.serviceId = serviceId;
     }
-
 
     public String getTaskId() {
         return taskId;
@@ -103,7 +105,6 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.taskId = taskId;
     }
 
-
     public String getTenantId() {
         return tenantId;
     }
@@ -111,7 +112,6 @@ public class AuaTransactionLog implements Persistable<Long> {
     public void setTenantId(String tenantId) {
         this.tenantId = tenantId;
     }
-
 
     public String getOperationType() {
         return operationType;
@@ -121,7 +121,6 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.operationType = operationType;
     }
 
-
     public String getStatus() {
         return status;
     }
@@ -129,7 +128,6 @@ public class AuaTransactionLog implements Persistable<Long> {
     public void setStatus(String status) {
         this.status = status;
     }
-
 
     public Long getProviderId() {
         return providerId;
@@ -139,7 +137,6 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.providerId = providerId;
     }
 
-
     public Long getApiId() {
         return apiId;
     }
@@ -147,7 +144,6 @@ public class AuaTransactionLog implements Persistable<Long> {
     public void setApiId(Long apiId) {
         this.apiId = apiId;
     }
-
 
     public String getProviderTxnId() {
         return providerTxnId;
@@ -157,7 +153,6 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.providerTxnId = providerTxnId;
     }
 
-
     public String getErrorCode() {
         return errorCode;
     }
@@ -165,7 +160,6 @@ public class AuaTransactionLog implements Persistable<Long> {
     public void setErrorCode(String errorCode) {
         this.errorCode = errorCode;
     }
-
 
     public String getErrorMessage() {
         return errorMessage;
@@ -175,38 +169,28 @@ public class AuaTransactionLog implements Persistable<Long> {
         this.errorMessage = errorMessage;
     }
 
-
-    public LocalDateTime getRequestedAt() {
-        return requestedAt;
-    }
-
-    public void setRequestedAt(LocalDateTime requestedAt) {
-        this.requestedAt = requestedAt;
-    }
-
-
-    public LocalDateTime getCompletedAt() {
+    public OffsetDateTime getCompletedAt() {
         return completedAt;
     }
 
-    public void setCompletedAt(LocalDateTime completedAt) {
+    public void setCompletedAt(OffsetDateTime completedAt) {
         this.completedAt = completedAt;
     }
 
-    public LocalDateTime getUpDate() {
-        return upDate;
-    }
-
-    public void setUpDate(LocalDateTime upDate) {
-        this.upDate = upDate;
-    }
-
-    public LocalDateTime getCrDate() {
+    public OffsetDateTime getCrDate() {
         return crDate;
     }
 
-    public void setCrDate(LocalDateTime crDate) {
+    public void setCrDate(OffsetDateTime crDate) {
         this.crDate = crDate;
+    }
+
+    public OffsetDateTime getUpDate() {
+        return upDate;
+    }
+
+    public void setUpDate(OffsetDateTime upDate) {
+        this.upDate = upDate;
     }
 
     public boolean isNewEntity() {

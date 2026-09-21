@@ -222,6 +222,8 @@ ALTER TABLE IF EXISTS schm_sp.application_details ADD COLUMN is_priority boolean
 CREATE TABLE schm_sp.aua_transaction_log (
     id BIGSERIAL PRIMARY KEY,
     txn_id VARCHAR NOT NULL,
+    row_no INTEGER NOT NULL,
+
     attribute_id VARCHAR NOT NULL,
     service_id INTEGER NOT NULL,
     task_id VARCHAR,
@@ -233,7 +235,7 @@ CREATE TABLE schm_sp.aua_transaction_log (
     provider_txn_id VARCHAR,
     error_code VARCHAR,
     error_message VARCHAR,
-    requested_at TIMESTAMP WITH TIME ZONE,
+
     completed_at TIMESTAMP WITH TIME ZONE,
     cr_date TIMESTAMP WITH TIME ZONE NOT NULL,
     up_date TIMESTAMP WITH TIME ZONE NOT NULL

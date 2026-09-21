@@ -1,5 +1,6 @@
 package com.serviceplus.form.validation.auaVerification.engine;
 
+import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
 import com.serviceplus.form.validation.auaVerification.dto.AuaApiConfigurationDTO;
 import com.serviceplus.form.validation.auaVerification.dto.AuaExecutionResult;
 import com.serviceplus.form.validation.auaVerification.dto.AuaRequest;
@@ -13,6 +14,7 @@ import com.serviceplus.form.validation.esb.EsbClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
@@ -24,34 +26,17 @@ public class AuaEngine {
     private static final Logger log = LoggerFactory.getLogger("applicationFlowLogger");
 
     private final AuaRequestBuilder requestBuilder;
-
     private final EsbClient esbClient;
-
     private final AuaResponseParser responseParser;
+    private final AuaXmlLogger auaXmlLogger;
 
-
-    public AuaEngine(AuaRequestBuilder requestBuilder, EsbClient esbClient, AuaResponseParser responseParser) {
-
+    public AuaEngine(AuaRequestBuilder requestBuilder, EsbClient esbClient, AuaResponseParser responseParser, AuaXmlLogger auaXmlLogger) {
         this.requestBuilder = requestBuilder;
         this.esbClient = esbClient;
         this.responseParser = responseParser;
+        this.auaXmlLogger = auaXmlLogger;
     }
 
-
-    /**
-     * Execute any configured AUA operation.
-     * <p>
-     * Examples:
-     * <p>
-     * OTP_REQUEST
-     * OTP_VALIDATION
-     * DEMOGRAPHIC
-     * EKYC
-     * ESIGN
-     * <p>
-     * The operation determines which API configuration
-     * is selected from service metadata.
-     */
     public Mono<AuaExecutionResult> execute(ServiceJSONDTO metadata, AuaRequest request, AuaTransactionLog logEntry) {
 
         if (request == null) {
@@ -62,88 +47,117 @@ public class AuaEngine {
                 request.getServiceId(),
                 request.getTaskId(),
                 request.getTxnId(),
-                request.getOperationType()
-        );
+                request.getOperationType());
 
-        AuaApiConfigurationDTO api = findApi(metadata, request.getOperationType());
+        AuaApiConfigurationDTO api;
 
+        try {
+            api = findApi(metadata, request.getOperationType());
+        } catch (Exception e) {
+            log.error("Failed to find Api definition. serviceId={}, taskId={}, txnId={}, operationType={}, error={}",
+                    request.getServiceId(),
+                    request.getTaskId(),
+                    request.getTxnId(),
+                    request.getOperationType(), e.getMessage(), e);
 
-        log.info("AUA API selected. operationType={}, apiId={}, apiCode={}, auaId={}, providerName={}",
+            return Mono.error(new SPRuntimeError("Unable to process the request [A - 01]", HttpStatus.INTERNAL_SERVER_ERROR,request.getTxnId()));
+        }
+
+        log.info("AUA API selected. operationType={}, apiType={}, endpoint={}", request.getOperationType(), api.getApiType(), api.getEndpoint());
+
+        String xml;
+
+        try {
+
+            xml = requestBuilder.buildRequest(api, request.getAttributes(), logEntry);
+
+            String requestLogXml = auaXmlLogger.prepareForLogging(xml, api.getRequestPayload());
+
+            log.info("AUA request. apiType={}, xml={}", api.getApiType(), requestLogXml);
+
+        } catch (Exception e) {
+
+            log.error("Failed to build AUA request. serviceId={}, taskId={}, txnId={}, operationType={}, error={}",
+                    request.getServiceId(),
+                    request.getTaskId(),
+                    request.getTxnId(),
+                    request.getOperationType(), e.getMessage(), e);
+
+            return Mono.error(new SPRuntimeError("Unable to process the request [A - 02]", HttpStatus.INTERNAL_SERVER_ERROR,request.getTxnId()));
+        }
+
+        log.info("AUA request XML generated. operationType={}, apiType={}, txnId={}",
                 request.getOperationType(),
-                api.getApiId(), api.getApiCode(), api.getAuaId(), api.getProviderName());
+                api.getApiType(),
+                request.getTxnId());
 
+        log.info("AUA request XML generated. apiType={}, xmlLength={}", api.getApiType(), xml != null ? xml.length() : 0);
 
-        String xml = requestBuilder.buildRequest(api, request.getAttributes(),logEntry);
+        IntegrationRequest integrationRequest;
 
+        try {
 
-        log.info("AUA request XML generated. operationType={}, apiId={}, txnId={}", request.getOperationType(), api.getApiId(), request.getTxnId());
+            integrationRequest = buildIntegrationRequest(api, xml);
 
-        log.info("AUA request XML. apiId={}, xml={}", api.getApiId(), xml);
+        } catch (Exception e) {
 
-        IntegrationRequest integrationRequest = buildIntegrationRequest(api, xml);
+            log.error("Failed to create ESB integration request. apiType={}, endpoint={}", api.getApiType(), api.getEndpoint(), e);
+            return Mono.error(new SPRuntimeError("Unable to process the request [A - 03]", HttpStatus.INTERNAL_SERVER_ERROR,request.getTxnId()));
+        }
 
-        log.info("Invoking AUA provider through ESB. operationType={}, apiId={}, endpoint={}", request.getOperationType(), api.getApiId(), api.getEndpoint());
-
-
-//        AuaResponse auaResponse1 = new AuaResponse();
-//
-//        auaResponse1.setSuccess(true);
-//        auaResponse1.setTransactionId(request.getTxnId());
-//        auaResponse1.setErrorCode(null);
-//        auaResponse1.setMessage("OTP requested successfully");
-//
-//        log.info(
-//                "Returning mock AUA response directly to client. operationType={}, apiId={}, txnId={}, success={}",
-//                request.getOperationType(),
-//                api.getApiId(),
-//                request.getTxnId(),
-//                auaResponse1.isSuccess()
-//        );
-//
-//        return Mono.just(
-//                new AuaExecutionResult(
-//                        auaResponse1,
-//                        api.getAuaId(),
-//                        api.getApiId()
-//                )
-//        );
+        log.info("Invoking AUA provider through ESB. operationType={}, apiType={}, endpoint={}", request.getOperationType(), api.getApiType(), api.getEndpoint());
 
         return esbClient.invoke(integrationRequest)
 
                 .map(integrationResponse -> {
 
-                    log.info("Received ESB response. operationType={}, apiId={}, success={}, statusCode={}", request.getOperationType(), api.getApiId(),
+                    log.info("Received ESB response. operationType={}, apiType={}, success={}, statusCode={}",
+                            request.getOperationType(),
+                            api.getApiType(),
                             integrationResponse != null && integrationResponse.isSuccess(),
-                            integrationResponse != null ? integrationResponse.getStatusCode() : null
-                    );
+                            integrationResponse != null ? integrationResponse.getStatusCode() : null);
 
                     validateIntegrationResponse(integrationResponse);
 
                     String providerResponse = extractResponseBody(integrationResponse);
 
-                    log.info("Provider response received. operationType={}, apiId={}, txnId={}",
+                    log.info("Provider response received. operationType={}, apiType={}, txnId={}, responseLength={}",
                             request.getOperationType(),
-                            api.getApiId(),
-                            request.getTxnId()
-                    );
+                            api.getApiType(),
+                            request.getTxnId(),
+                            providerResponse != null ? providerResponse.length() : 0);
+
+                    String requestLogXml = auaXmlLogger.prepareForLogging(providerResponse, api.getResponsePayload());
+
+                    log.info("AUA response. apiType={}, xml={}", api.getApiType(), requestLogXml);
 
                     AuaResponse auaResponse = responseParser.parse(api, providerResponse);
 
-
-                    log.info("AUA response parsed. operationType={}, apiId={}, txnId={}, success={}, providerTransactionIdPresent={}, errorCodePresent={},raw={}",
+                    log.info(
+                            "AUA response parsed. operationType={}, apiType={}, txnId={}, success={}, providerTransactionIdPresent={}, errorCodePresent={}",
                             request.getOperationType(),
-                            api.getApiId(),
+                            api.getApiType(),
                             request.getTxnId(),
                             auaResponse.isSuccess(),
-                            auaResponse.getTransactionId() != null, auaResponse.getErrorCode() != null && !auaResponse.getErrorCode().isBlank(),
-                            auaResponse.getRawResponse()
+                            auaResponse.getTransactionId() != null,
+                            auaResponse.getErrorCode() != null
+                                    && !auaResponse.getErrorCode().isBlank()
                     );
 
-                    return new AuaExecutionResult(auaResponse, api.getAuaId(), api.getApiId());
+                    return new AuaExecutionResult(auaResponse);
                 })
 
                 .doOnError(error ->
-                        log.error("AUA execution failed. serviceId={}, taskId={}, txnId={}, operationType={}, error={}", request.getServiceId(), request.getTaskId(), request.getTxnId(), request.getOperationType(), error.getMessage(), error));
+                        log.error(
+                                "AUA execution failed. serviceId={}, taskId={}, txnId={}, operationType={}, error={}",
+                                request.getServiceId(),
+                                request.getTaskId(),
+                                request.getTxnId(),
+                                request.getOperationType(),
+                                error.getMessage(),
+                                error
+                        )
+                );
     }
 
 
@@ -153,23 +167,20 @@ public class AuaEngine {
             throw new IllegalArgumentException("AUA API configuration is required");
         }
 
+        if (api.getEndpoint() == null || api.getEndpoint().isBlank()) {
+
+            throw new IllegalArgumentException("AUA API endpoint is not configured");
+        }
+
         IntegrationRequest request = new IntegrationRequest();
 
         request.setProvider("XML");
         request.setUrl(api.getEndpoint());
-        request.setMethod(HttpMethod.valueOf(api.getHttpMethod()).name());
-        request.setProtocol(api.getProtocol());
+        request.setMethod(HttpMethod.POST.name());
         request.setContentType(MediaType.APPLICATION_XML_VALUE);
-
         request.setBody(xml);
 
-        log.debug("ESB IntegrationRequest created. apiId={}, apiCode={}, protocol={}, method={}, endpoint={}",
-                api.getApiId(),
-                api.getApiCode(),
-                api.getProtocol(),
-                api.getHttpMethod(),
-                api.getEndpoint()
-        );
+        log.info("ESB IntegrationRequest created. apiType={}, method={}, endpoint={}", api.getApiType(), HttpMethod.POST.name(), api.getEndpoint());
 
         return request;
     }
@@ -180,11 +191,9 @@ public class AuaEngine {
             throw new RuntimeException("Empty response received from ESB");
         }
 
-
         if (response.getBody() == null) {
             throw new RuntimeException("Empty provider response received from ESB");
         }
-
 
         Object body = response.getBody();
 
@@ -192,21 +201,9 @@ public class AuaEngine {
             return (String) body;
         }
 
-
         return body.toString();
     }
 
-
-    /**
-     * Validate ESB-level response.
-     * <p>
-     * This is different from AUA/provider-level
-     * validation.
-     * <p>
-     * ESB success = request reached provider / ESB
-     * <p>
-     * AUA success = provider response says operation succeeded.
-     */
     private void validateIntegrationResponse(IntegrationResponse response) {
 
         if (response == null) {
@@ -214,11 +211,9 @@ public class AuaEngine {
         }
 
         if (!response.isSuccess()) {
-
             log.error("ESB invocation failed. statusCode={}, message={}", response.getStatusCode(), response.getMessage());
             throw new RuntimeException("ESB invocation failed: " + response.getMessage());
         }
-
 
         if (response.getBody() == null) {
             throw new RuntimeException("ESB returned empty provider response");
@@ -226,19 +221,13 @@ public class AuaEngine {
     }
 
 
-    /**
-     * Find API from frozen service metadata.
-     * <p>
-     * The operationType supplied by the request determines
-     * which AUA API is executed.
-     */
     private AuaApiConfigurationDTO findApi(ServiceJSONDTO metadata, String operationType) {
 
         if (metadata == null) {
+
             log.error("Service metadata is null while finding AUA API");
             throw new IllegalArgumentException("Service metadata not available");
         }
-
 
         if (metadata.getAuaApiConfigurations() == null || metadata.getAuaApiConfigurations().isEmpty()) {
 
@@ -246,38 +235,24 @@ public class AuaEngine {
             throw new IllegalArgumentException("AUA API configuration not found for service");
         }
 
-
         if (operationType == null || operationType.isBlank()) {
             throw new IllegalArgumentException("AUA operation type is required");
         }
 
-
-        /*
-         * Avoid the previous getOperationType() issue if
-         * you have an enum-backed DTO.
-         *
-         * Simple loop is also easier to debug.
-         */
         for (AuaApiConfigurationDTO api : metadata.getAuaApiConfigurations()) {
 
-            if (api == null) {
+            if (api == null || api.getApiType() == null) {
                 continue;
             }
 
-            String configuredOperation = api.getOperationType();
+            if (operationType.trim().equalsIgnoreCase(api.getApiType().trim())) {
 
-            if (configuredOperation == null) {
-                continue;
-            }
-
-            if (operationType.trim().equalsIgnoreCase(configuredOperation.trim())) {
+                log.info("AUA API configuration matched. operationType={}, apiType={}", operationType, api.getApiType());
                 return api;
             }
         }
 
-
         log.error("AUA API not configured. operationType={}", operationType);
-
         throw new IllegalArgumentException("AUA API not configured for operation: " + operationType);
     }
 }

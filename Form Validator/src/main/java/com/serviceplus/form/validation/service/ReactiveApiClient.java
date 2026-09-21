@@ -630,7 +630,7 @@ public class ReactiveApiClient {
 		Map<String, Object> params = new HashMap<>();
 		request.getQueryParams().forEach((key, value) -> params.put(key, value.size() == 1 ? value.getFirst() : value));
 
-		applicationFlowLogs.debug("Query params for tracking service call | url={}, params={}", url, params);
+		applicationFlowLogs.info("Query params for tracking service call | url={}, params={}", url, params);
 
 		String requestBody;
 		try {
@@ -641,7 +641,7 @@ public class ReactiveApiClient {
 			return Mono.error(new SPRuntimeError("Invalid request payload", HttpStatus.BAD_REQUEST, null));
 		}
 
-		applicationFlowLogs.debug("Serialized request body for tracking service | body={}", requestBody);
+		applicationFlowLogs.info("Serialized request body for tracking service | body={}", requestBody);
 
 		Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(String.class,
 				HttpMethod.POST, headers, params, url, requestBody, MediaType.APPLICATION_JSON);
@@ -649,7 +649,7 @@ public class ReactiveApiClient {
 		return callExternalEndpoint.flatMap(apiResponse -> {
 			String body = apiResponse.getBody();
 
-			applicationFlowLogs.debug("Tracking service responded | status={}", apiResponse.getStatusCode());
+			applicationFlowLogs.info("Tracking service responded | status={}", apiResponse.getStatusCode());
 
 			if (body == null || body.isBlank()) {
 				applicationFlowLogs.warn("Empty/blank response body from tracking service | url={}, status={}", url,
