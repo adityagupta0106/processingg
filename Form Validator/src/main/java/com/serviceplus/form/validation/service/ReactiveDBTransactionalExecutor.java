@@ -84,7 +84,7 @@ public class ReactiveDBTransactionalExecutor implements TransactionalDBExecutor{
             return Mono.empty();
         }
 
-        transactionLogger.debug("Merging record for class {}", entity.getClass());
+        transactionLogger.info("Merging record for class {}", entity.getClass());
 
         return entityTemplate.update(entity)
                 .onErrorResume(org.springframework.dao.TransientDataAccessResourceException.class, ex -> {

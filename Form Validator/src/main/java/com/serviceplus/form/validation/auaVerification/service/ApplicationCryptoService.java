@@ -53,9 +53,6 @@ public class ApplicationCryptoService {
     }
 
 
-    /**
-     * Decrypt value using application PRIVATE key.
-     */
     public String decrypt(String encryptedValue) {
 
         try {
@@ -65,7 +62,7 @@ public class ApplicationCryptoService {
                 throw new IllegalArgumentException("Encrypted value cannot be empty");
             }
 
-            log.debug("Starting application attribute decryption");
+            log.info("Starting application attribute decryption");
 
             PrivateKey privateKey = loadPrivateKey();
 
@@ -79,7 +76,7 @@ public class ApplicationCryptoService {
 
             String plaintext = new String(decryptedBytes, StandardCharsets.UTF_8);
 
-            log.debug("Application attribute decrypted successfully");
+            log.info("Application attribute decrypted successfully");
 
             return plaintext;
 

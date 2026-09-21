@@ -16,6 +16,8 @@ public class AuaRequest {
 
     private String otp;
 
+    private Integer rowNo;
+
     private Map<String, Object> attributes;
 
     public String getTaskId() {
@@ -72,5 +74,13 @@ public class AuaRequest {
 
     public void setOtp(String otp) {
         this.otp = otp;
+    }
+
+    public Integer getRowNo() {
+        return rowNo;
+    }
+
+    public void setRowNo(Integer rowNo) {
+        this.rowNo = rowNo;
     }
 }

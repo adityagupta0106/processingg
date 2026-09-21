@@ -32,7 +32,7 @@ public class ParallelConvergentGatewayHandler implements ConvergentGatewayHandle
 
 		boolean supported = GATEWAY_BEHAVIOUR_PARALLEL_CONVERGENT.equalsIgnoreCase(gatewayType);
 
-		applicationFlowLogs.debug("Checking Parallel Convergent Gateway support. gatewayType={}, supported={}",
+		applicationFlowLogs.info("Checking Parallel Convergent Gateway support. gatewayType={}, supported={}",
 				gatewayType, supported);
 
 		return supported;
@@ -140,7 +140,7 @@ public class ParallelConvergentGatewayHandler implements ConvergentGatewayHandle
 
 								boolean completed = "Y".equalsIgnoreCase(cp.getActionTaken());
 
-								applicationFlowLogs.debug(
+								applicationFlowLogs.info(
 										"Checking parallel branch completion. "
 												+ "processId={}, currentTask={}, actionTaken={}, completed={}",
 										cp.getProcessId(), cp.getCurrentTask(), cp.getActionTaken(), completed);

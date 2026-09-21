@@ -3,6 +3,8 @@ package com.serviceplus.form.validation.auaVerification.dto;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.util.Map;
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class AuaResponse {
 
@@ -18,6 +20,8 @@ public class AuaResponse {
     private String rawResponse;
 
     private String info;
+
+    private Map<String, String> responseAttributes;
 
     public String getMessage() {
         return message;
@@ -65,5 +69,13 @@ public class AuaResponse {
 
     public void setInfo(String info) {
         this.info = info;
+    }
+
+    public Map<String, String> getResponseAttributes() {
+        return responseAttributes;
+    }
+
+    public void setResponseAttributes(Map<String, String> responseAttributes) {
+        this.responseAttributes = responseAttributes;
     }
 }

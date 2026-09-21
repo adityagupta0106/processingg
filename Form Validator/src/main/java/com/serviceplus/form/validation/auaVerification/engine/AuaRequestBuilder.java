@@ -2,10 +2,10 @@ package com.serviceplus.form.validation.auaVerification.engine;
 
 import com.serviceplus.form.validation.auaVerification.dto.AuaApiConfigurationDTO;
 import com.serviceplus.form.validation.auaVerification.entity.AuaTransactionLog;
-import com.serviceplus.form.validation.auaVerification.enums.AuaGenerationType;
-import com.serviceplus.form.validation.auaVerification.enums.AuaMappingSourceType;
-import com.serviceplus.form.validation.auaVerification.enums.AuaMessageType;
-import com.serviceplus.form.validation.auaVerification.model.AuaCryptoPayload;
+import com.serviceplus.form.validation.auaVerification.enums.AadhaarSystemGeneratedType;
+import com.serviceplus.form.validation.auaVerification.enums.AuaMappingType;
+import com.serviceplus.form.validation.auaVerification.enums.AuaPluginType;
+import com.serviceplus.form.validation.auaVerification.model.AuaCryptoContext;
 import com.serviceplus.form.validation.auaVerification.service.AuaCryptoService;
 
 import org.slf4j.Logger;
@@ -15,11 +15,10 @@ import org.springframework.stereotype.Component;
 import java.text.SimpleDateFormat;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
-
-import static com.serviceplus.form.validation.utility.Utility.isEmpty;
-import static java.util.Objects.isNull;
-
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Random;
 
 @Component
 public class AuaRequestBuilder {
@@ -30,9 +29,7 @@ public class AuaRequestBuilder {
 
     private final AuaCryptoService auaCryptoService;
 
-
     public AuaRequestBuilder(AuaCryptoService auaCryptoService) {
-
         this.auaCryptoService = auaCryptoService;
     }
 
@@ -40,327 +37,339 @@ public class AuaRequestBuilder {
 
         validateApi(api);
 
-        log.info("Building AUA request. apiId={}, apiCode={}, operationType={}", api.getApiId(), api.getApiCode(), api.getOperationType());
+        log.info("Building AUA request. apiType={}", api.getApiType());
 
-        AuaApiConfigurationDTO.AuaApiMessageDTO requestMessage = getRequestMessage(api);
+        AuaApiConfigurationDTO.AuaPayloadDTO requestPayload = api.getRequestPayload();
+
+        if (requestPayload == null || requestPayload.getNodes() == null || requestPayload.getNodes().isEmpty()) {
+            throw new IllegalArgumentException("AUA request payload is not configured");
+        }
 
         RequestContext context = new RequestContext(attributes);
 
-        /*
-         * ---------------------------------------------------------
-         * 1. Build normal Auth XML + internal PID XML
-         * ---------------------------------------------------------
-         */
-        XmlNode rootNode = buildUnsignedXml(requestMessage, api, context, logEntry);
-        System.out.println(rootNode.toXml());
+        XmlNode rootNode = buildUnsignedXml(requestPayload, api, context, logEntry);
 
         /*
-         * ---------------------------------------------------------
-         * 2. Extract PID XML.
+         * Process plugin based crypto nodes.
          *
-         * This is the ONLY XML that should be encrypted by
-         * AuaCryptoService.
-         * ---------------------------------------------------------
+         * The PID XML is already present inside <Data>
+         * at this point.
          */
-        XmlNode dataNode = rootNode.children.get("Data");
-
-        if (dataNode != null) {
-
-            XmlNode pidNode = dataNode.children.get("Pid");
-
-            if (pidNode != null) {
-
-                String pidXml = pidNode.toXml();
-
-                log.info(
-                        "PID XML prepared for encryption. apiId={}, xml={}",
-                        api.getApiId(),
-                        pidXml
-                );
-
-
-                AuaCryptoPayload crypto = auaCryptoService.generateCryptoPayload(pidXml, api);
-
-                rootNode.children.remove("Data");
-
-                addCryptoPayload(rootNode, crypto);
-
-                log.info(
-                        "AUA cryptographic payload added. apiId={}, operationType={}",
-                        api.getApiId(),
-                        api.getOperationType()
-                );
-
-            } else {
-
-                log.info(
-                        "Data element exists but Pid element is not present. " +
-                                "Skipping AUA encryption. apiId={}, operationType={}",
-                        api.getApiId(),
-                        api.getOperationType()
-                );
-            }
-
-        } else {
-
-            log.debug(
-                    "AUA request does not contain Data/Pid. " +
-                            "Skipping cryptographic processing. apiId={}, operationType={}",
-                    api.getApiId(),
-                    api.getOperationType()
-            );
-        }
+        processPluginNodes(rootNode, requestPayload, api, context, logEntry);
 
         String finalXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" + rootNode.toXml();
 
-        log.info("AUA request generated successfully. apiId={}, apiCode={}", api.getApiId(), api.getApiCode());
-
-        log.info("Final AUA XML. apiId={}, xml={}", api.getApiId(), finalXml);
+        log.info("AUA request generated successfully. apiType={}", api.getApiType());
 
         return finalXml;
     }
 
+    private XmlNode buildUnsignedXml(AuaApiConfigurationDTO.AuaPayloadDTO requestPayload, AuaApiConfigurationDTO api, RequestContext context, AuaTransactionLog logEntry) {
 
-    private XmlNode buildUnsignedXml(AuaApiConfigurationDTO.AuaApiMessageDTO requestMessage, AuaApiConfigurationDTO api, RequestContext context, AuaTransactionLog logEntry) {
+        String rootElement = extractRootElement(requestPayload, api);
 
-        XmlNode rootNode = new XmlNode(requestMessage.getRootElement());
+        String prefix = api.getPrefix();
+        String suffix = api.getSuffix();
 
-        if (!isBlank(api.getXmlNamespace())) {
+        XmlNode rootNode = new XmlNode(rootElement);
+
+        if (api.getXmlNamespace() != null && !api.getXmlNamespace().isBlank()) {
 
             rootNode.setNamespace(api.getXmlNamespace());
-
-            log.info(
-                    "XML namespace configured. apiId={}, rootElement={}, namespace={}, namespaceVersion={}",
-                    api.getApiId(),
-                    requestMessage.getRootElement(),
-                    api.getXmlNamespace(),
-                    api.getXmlNamespaceVersion()
-            );
         }
 
-        if (requestMessage.getFields() == null) {
-            return rootNode;
-        }
+        for (AuaApiConfigurationDTO.AuaNodeDTO node : requestPayload.getNodes()) {
 
+            if (node == null || node.getXpath() == null || node.getXpath().isBlank()) {
 
-        for (AuaApiConfigurationDTO.AuaApiMessageDTO.AuaApiFieldDTO field : requestMessage.getFields()) {
-
-            if (field == null) {
                 continue;
             }
 
-            if (isBlank(field.getXpath())) {
+            AuaMappingType mappingType = node.getMappingType();
+
+            /*
+             * NONE
+             */
+            if (mappingType == null || mappingType == AuaMappingType.NONE) {
+
+                log.info("Skipping AUA node. nodeCode={}, mappingType={}", node.getNodeCode(), mappingType);
+
                 continue;
             }
 
-
-            if (isSignature(field)) {
-
-                log.debug("Skipping signature field while building unsigned XML. fieldCode={}", field.getFieldCode());
+            /*
+             * PLUGIN nodes are processed separately
+             * because some plugins depend on other
+             * generated values.
+             */
+            if (mappingType == AuaMappingType.PLUGIN) {
                 continue;
             }
 
+            if (mappingType == AuaMappingType.RESULT || mappingType == AuaMappingType.ERROR) {
+                continue;
+            }
 
-            String value = resolveValue(field, context,logEntry);
-
+            String value = resolveValue(node, context, logEntry,prefix,suffix);
 
             if (value == null) {
 
-                if (Boolean.TRUE.equals(field.getRequired())) {
-                    log.error("Required AUA field value missing. " + "fieldCode={}, sourceType={}, sourcePath={}, transformation={}", field.getFieldCode(), field.getSourceType(), field.getSourcePath(), field.getTransformation());
-                    throw new IllegalArgumentException("Required AUA field value missing: " + field.getFieldCode());
-                }
+                log.info("No value resolved for AUA node. nodeCode={}, mappingType={}", node.getNodeCode(), mappingType);
 
                 continue;
             }
 
-
-            addFieldToXml(rootNode, field, value);
+            addFieldToXml(rootNode, node, value);
         }
 
         return rootNode;
     }
 
+    private String resolveValue(AuaApiConfigurationDTO.AuaNodeDTO node, RequestContext context, AuaTransactionLog logEntry, String prefix, String suffix) {
 
-    /*
-     * =============================================================
-     * RESOLVE FIELD VALUE
-     * =============================================================
-     */
-    private String resolveValue(AuaApiConfigurationDTO.AuaApiMessageDTO.AuaApiFieldDTO field, RequestContext context, AuaTransactionLog logEntry) {
+        AuaMappingType mappingType = node.getMappingType();
 
-        String sourceType = normalize(field.getSourceType());
-
-        String transformation = normalize(field.getTransformation());
-
-        if (AuaMappingSourceType.CONSTANT.name().equalsIgnoreCase(sourceType)) {
-
-            log.debug("Resolving CONSTANT field. fieldCode={}", field.getFieldCode());
-
-            return field.getDefaultValue();
-        }
-
-        if (AuaMappingSourceType.SECRET.name().equalsIgnoreCase(sourceType)) {
-
-            log.debug("Resolving SECRET field. fieldCode={}", field.getFieldCode());
-
-            return resolveSecret(field.getSourcePath(), field.getDefaultValue());
-        }
-
-
-        if (AuaMappingSourceType.NONE.name().equalsIgnoreCase(sourceType)) {
+        if (mappingType == null) {
             return null;
         }
 
+        if (mappingType == AuaMappingType.STATIC || mappingType == AuaMappingType.ADD_VALUE) {
 
-        if (AuaMappingSourceType.DYNAMIC.name().equalsIgnoreCase(sourceType)) {
-
-            if (AuaGenerationType.SYSTEM.name().equalsIgnoreCase(transformation)) {
-                return "";
+            if (node.getDefaultValue() == null) {
+                return null;
             }
 
+            return node.getDefaultValue();
+        }
 
-            if (AuaGenerationType.GENERATE_TXN.name().equalsIgnoreCase(transformation)) {
-                String txn = isNull(logEntry.getProviderTxnId()) ? generateTransactionId() : logEntry.getProviderTxnId();
-                logEntry.setProviderTxnId(txn);
-                log.debug("AUA transaction ID resolved. fieldCode={}", field.getFieldCode());
+        if (mappingType == AuaMappingType.DYNAMIC) {
+            return resolveDynamicValue(node, context);
+        }
+
+        if (mappingType == AuaMappingType.SYSTEM_GENERATED) {
+            return resolveSystemGeneratedValue(node, logEntry,prefix,suffix);
+        }
+
+        if (mappingType == AuaMappingType.PLUGIN) {
+            return resolvePluginValue(node, context);
+        }
+
+        return null;
+    }
+
+    private String resolveDynamicValue(AuaApiConfigurationDTO.AuaNodeDTO node, RequestContext context) {
+
+        if (node.getSourcePath() == null || node.getSourcePath().isBlank()) {
+            return null;
+        }
+
+        Object value = getAttributeValue(node, context.getAttributes());
+
+        if (value == null) {
+
+            log.info("Dynamic value not found. nodeCode={}, sourcePath={}", node.getNodeCode(), node.getSourcePath());
+            return null;
+        }
+
+        return String.valueOf(value);
+    }
+
+    private String resolveSystemGeneratedValue(AuaApiConfigurationDTO.AuaNodeDTO node, AuaTransactionLog logEntry, String prefix, String suffix) {
+
+        String systemVariable = node.getSystemVariable();
+
+        if (systemVariable == null || systemVariable.isBlank()) {
+            return null;
+        }
+
+        AadhaarSystemGeneratedType type;
+
+        try {
+            type = AadhaarSystemGeneratedType.valueOf(systemVariable.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("Unsupported AUA system variable. nodeCode={}, systemVariable={}", node.getNodeCode(), systemVariable);
+            return null;
+        }
+
+        switch (type) {
+
+            case GENERATE_TXN:
+
+                String txn = logEntry.getProviderTxnId();
+
+                if (txn == null || txn.isBlank()) {
+                    txn = generateTransactionId(prefix,suffix);
+                    logEntry.setProviderTxnId(txn);
+                }
+
                 return txn;
-            }
 
+            case CURRENT_TIMESTAMP:
+                return generateTimestamp();
 
-            /*
-             * -----------------------------------------------------
-             * TIMESTAMP
-             * -----------------------------------------------------
-             */
-            if (AuaGenerationType.CURRENT_TIMESTAMP.name().equalsIgnoreCase(transformation)) {
+            case SIGN:
+                return null;
 
-                String timestamp = context.getOrGenerate(field.getSourcePath(), this::generateTimestamp);
-                log.debug("AUA timestamp resolved. fieldCode={}", field.getFieldCode());
+            default:
 
-                return timestamp;
-            }
-
-
-            /*
-             * -----------------------------------------------------
-             * SIGNATURE
-             * -----------------------------------------------------
-             *
-             * This is deliberately NOT generated here.
-             *
-             * Signature is generated AFTER the complete unsigned
-             * XML has been constructed.
-             */
-            if (AuaGenerationType.SIGN.name().equalsIgnoreCase(transformation)) {
+                log.info("Unsupported AUA system variable. nodeCode={}, systemVariable={}", node.getNodeCode(), systemVariable);
 
                 return null;
+        }
+    }
+
+    private String resolvePluginValue(AuaApiConfigurationDTO.AuaNodeDTO node, RequestContext context) {
+
+        String pluginMethodCode = node.getPluginMethodCode();
+
+        if (pluginMethodCode == null || pluginMethodCode.isBlank()) {
+            throw new IllegalArgumentException("Plugin method is not configured for node: " + node.getNodeCode());
+        }
+
+        AuaPluginType pluginType = AuaPluginType.fromCode(pluginMethodCode);
+
+        if (pluginType == null) {
+            throw new IllegalArgumentException("Invalid AUA plugin method: " + pluginMethodCode);
+        }
+
+        log.info("AUA plugin resolved. nodeCode={}, plugin={}", node.getNodeCode(), pluginType);
+        return null;
+    }
+
+    private void processPluginNodes(XmlNode rootNode, AuaApiConfigurationDTO.AuaPayloadDTO requestPayload, AuaApiConfigurationDTO api, RequestContext context, AuaTransactionLog logEntry) {
+
+        if (requestPayload == null || requestPayload.getNodes() == null || requestPayload.getNodes().isEmpty()) {
+
+            return;
+        }
+
+        boolean hasSkeyPlugin = false;
+        boolean hasDataPlugin = false;
+        boolean hasHmacPlugin = false;
+
+        for (AuaApiConfigurationDTO.AuaNodeDTO node : requestPayload.getNodes()) {
+
+            if (node == null || node.getMappingType() != AuaMappingType.PLUGIN) {
+                continue;
             }
 
+            String pluginCode = node.getPluginMethodCode();
 
-            /*
-             * -----------------------------------------------------
-             * NORMAL DYNAMIC VALUE
-             * -----------------------------------------------------
-             */
-            Object value = getAttributeValue(field, context.getAttributes());
-
-            if (value == null) {
-
-                log.debug("Dynamic value not found. fieldCode={}, sourcePath={}", field.getFieldCode(), field.getSourcePath());
-
-                return null;
+            if (pluginCode == null || pluginCode.isBlank()) {
+                continue;
             }
 
-            return String.valueOf(value);
+            AuaPluginType pluginType = AuaPluginType.fromCode(pluginCode);
+
+            if (pluginType == null) {
+                continue;
+            }
+
+            switch (pluginType) {
+
+                case CREATE_SKEY:
+                    hasSkeyPlugin = true;
+                    break;
+
+                case CREATE_DATA:
+                    hasDataPlugin = true;
+                    break;
+
+                case CREATE_HMAC:
+                    hasHmacPlugin = true;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        if (!hasSkeyPlugin && !hasDataPlugin && !hasHmacPlugin) {
+            return;
+        }
+
+        XmlNode dataNode = rootNode.children.get("Data");
+
+        if (dataNode == null) {
+
+            log.warn("AUA crypto plugins configured but Data node was not found. apiType={}", api.getApiType());
+            return;
+        }
+
+        XmlNode pidNode = dataNode.children.get("Pid");
+
+        if (pidNode == null) {
+
+            log.warn("AUA crypto plugins configured but PID node was not found. apiType={}", api.getApiType());
+            return;
+        }
+
+        String pidXml = pidNode.toXml();
+
+        log.info("PID XML prepared for AUA plugin processing. apiType={}, size={}", api.getApiType(), pidXml.length());
+
+        AuaCryptoContext cryptoContext = new AuaCryptoContext();
+
+        cryptoContext.setPidXml(pidXml);
+
+
+        if (hasSkeyPlugin) {
+
+            String skey = auaCryptoService.createSkey(cryptoContext, api);
+            log.info("CREATE_SKEY completed. apiType={}, generated={}", api.getApiType(), skey != null);
         }
 
 
-        return "";
-        //throw new IllegalArgumentException("Unsupported AUA source type: " + field.getSourceType() + " for field: " + field.getFieldCode());
+        if (hasDataPlugin) {
+
+            String encryptedData = auaCryptoService.createData(cryptoContext, api);
+            cryptoContext.setEncryptedData(encryptedData);
+            log.info("CREATE_DATA completed. apiType={}, generated={}", api.getApiType(), encryptedData != null);
+        }
+
+        if (hasHmacPlugin) {
+
+            String encryptedHmac = auaCryptoService.createHmac(cryptoContext, api);
+            cryptoContext.setEncryptedHmac(encryptedHmac);
+            log.info("CREATE_HMAC completed. apiType={}, generated={}", api.getApiType(), encryptedHmac != null);
+        }
+
+        rootNode.children.remove("Data");
+
+        addCryptoPayload(rootNode, cryptoContext);
     }
 
+    private Object getAttributeValue(AuaApiConfigurationDTO.AuaNodeDTO node, Map<String, Object> attributes) {
 
-    /*
-     * =============================================================
-     * FIND SIGNATURE FIELD
-     * =============================================================
-     */
-    private AuaApiConfigurationDTO.AuaApiMessageDTO.AuaApiFieldDTO findSignatureField(AuaApiConfigurationDTO.AuaApiMessageDTO requestMessage) {
-
-        if (requestMessage.getFields() == null) {
+        if (attributes == null || attributes.isEmpty()) {
             return null;
         }
 
-        return requestMessage.getFields().stream().filter(field -> field != null && isSignature(field)).findFirst().orElse(null);
-    }
+        String sourcePath = node.getSourcePath();
 
-
-    private boolean isSignature(AuaApiConfigurationDTO.AuaApiMessageDTO.AuaApiFieldDTO field) {
-
-        return AuaGenerationType.SIGN.name().equalsIgnoreCase(field.getTransformation());
-    }
-
-    private void addCryptoPayload(XmlNode rootNode, AuaCryptoPayload crypto) {
-
-        if (crypto == null) {
-            throw new IllegalArgumentException("AUA crypto payload cannot be null");
+        if (sourcePath == null || sourcePath.isBlank()) {
+            return null;
         }
 
+        Object value = attributes.get(sourcePath);
 
-        rootNode.rawXml = buildCryptoXml(crypto);
-
-        log.info("Crypto payload added directly under Auth");
-    }
-
-
-    /*
-     * =============================================================
-     * BUILD CRYPTO XML
-     * =============================================================
-     */
-    private String buildCryptoXml(AuaCryptoPayload crypto) {
-
-        if (crypto == null) {
-            throw new IllegalArgumentException("AUA crypto payload cannot be null");
+        if (value != null) {
+            return value;
         }
 
+        for (Map.Entry<String, Object> entry : attributes.entrySet()) {
 
-        StringBuilder xml = new StringBuilder();
-
-
-        /*
-         * Skey
-         */
-        xml.append("<Skey");
-
-        if (!isBlank(crypto.getCertificateIdentifier())) {
-
-            xml.append(" ci=\"").append(escapeXml(crypto.getCertificateIdentifier())).append("\"");
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(sourcePath)) {
+                return entry.getValue();
+            }
         }
 
-        xml.append(">").append(escapeXml(crypto.getEncryptedSessionKey())).append("</Skey>");
-
-
-        /*
-         * Data
-         */
-        xml.append("<Data type=\"X\">").append(escapeXml(crypto.getEncryptedData())).append("</Data>");
-
-
-        /*
-         * Hmac
-         */
-        xml.append("<Hmac>").append(escapeXml(crypto.getEncryptedHmac())).append("</Hmac>");
-
-
-        return xml.toString();
+        return null;
     }
 
+    private void addFieldToXml(XmlNode rootNode, AuaApiConfigurationDTO.AuaNodeDTO node, String value) {
 
-    private void addFieldToXml(XmlNode rootNode, AuaApiConfigurationDTO.AuaApiMessageDTO.AuaApiFieldDTO field, String value) {
-
-        String xpath = field.getXpath();
+        String xpath = node.getXpath();
 
         if (xpath == null || xpath.isBlank()) {
             return;
@@ -369,10 +378,10 @@ public class AuaRequestBuilder {
         String[] parts = xpath.split("/");
 
         XmlNode current = rootNode;
+
         int startIndex = 1;
 
         if (parts.length > 1 && rootNode.name.equals(parts[1])) {
-
             startIndex = 2;
         }
 
@@ -384,144 +393,94 @@ public class AuaRequestBuilder {
                 continue;
             }
 
-            /*
-             * Attribute
-             *
-             * /Otp/@uid
-             */
+
             if (part.startsWith("@")) {
 
                 String attributeName = part.substring(1);
-
                 current.attributes.put(attributeName, value);
-
                 return;
             }
 
-            /*
-             * Element
-             *
-             * /Otp/Opts/@ch
-             */
             current = current.children.computeIfAbsent(part, XmlNode::new);
 
-            /*
-             * If this is the final element,
-             * put the value inside it.
-             */
             if (i == parts.length - 1) {
 
                 current.text = value;
-
                 return;
             }
         }
     }
 
+    private void addCryptoPayload(XmlNode rootNode, AuaCryptoContext context) {
 
-    /*
-     * =============================================================
-     * ATTRIBUTE VALUE
-     * =============================================================
-     */
-    private Object getAttributeValue(AuaApiConfigurationDTO.AuaApiMessageDTO.AuaApiFieldDTO field, Map<String, Object> attributes) {
-
-        if (attributes == null || attributes.isEmpty()) {
-
-            return null;
+        if (context == null) {
+            throw new IllegalArgumentException("AUA crypto context cannot be null");
         }
 
-        String sourcePath = field.getSourcePath();
+        StringBuilder xml = new StringBuilder();
 
-        if (isBlank(sourcePath)) {
-            return null;
-        }
+        if (context.getEncryptedSessionKey() != null && !context.getEncryptedSessionKey().isBlank()) {
 
+            xml.append("<Skey");
 
-        /*
-         * Exact match.
-         */
-        Object value = attributes.get(sourcePath);
-
-        if (value != null) {
-            return value;
-        }
-
-
-        /*
-         * Case-insensitive match.
-         */
-        for (Map.Entry<String, Object> entry : attributes.entrySet()) {
-
-            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(sourcePath)) {
-
-                return entry.getValue();
+            if (context.getCertificateIdentifier() != null && !context.getCertificateIdentifier().isBlank()) {
+                xml.append(" ci=\"").append(escapeXml(context.getCertificateIdentifier())).append("\"");
             }
+
+            xml.append(">").append(escapeXml(context.getEncryptedSessionKey())).append("</Skey>");
         }
 
-        return null;
+
+        if (context.getEncryptedData() != null && !context.getEncryptedData().isBlank()) {
+            xml.append("<Data type=\"X\">").append(escapeXml(context.getEncryptedData())).append("</Data>");
+        }
+
+        if (context.getEncryptedHmac() != null && !context.getEncryptedHmac().isBlank()) {
+            xml.append("<Hmac>").append(escapeXml(context.getEncryptedHmac())).append("</Hmac>");
+        }
+
+        rootNode.rawXml = xml.toString();
     }
 
-
-    /*
-     * =============================================================
-     * API VALIDATION
-     * =============================================================
-     */
     private void validateApi(AuaApiConfigurationDTO api) {
 
         if (api == null) {
-
             throw new IllegalArgumentException("AUA API configuration is required");
         }
 
-        if (api.getMessages() == null || api.getMessages().isEmpty()) {
-
-            throw new IllegalArgumentException("AUA API messages are not configured");
+        if (api.getRequestPayload() == null) {
+            throw new IllegalArgumentException("AUA request payload is not configured");
         }
     }
 
+    private String extractRootElement(AuaApiConfigurationDTO.AuaPayloadDTO payload, AuaApiConfigurationDTO api) {
 
-    /*
-     * =============================================================
-     * REQUEST MESSAGE
-     * =============================================================
-     */
-    private AuaApiConfigurationDTO.AuaApiMessageDTO getRequestMessage(AuaApiConfigurationDTO api) {
+        if (payload.getNodes() != null) {
 
-        return api.getMessages().stream().filter(message -> message != null && AuaMessageType.REQUEST.name().equalsIgnoreCase(message.getMessageType())).findFirst().orElseThrow(() -> new IllegalArgumentException("REQUEST message not configured for API: " + api.getApiCode()));
+            for (AuaApiConfigurationDTO.AuaNodeDTO node : payload.getNodes()) {
+
+                if (node == null || node.getXpath() == null) {
+                    continue;
+                }
+
+                String[] parts = node.getXpath().split("/");
+
+                if (parts.length > 1 && !parts[1].isBlank()) {
+                    return parts[1];
+                }
+            }
+        }
+
+        throw new IllegalArgumentException("Unable to determine AUA root element for apiType: " + api.getApiType());
     }
 
-
-    private String generateTransactionId() {
-        return generateTXN(null,null);
+    private String generateTransactionId(String prefix, String suffix) {
+        return generateTXN(prefix, suffix);
     }
-
 
     private String generateTimestamp() {
-
         return OffsetDateTime.now().format(TIMESTAMP_FORMATTER);
     }
-
-
-    private String resolveSecret(String sourcePath, String defaultValue) {
-        return defaultValue;
-    }
-
-    private String normalize(String value) {
-
-        if (value == null) {
-            return null;
-        }
-
-        return value.trim().toUpperCase();
-    }
-
-
-    private boolean isBlank(String value) {
-        return isEmpty(value);
-    }
-
 
     private String escapeXml(String value) {
 
@@ -536,37 +495,23 @@ public class AuaRequestBuilder {
                 .replace("'", "&apos;");
     }
 
-
     private static class RequestContext {
 
         private final Map<String, Object> attributes;
 
-        private final Map<String, String> generatedValues = new LinkedHashMap<>();
-
+        private final AuaCryptoContext cryptoContext;
 
         private RequestContext(Map<String, Object> attributes) {
-
             this.attributes = attributes == null ? new LinkedHashMap<>() : new LinkedHashMap<>(attributes);
+            this.cryptoContext = new AuaCryptoContext();
         }
 
-
         private Map<String, Object> getAttributes() {
-
             return attributes;
         }
 
-
-        private String getOrGenerate(String key, java.util.function.Supplier<String> generator) {
-
-            String actualKey = isBlankStatic(key) ? UUID.randomUUID().toString() : key;
-
-            return generatedValues.computeIfAbsent(actualKey, k -> generator.get());
-        }
-
-
-        private static boolean isBlankStatic(String value) {
-
-            return value == null || value.trim().isEmpty();
+        private AuaCryptoContext getCryptoContext() {
+            return cryptoContext;
         }
     }
 
@@ -580,23 +525,17 @@ public class AuaRequestBuilder {
 
         private String namespace;
 
-        public void setNamespace(String namespace) {
-            this.namespace = namespace;
-        }
-
-        public String getNamespace() {
-            return namespace;
-        }
-
         private final Map<String, String> attributes = new LinkedHashMap<>();
 
         private final Map<String, XmlNode> children = new LinkedHashMap<>();
-
 
         private XmlNode(String name) {
             this.name = name;
         }
 
+        public void setNamespace(String namespace) {
+            this.namespace = namespace;
+        }
 
         private String toXml() {
 
@@ -608,19 +547,13 @@ public class AuaRequestBuilder {
                 xml.append(" xmlns=\"").append(escapeXml(namespace)).append("\"");
             }
 
-            /*
-             * Attributes.
-             */
             for (Map.Entry<String, String> attribute : attributes.entrySet()) {
-
-                xml.append(" ").append(attribute.getKey()).append("=\"").append(escapeXml(attribute.getValue())).append("\"");
+                xml.append(" ")
+                        .append(attribute.getKey()).append("=\"")
+                        .append(escapeXml(attribute.getValue())).append("\"");
             }
 
-            /*
-             * Empty element.
-             */
             if ((text == null || text.isEmpty()) && children.isEmpty() && (rawXml == null || rawXml.isEmpty())) {
-
                 xml.append("/>");
                 return xml.toString();
             }
@@ -640,42 +573,26 @@ public class AuaRequestBuilder {
             }
 
             xml.append("</").append(name).append(">");
-
             return xml.toString();
         }
     }
 
-    public String generateTXN(String prefix,String suffix){
-        if(prefix==null || prefix.equals("")){
-            prefix = "NIC";
-        }
-        if(suffix==null || suffix.equals("")){
-            suffix = "SPLS";
-        }
-        Random random = new Random();
-        //long rand12Digit = random.nextLong();
-        long n = (long) (100000000000L + random.nextFloat() * 900000000000L);
+    public String generateTXN(String prefix, String suffix) {
 
+        Random random = new Random();
+
+        long n = (long) (100000000000L + random.nextFloat() * 900000000000L);
         Date date = new Date();
+
         SimpleDateFormat ddForm = new SimpleDateFormat("dd");
         SimpleDateFormat mmForm = new SimpleDateFormat("MM");
         SimpleDateFormat yyyyForm = new SimpleDateFormat("yyyy");
         SimpleDateFormat hhForm = new SimpleDateFormat("hh");
         SimpleDateFormat minForm = new SimpleDateFormat("mm");
         SimpleDateFormat ssForm = new SimpleDateFormat("ss");
+        String strDate = yyyyForm.format(date) + mmForm.format(date) + ddForm.format(date);
+        String strTime = hhForm.format(date) + minForm.format(date) + ssForm.format(date);
 
-        String strDD= ddForm.format(date);
-        String strMM= mmForm.format(date);
-        String strYYYYY= yyyyForm.format(date);
-        String strHH= hhForm.format(date);
-        String strMIN= minForm.format(date);
-        String strSS= ssForm.format(date);
-
-        String strDate = strYYYYY+strMM+strDD;
-        String strTime = strHH+strMIN+strSS;
-
-        String finalTXN = prefix + n + strDate + strTime + suffix;
-
-        return finalTXN;
+        return prefix + n + strDate + strTime + suffix;
     }
 }

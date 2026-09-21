@@ -15,6 +15,10 @@ public class AuaExecutionResult {
         this.apiId = apiId;
     }
 
+    public AuaExecutionResult(AuaResponse auaResponse) {
+        this.response = auaResponse;
+    }
+
     public AuaResponse getResponse() {
         return response;
     }
