@@ -196,7 +196,7 @@ public class WorkflowService {
 											return taskAssignmentService
 													.refreshTaskAvailableOfficeLocation(nextAllowedOfficeLocation,
 															taskLocationUserHolderMap, sourceLocationId,
-															sourceLevelCode, destinationLevelCode, user,ad.getApplicationId(),applicationRoutingMap)
+															sourceLevelCode, destinationLevelCode, user,ad.getApplicationId(),applicationRoutingMap,txn.getTxnId())
 
 													.thenMany(Flux.defer(() -> {
 

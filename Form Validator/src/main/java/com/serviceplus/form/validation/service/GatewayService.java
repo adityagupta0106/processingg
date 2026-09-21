@@ -207,7 +207,7 @@ public class GatewayService {
 	
 							return taskAssignmentService.refreshTaskAvailableOfficeLocation(location,
 									taskLocationUserHolderMap, sourceLocationId, sourceLevelCode, destinationLevelCode,
-									user, ad.getApplicationId(), applicationRoutingMap).then(Mono.fromSupplier(() -> {
+									user, ad.getApplicationId(), applicationRoutingMap,txn.getTxnId()).then(Mono.fromSupplier(() -> {
 	
 										applicationFlowLogs.info("Office locations refreshed for gateway taskId={} : {}",
 												taskId, location);

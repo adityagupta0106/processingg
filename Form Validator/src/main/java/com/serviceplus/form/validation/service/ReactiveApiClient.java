@@ -1111,7 +1111,7 @@ public class ReactiveApiClient {
 		Map<String, String> headers = Map.of("USER-DETAILS", entityToString(user));
 
 		Map<String, Object> requestBody = Map.of("applicationId", applicationId, "taskId", taskId, "holderId", holderId,
-				"attributeIds", List.of());
+				"attributeIds", attributeIds);
 
 		Mono<ResponseEntity<String>> callExternalEndpoint = AsynchronousApiExecutor.callExternalEndpoint(String.class,
 				HttpMethod.POST, headers, Collections.emptyMap(), url, entityToString(requestBody),

@@ -114,23 +114,34 @@ public class ApplicationRouting {
     // Nested class
     public static class RoutingCombination {
 
-        private Integer priority;
-        private List<String> attributeIds;
+    	private Integer priority;
 
-        public Integer getPriority() {
-            return priority;
-        }
+	    private List<String> sourceAttributeIds;
+	    
+	    private List<String> destinationAttributeIds;
 
-        public void setPriority(Integer priority) {
-            this.priority = priority;
-        }
+	    public Integer getPriority() {
+	        return priority;
+	    }
 
-        public List<String> getAttributeIds() {
-            return attributeIds;
-        }
+	    public void setPriority(Integer priority) {
+	        this.priority = priority;
+	    }
 
-        public void setAttributeIds(List<String> attributeIds) {
-            this.attributeIds = attributeIds;
-        }
+		public List<String> getSourceAttributeIds() {
+			return sourceAttributeIds;
+		}
+
+		public void setSourceAttributeIds(List<String> sourceAttributeIds) {
+			this.sourceAttributeIds = sourceAttributeIds;
+		}
+
+		public List<String> getDestinationAttributeIds() {
+			return destinationAttributeIds;
+		}
+
+		public void setDestinationAttributeIds(List<String> destinationAttributeIds) {
+			this.destinationAttributeIds = destinationAttributeIds;
+		}
     }
 }
