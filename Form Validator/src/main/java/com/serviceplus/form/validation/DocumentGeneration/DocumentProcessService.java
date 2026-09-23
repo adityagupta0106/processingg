@@ -22,6 +22,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_BULK_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.ApplicationConstants.FALLBACK_ACTION_NO;
 import static com.serviceplus.form.validation.utility.SnowflakeIdGenerator.createUniqueId;
 import static com.serviceplus.form.validation.utility.Utility.getUserSessionDetails;
@@ -102,10 +103,10 @@ public class DocumentProcessService {
                     service.setDocumentGenerationDetails(dgConfig);
 
                     return applicationFlowRouterRepository
-                            .findFirstByApplicationIdAndTaskIdAndActivityTypeAndCompletedOrderByIdDesc(
+                            .findFirstByApplicationIdAndTaskIdAndActivityTypeInAndCompletedOrderByIdDesc(
                                     flow.getApplicationId(),
                                     flow.getTaskId(),
-                                    ACTIVITY_FORM_STATUS_KEY,
+                                    List.of(ACTIVITY_FORM_STATUS_KEY,ACTIVITY_FORM_BULK_STATUS_KEY),
                                     1)
                             .switchIfEmpty(Mono.error(new SPRuntimeError("Completed Form Submission activity not found.", HttpStatus.BAD_REQUEST, flow.getTxnId())))
                             .flatMap(fsFlow ->

@@ -21,6 +21,7 @@ import java.time.ZoneId;
 import java.util.*;
 
 import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_STATUS_KEY;
+import static com.serviceplus.form.validation.utility.ApplicationConstants.ACTIVITY_FORM_BULK_STATUS_KEY;
 import static com.serviceplus.form.validation.utility.Utility.isEmpty;
 import static com.serviceplus.form.validation.utility.Utility.populateActionAndLocation;
 import static java.util.Objects.isNull;
@@ -183,15 +184,15 @@ public class EventDecider {
 
         Mono<ApplicationFlowStatusEntity> fsFlowMono;
 
-        if (ACTIVITY_FORM_STATUS_KEY.equals(flowStatus.getActivityType())) {
+        if (ACTIVITY_FORM_BULK_STATUS_KEY.equals(flowStatus.getActivityType())|| ACTIVITY_FORM_STATUS_KEY.equals(flowStatus.getActivityType())) {
             fsFlowMono = Mono.just(flowStatus);
 
         } else {
             fsFlowMono = applicationFlowRouterRepository
-                                        .findFirstByApplicationIdAndTaskIdAndActivityTypeAndCompletedOrderByIdDesc(
+                                        .findFirstByApplicationIdAndTaskIdAndActivityTypeInAndCompletedOrderByIdDesc(
                                                 flowStatus.getApplicationId(),
                                                 flowStatus.getTaskId(),
-                                                ACTIVITY_FORM_STATUS_KEY,
+                                                List.of(ACTIVITY_FORM_STATUS_KEY,ACTIVITY_FORM_BULK_STATUS_KEY),
                                                 1)
                     .switchIfEmpty(Mono.error(
                             new SPRuntimeError("Completed Form Submission activity not found.", HttpStatus.BAD_REQUEST, flowStatus.getTxnId()))

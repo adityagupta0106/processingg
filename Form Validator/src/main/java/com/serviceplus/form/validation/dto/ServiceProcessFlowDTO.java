@@ -52,6 +52,8 @@ public class ServiceProcessFlowDTO {
 
             private Boolean priorityEnabled;
             
+            private Boolean bulkEnabled;
+            
             public List<ActionAttribute> getActionAttribute() {
                 return actionAttribute;
             }
@@ -83,6 +85,15 @@ public class ServiceProcessFlowDTO {
 			public void setPriorityEnabled(Boolean priorityEnabled) {
 				this.priorityEnabled = priorityEnabled;
 			}
+
+			public Boolean getBulkEnabled() {
+				return bulkEnabled;
+			}
+
+			public void setBulkEnabled(Boolean bulkEnabled) {
+				this.bulkEnabled = bulkEnabled;
+			}
+			
 
         }
 
