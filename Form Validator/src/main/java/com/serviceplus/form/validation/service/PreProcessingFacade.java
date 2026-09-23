@@ -13,13 +13,11 @@ import static java.util.Objects.isNull;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import com.serviceplus.form.validation.dto.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +27,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.serviceplus.form.validation.ExceptionHandler.SPRuntimeError;
+import com.serviceplus.form.validation.dto.FormPreparationContext;
+import com.serviceplus.form.validation.dto.HandlerResponse;
+import com.serviceplus.form.validation.dto.InboxApplReqDTO;
+import com.serviceplus.form.validation.dto.OfficeDetailsDTO;
+import com.serviceplus.form.validation.dto.ServerSidePaginationRecord;
+import com.serviceplus.form.validation.dto.ServiceMeta;
+import com.serviceplus.form.validation.dto.ServiceProcessFlowDTO;
+import com.serviceplus.form.validation.dto.UserSessionObject;
+import com.serviceplus.form.validation.dto.WorkflowInboxResponse;
 import com.serviceplus.form.validation.entity.ApplicationDetails;
 import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
 import com.serviceplus.form.validation.entity.ProcessingTxn;
@@ -37,6 +44,7 @@ import com.serviceplus.form.validation.repository.ApplicationDetailsRepository;
 import com.serviceplus.form.validation.repository.CurrentProcessRepository;
 import com.serviceplus.form.validation.repository.ProcessingTxnRepository;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Service
@@ -173,24 +181,27 @@ public class PreProcessingFacade {
                 "Preparing ApplicationFlowStatusEntity for txnId : {}",
                 txnId);
 
-        ApplicationFlowStatusEntity flowStatus = new ApplicationFlowStatusEntity();
+        ApplicationFlowStatusEntity flowStatusTemp = new ApplicationFlowStatusEntity();
 
-        if(isNull(oldFlowStatus) || isNull(oldFlowStatus.getId())){
-            flowStatus.setId(createUniqueId());
-            flowStatus.setApplicationId(applicationId);
-            flowStatus.setFormId(service.getFormId());
-            flowStatus.setTxnId(txnId);
-            flowStatus.setActivityType("FS");
-            flowStatus.setCompleted(0);
-            flowStatus.setTenantId(user.getTenantId());
-            flowStatus.setNewEntity(true);
-            flowStatus.setTaskId(service.getTaskId());
-            flowStatus.setServiceId(service.getServiceId());
-            flowStatus.setLastUpdate(now);
+        if (isNull(oldFlowStatus) || isNull(oldFlowStatus.getId())) {
+
+            flowStatusTemp.setId(createUniqueId());
+            flowStatusTemp.setApplicationId(applicationId);
+            flowStatusTemp.setFormId(service.getFormId());
+            flowStatusTemp.setTxnId(txnId);
+            flowStatusTemp.setActivityType(activityType);
+            flowStatusTemp.setCompleted(0);
+            flowStatusTemp.setTenantId(user.getTenantId());
+            flowStatusTemp.setNewEntity(true);
+            flowStatusTemp.setTaskId(service.getTaskId());
+            flowStatusTemp.setServiceId(service.getServiceId());
+            flowStatusTemp.setLastUpdate(now);
+
+        } else {
+            flowStatusTemp = oldFlowStatus;
         }
-        else{
-            flowStatus = oldFlowStatus;
-        }
+
+        final ApplicationFlowStatusEntity flowStatus = flowStatusTemp;
 
 
         applicationFlowLogs.info(
@@ -236,40 +247,77 @@ public class PreProcessingFacade {
 		applicationFlowLogs.info("newEntityFlag is false, will update ApplicationDetails priority before txn update for txnId : {} applicationId : {}",
 				txnId, applicationId);
 
-		return applicationDetailsRepository.findByApplicationId(applicationId)
-				.flatMap(existingApplDetails -> {
-					applicationFlowLogs.info("Updating ApplicationDetails for applicationId : {} isPriority : {} -> {}", applicationId, existingApplDetails.getIsPriority(), service.getIsPriority());
-					existingApplDetails.setIsPriority(service.getIsPriority());
-					return applicationDetailsRepository.save(existingApplDetails);
-				})
-				.doOnSuccess(saved -> applicationFlowLogs.info("ApplicationDetails priority updated successfully for applicationId : {}", applicationId))
-				.doOnError(ex -> applicationFlowLogs.error("Unable to update ApplicationDetails priority for applicationId : {} error : {}", applicationId, ex.getMessage(), ex))
-				.then(transactionalDBExecutor.execute(txnId, txnEntity, flowStatus))
-                .doOnSuccess(success ->
-                        applicationFlowLogs.info(
-                                "Transaction updated successfully for txnId : {}",
-                                txnId))
-                .then(redis.remove(txnId))
-                .doOnSuccess(success ->
-                        applicationFlowLogs.info(
-                                "Redis temporary transaction removed successfully for txnIda : {}",
-                                txnId))
-                .thenReturn(txnEntity)
-                .onErrorResume(Exception.class, ex -> {
+		return Flux.fromArray(applicationId.split(","))
+		        .map(String::trim)
+		        .filter(id -> !id.isBlank())
+		        .concatMap(applId -> {
 
-                    applicationFlowLogs.error(
-                            "Unable to update transaction for txnId : {} error : {}",
-                            txnId,
-                            ex.getMessage(),
-                            ex);
+		            applicationFlowLogs.info(
+		                    "Processing applicationId : {} for txnId : {}",
+		                    applId, txnId);
 
-                    return Mono.error(
-                            new SPRuntimeError(
-                                    "Unable to process your request [AY - 02]",
-                                    HttpStatus.INTERNAL_SERVER_ERROR,
-                                    txnId
-                            ));
-                });
+		            return applicationDetailsRepository.findByApplicationId(applId)
+		                    .flatMap(existingApplDetails -> {
+
+		                        applicationFlowLogs.info(
+		                                "Updating ApplicationDetails for applicationId : {} isPriority : {} -> {}",
+		                                applId,
+		                                existingApplDetails.getIsPriority(),
+		                                service.getIsPriority());
+
+		                        existingApplDetails.setIsPriority(
+		                                service.getIsPriority());
+
+		                        return applicationDetailsRepository.save(
+		                                existingApplDetails);
+		                    })
+		                    .doOnSuccess(saved ->
+		                            applicationFlowLogs.info(
+		                                    "ApplicationDetails priority updated successfully for applicationId : {}",
+		                                    applId))
+		                    .doOnError(ex ->
+		                            applicationFlowLogs.error(
+		                                    "Unable to update ApplicationDetails priority for applicationId : {} error : {}",
+		                                    applId,
+		                                    ex.getMessage(),
+		                                    ex))
+
+		                    .then(
+		                            transactionalDBExecutor.execute(
+		                                    txnId,
+		                                    txnEntity,
+		                                    flowStatus))
+		                    .doOnSuccess(success ->
+		                            applicationFlowLogs.info(
+		                                    "Transaction updated successfully for applicationId : {} txnId : {}",
+		                                    applId,
+		                                    txnId))
+
+		                    .then(redis.remove(txnId))
+		                    .doOnSuccess(success ->
+		                            applicationFlowLogs.info(
+		                                    "Redis temporary transaction removed successfully for applicationId : {} txnId : {}",
+		                                    applId,
+		                                    txnId))
+
+		                    .thenReturn(applId);
+		        })
+		        .collectList()
+		        .thenReturn(txnEntity)
+		        .onErrorResume(Exception.class, ex -> {
+
+		            applicationFlowLogs.error(
+		                    "Unable to update transaction for applicationIds : {} error : {}",
+		                    applicationId,
+		                    ex.getMessage(),
+		                    ex);
+
+		            return Mono.error(
+		                    new SPRuntimeError(
+		                            "Unable to process your request [AY - 02]",
+		                            HttpStatus.INTERNAL_SERVER_ERROR,
+		                            txnId));
+		        });
 
 
 //        Mono<ProcessingTxn> res = applicationDetailsRepository.save(applicationDetails)

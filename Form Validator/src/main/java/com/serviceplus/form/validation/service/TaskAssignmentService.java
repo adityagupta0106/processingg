@@ -334,8 +334,11 @@ public class TaskAssignmentService {
                                                     })
                                                     .toList();
 
-                                    officeLocation.setAllowedOffices(
-                                            new ArrayList<>(filteredOffices));
+                                    if(allowedLocationIds != null && !allowedLocationIds.isEmpty()) {
+                                        officeLocation.setAllowedOffices(
+                                                new ArrayList<>(filteredOffices));
+                                    }
+                                    
 
                                     applicationFlowLogs.info(
                                             "Final routing locations for taskId={} = {}",

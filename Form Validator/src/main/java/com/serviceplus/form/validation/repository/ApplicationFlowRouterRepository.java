@@ -1,17 +1,14 @@
 package com.serviceplus.form.validation.repository;
 
-import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
-import org.springframework.data.r2dbc.repository.Modifying;
-import org.springframework.data.r2dbc.repository.Query;
-import org.springframework.data.repository.query.Param;
+import java.time.LocalDateTime;
+import java.util.List;
+
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
+
+import com.serviceplus.form.validation.entity.ApplicationFlowStatusEntity;
+
 import reactor.core.publisher.Mono;
-
-import java.time.LocalDateTime;
-import java.util.Optional;
-
-import static com.serviceplus.form.validation.utility.ApplicationConstants.SP_SCHEMA_NAME;
 
 @Repository
 public interface ApplicationFlowRouterRepository  extends ReactiveCrudRepository<ApplicationFlowStatusEntity, String> {
@@ -37,4 +34,7 @@ public interface ApplicationFlowRouterRepository  extends ReactiveCrudRepository
     Mono<ApplicationFlowStatusEntity> findFirstByApplicationIdAndTaskIdAndServiceIdAndTenantIdAndActivityTypeOrderByIdDesc(String appId, String taskId, Integer serviceId, String tenantId, String activityFormStatusKey);
 
     Mono<ApplicationFlowStatusEntity> findFirstByApplicationIdAndTaskIdAndServiceIdAndTenantIdAndActivityTypeAndLastUpdateAfterOrderByIdDesc(String appId, String taskId, Integer serviceId, String tenantId, String activityFormStatusKey, LocalDateTime initiatedOn);
+
+	Mono<ApplicationFlowStatusEntity> findFirstByApplicationIdAndTaskIdAndActivityTypeInAndCompletedOrderByIdDesc(
+			String applicationId, String taskId, List<String> activityType, Integer completed);
 }
