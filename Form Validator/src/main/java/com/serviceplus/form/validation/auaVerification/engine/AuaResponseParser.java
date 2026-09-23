@@ -2,9 +2,7 @@ package com.serviceplus.form.validation.auaVerification.engine;
 
 import com.serviceplus.form.validation.auaVerification.dto.AuaApiConfigurationDTO;
 import com.serviceplus.form.validation.auaVerification.dto.AuaResponse;
-import com.serviceplus.form.validation.auaVerification.enums.AuaGenerationType;
 import com.serviceplus.form.validation.auaVerification.enums.AuaMappingType;
-import com.serviceplus.form.validation.auaVerification.enums.AuaMessageType;
 import com.serviceplus.form.validation.auaVerification.enums.AuaResponseAttributeType;
 
 import org.slf4j.Logger;
@@ -27,13 +25,17 @@ public class AuaResponseParser {
 
     private static final Logger log = LoggerFactory.getLogger(AuaResponseParser.class);
 
+    private static final int AUA_INFO_VALUE_LENGTH = 72;
+
     public AuaResponse parse(AuaApiConfigurationDTO api, String xml) {
 
         if (api == null) {
             throw new IllegalArgumentException("AUA API configuration is required");
         }
 
-        if (api.getResponsePayload() == null || api.getResponsePayload().getNodes() == null || api.getResponsePayload().getNodes().isEmpty()) {
+        if (api.getResponsePayload() == null
+                || api.getResponsePayload().getNodes() == null
+                || api.getResponsePayload().getNodes().isEmpty()) {
             throw new IllegalArgumentException("AUA response payload is not configured");
         }
 
@@ -52,55 +54,141 @@ public class AuaResponseParser {
             }
 
             String attributeName = extractAttributeName(node.getXpath());
-
             String value = values.get(attributeName);
 
             if (value == null) {
-                log.info("AUA response attribute not found. nodeCode={}, xpath={}", node.getNodeCode(), node.getXpath());
+                log.info(
+                        "AUA response attribute not found. nodeCode={}, xpath={}",
+                        node.getNodeCode(),
+                        node.getXpath()
+                );
                 continue;
             }
 
-            AuaMappingType mappingType = AuaMappingType.valueOf(node.getResponseAttributeType());
+            processResponseNode(node, value, result);
+        }
 
-            switch (mappingType) {
+        log.info(
+                "AUA response parsing completed. apiType={}, success={}, errorCodePresent={}, responseAttributeCount={}",
+                api.getApiType(),
+                result.isSuccess(),
+                result.getErrorCode() != null && !result.getErrorCode().isBlank(),
+                result.getResponseAttributes() != null ? result.getResponseAttributes().size() : 0
+        );
 
-                case RESULT:
+        return result;
+    }
 
-                    boolean success = node.getDesiredResponse() != null && node.getDesiredResponse().equalsIgnoreCase(value);
-                    result.setSuccess(success);
-                    log.info("AUA RESULT processed. nodeCode={}, success={}", node.getNodeCode(), success);
+    private void processResponseNode(AuaApiConfigurationDTO.AuaNodeDTO node, String value, AuaResponse result) {
 
-                    break;
+        String responseAttributeType = node.getResponseAttributeType();
 
-                case ERROR:
+        if (responseAttributeType != null && !responseAttributeType.isBlank()) {
 
-                    result.setErrorCode(value);
-                    log.info("AUA ERROR processed. nodeCode={}, errorPresent={}", node.getNodeCode(), !value.isBlank());
+            if (AuaResponseAttributeType.RESULT.name().equalsIgnoreCase(responseAttributeType)) {
 
-                    break;
+                processResult(node, value, result);
+                return;
+            }
 
-                case INFO:
+            if (AuaResponseAttributeType.ERROR.name().equalsIgnoreCase(responseAttributeType)) {
 
-                    String infoValue = extractInfoValue(value);
+                result.setErrorCode(value);
 
-                    if (infoValue != null) {
-                        result.setInfo(infoValue);
-                    }
+                log.info(
+                        "AUA ERROR processed. nodeCode={}, errorPresent={}",
+                        node.getNodeCode(),
+                        !value.isBlank()
+                );
 
-                    log.info("AUA INFO processed. nodeCode={}, sourcePath={}", node.getNodeCode(), node.getSourcePath());
+                return;
+            }
 
-                    break;
+            if (AuaResponseAttributeType.INFO.name().equalsIgnoreCase(responseAttributeType)) {
 
-                default:
-
-                    processResponseAttributeType(node, value, result);
-                    break;
+                processInfo(node, value, result);
+                return;
             }
         }
 
-        log.info("AUA response parsing completed. apiType={}, success={}, errorCodePresent={}", api.getApiType(), result.isSuccess(), result.getErrorCode() != null && !result.getErrorCode().isBlank());
+        processResponseAttribute(node, value, result);
+    }
 
-        return result;
+    private void processResult(
+            AuaApiConfigurationDTO.AuaNodeDTO node,
+            String value,
+            AuaResponse result) {
+
+        String expectedResponse = node.getDesiredResponse();
+
+        if (expectedResponse == null || expectedResponse.isBlank()) {
+            expectedResponse = node.getDefaultValue();
+        }
+
+        boolean success = expectedResponse != null
+                && expectedResponse.equalsIgnoreCase(value);
+
+        result.setSuccess(success);
+
+        log.info(
+                "AUA RESULT processed. nodeCode={}, success={}",
+                node.getNodeCode(),
+                success
+        );
+    }
+
+    private void processInfo(
+            AuaApiConfigurationDTO.AuaNodeDTO node,
+            String value,
+            AuaResponse result) {
+
+        String infoValue = extractInfoValue(value);
+
+        if (infoValue != null) {
+            result.setInfo(infoValue);
+
+            if (node.getSourcePath() != null && !node.getSourcePath().isBlank()) {
+                result.addResponseAttribute(node.getSourcePath(), infoValue);
+            }
+        }
+
+        log.info(
+                "AUA INFO processed. nodeCode={}, sourcePath={}",
+                node.getNodeCode(),
+                node.getSourcePath()
+        );
+    }
+
+    private void processResponseAttribute(
+            AuaApiConfigurationDTO.AuaNodeDTO node,
+            String value,
+            AuaResponse result) {
+
+        AuaMappingType mappingType = node.getMappingType();
+
+        if (mappingType != AuaMappingType.DYNAMIC && mappingType != AuaMappingType.STATIC) {
+            return;
+        }
+
+        String sourcePath = node.getSourcePath();
+
+        if (sourcePath == null || sourcePath.isBlank()) {
+            log.warn(
+                    "Response attribute mapping has no sourcePath. nodeCode={}, mappingType={}",
+                    node.getNodeCode(),
+                    mappingType
+            );
+            return;
+        }
+
+        result.addResponseAttribute(sourcePath, value);
+
+        log.info(
+                "AUA response attribute processed. nodeCode={}, mappingType={}, sourcePath={}",
+                node.getNodeCode(),
+                mappingType,
+                sourcePath
+        );
     }
 
     private String extractInfoValue(String value) {
@@ -118,38 +206,22 @@ public class AuaResponseParser {
 
         String infoValue = value.substring(start + 1);
 
-        if (infoValue.length() < 72) {
-            log.warn("AUA INFO response is shorter than expected. length={}", infoValue.length());
+        if (infoValue.length() < AUA_INFO_VALUE_LENGTH) {
+            log.warn(
+                    "AUA INFO response is shorter than expected. length={}",
+                    infoValue.length()
+            );
             return null;
         }
 
-        return infoValue.substring(0, 72);
-    }
-
-    private void processResponseAttributeType(AuaApiConfigurationDTO.AuaNodeDTO node, String value, AuaResponse result) {
-
-        if (node.getResponseAttributeType() == null) {
-            return;
-        }
-
-        if (AuaResponseAttributeType.RESULT.name().equalsIgnoreCase(node.getResponseAttributeType())) {
-
-            boolean success = node.getDesiredResponse() != null && node.getDesiredResponse().equalsIgnoreCase(value);
-            result.setSuccess(success);
-            log.info("AUA dynamic RESULT processed. nodeCode={}, success={}", node.getNodeCode(), success);
-        }
-
-        if (AuaResponseAttributeType.ERROR.name().equalsIgnoreCase(node.getResponseAttributeType())) {
-            result.setErrorCode(value);
-            log.info("AUA dynamic ERROR processed. nodeCode={}, errorPresent={}", node.getNodeCode(), !value.isBlank());
-        }
+        return infoValue.substring(0, AUA_INFO_VALUE_LENGTH);
     }
 
     private String extractAttributeName(String xpath) {
 
         int index = xpath.lastIndexOf("@");
 
-        if (index < 0) {
+        if (index < 0 || index + 1 >= xpath.length()) {
             throw new IllegalArgumentException("Invalid response XPath: " + xpath);
         }
 
@@ -166,13 +238,25 @@ public class AuaResponseParser {
 
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature(
+                    "http://apache.org/xml/features/disallow-doctype-decl",
+                    true
+            );
 
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature(
+                    "http://xml.org/sax/features/external-general-entities",
+                    false
+            );
 
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setFeature(
+                    "http://xml.org/sax/features/external-parameter-entities",
+                    false
+            );
 
-            factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            factory.setFeature(
+                    "http://apache.org/xml/features/nonvalidating/load-external-dtd",
+                    false
+            );
 
             factory.setXIncludeAware(false);
             factory.setExpandEntityReferences(false);
@@ -180,7 +264,9 @@ public class AuaResponseParser {
 
             DocumentBuilder builder = factory.newDocumentBuilder();
 
-            Document document = builder.parse(new InputSource(new StringReader(xml)));
+            Document document = builder.parse(
+                    new InputSource(new StringReader(xml))
+            );
 
             Map<String, String> values = new HashMap<>();
 
@@ -198,18 +284,27 @@ public class AuaResponseParser {
 
             log.error("Failed to parse AUA response XML", e);
 
-            throw new IllegalArgumentException("Failed to parse AUA response XML", e);
+            throw new IllegalArgumentException(
+                    "Failed to parse AUA response XML",
+                    e
+            );
         }
     }
 
-    private void collectAttributes(Element element, Map<String, String> values) {
+    private void collectAttributes(
+            Element element,
+            Map<String, String> values) {
 
         NamedNodeMap attributes = element.getAttributes();
 
         for (int i = 0; i < attributes.getLength(); i++) {
 
             Node attribute = attributes.item(i);
-            values.put(attribute.getNodeName(), attribute.getNodeValue());
+
+            values.put(
+                    attribute.getNodeName(),
+                    attribute.getNodeValue()
+            );
         }
 
         NodeList children = element.getChildNodes();

@@ -4,5 +4,6 @@ public enum AuaResponseAttributeType {
 
     RESULT,
     TRANSACTION_ID,
-    ERROR
+    ERROR,
+    INFO
 }

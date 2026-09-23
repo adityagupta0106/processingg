@@ -16,7 +16,11 @@ import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import javax.xml.xpath.*;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 import java.io.StringReader;
 import java.io.StringWriter;
 
@@ -32,10 +36,12 @@ public class AuaXmlLogger {
         }
 
         if (payload == null || payload.getNodes() == null || payload.getNodes().isEmpty()) {
+
             return "[NO_LOGGING_CONFIGURATION]";
         }
 
         try {
+
             Document document = parseXml(xml);
 
             for (AuaApiConfigurationDTO.AuaNodeDTO node : payload.getNodes()) {
@@ -51,7 +57,7 @@ public class AuaXmlLogger {
 
         } catch (Exception e) {
 
-            log.warn("Unable to prepare AUA XML for logging. Returning sanitized placeholder.");
+            log.error("Unable to prepare AUA XML for logging.", e);
 
             return "[AUA_XML_LOGGING_FAILED]";
         }
@@ -67,6 +73,8 @@ public class AuaXmlLogger {
             NodeList nodes = evaluateXPath(document, node.getXpath());
 
             if (nodes == null || nodes.getLength() == 0) {
+
+                log.info("No XML node found for AUA logging rule. nodeCode={}, xpath={}", node.getNodeCode(), node.getXpath());
                 return;
             }
 
@@ -78,12 +86,77 @@ public class AuaXmlLogger {
                     replaceValue(xmlNode, "[NOT_LOGGED]");
 
                 } else if (maskEnabled) {
-                    replaceValue(xmlNode, maskValue(getNodeValue(xmlNode)));
+
+                    String originalValue = getNodeValue(xmlNode);
+                    replaceValue(xmlNode, maskValue(originalValue));
                 }
             }
+
         } catch (Exception e) {
-            e.printStackTrace();
+            log.warn("Failed to apply AUA XML logging rule. nodeCode={}, xpath={}", node.getNodeCode(), node.getXpath(), e);
         }
+    }
+
+    private NodeList evaluateXPath(Document document, String xpathExpression) throws XPathExpressionException {
+
+        XPathFactory xpathFactory = XPathFactory.newInstance();
+        XPath xpath = xpathFactory.newXPath();
+
+        String namespaceSafeXPath = convertToNamespaceIndependentXPath(xpathExpression);
+
+        log.info("Evaluating AUA logging XPath. original={}, converted={}", xpathExpression, namespaceSafeXPath);
+
+        XPathExpression expression = xpath.compile(namespaceSafeXPath);
+
+        return (NodeList) expression.evaluate(document, XPathConstants.NODESET);
+    }
+
+    private String convertToNamespaceIndependentXPath(String xpath) {
+
+        if (xpath == null || xpath.isBlank()) {
+            return xpath;
+        }
+
+        if (!xpath.startsWith("/")) {
+            return xpath;
+        }
+
+        String[] parts = xpath.split("/");
+
+        StringBuilder result = new StringBuilder();
+
+        for (String part : parts) {
+
+            if (part == null || part.isBlank()) {
+                continue;
+            }
+
+            if (part.startsWith("@")) {
+
+                result.append("/").append(part);
+                continue;
+            }
+
+            if ("*".equals(part)) {
+
+                result.append("/*");
+                continue;
+            }
+
+            int predicateIndex = part.indexOf('[');
+
+            if (predicateIndex > 0) {
+
+                String elementName = part.substring(0, predicateIndex);
+                String predicate = part.substring(predicateIndex);
+                result.append("/*[local-name()='").append(elementName).append("']").append(predicate);
+
+            } else {
+                result.append("/*[local-name()='").append(part).append("']");
+            }
+        }
+
+        return result.toString();
     }
 
     private void replaceValue(Node node, String value) {
@@ -93,11 +166,13 @@ public class AuaXmlLogger {
         }
 
         if (node.getNodeType() == Node.ATTRIBUTE_NODE) {
+
             node.setNodeValue(value);
             return;
         }
 
         if (node.getNodeType() == Node.TEXT_NODE) {
+
             node.setNodeValue(value);
             return;
         }
@@ -109,6 +184,7 @@ public class AuaXmlLogger {
             Node child = children.item(i);
 
             if (child.getNodeType() == Node.TEXT_NODE) {
+
                 child.setNodeValue(value);
                 return;
             }
@@ -143,16 +219,6 @@ public class AuaXmlLogger {
         }
 
         return "*".repeat(length - 4) + value.substring(length - 4);
-    }
-
-    private NodeList evaluateXPath(Document document, String xpathExpression) throws XPathExpressionException {
-
-        XPathFactory xpathFactory = XPathFactory.newInstance();
-        XPath xpath = xpathFactory.newXPath();
-
-        XPathExpression expression = xpath.compile(xpathExpression);
-
-        return (NodeList) expression.evaluate(document, XPathConstants.NODESET);
     }
 
     private Document parseXml(String xml) throws Exception {
