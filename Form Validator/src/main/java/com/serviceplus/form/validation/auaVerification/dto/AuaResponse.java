@@ -3,6 +3,7 @@ package com.serviceplus.form.validation.auaVerification.dto;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -61,6 +62,18 @@ public class AuaResponse {
 
     public void setRawResponse(String rawResponse) {
         this.rawResponse = rawResponse;
+    }
+
+    public void addResponseAttribute(String sourcePath, String value) {
+        if (sourcePath == null || sourcePath.isBlank() || value == null) {
+            return;
+        }
+
+        if (responseAttributes == null) {
+            responseAttributes = new HashMap<>();
+        }
+
+        responseAttributes.put(sourcePath, value);
     }
 
     public String getInfo() {
