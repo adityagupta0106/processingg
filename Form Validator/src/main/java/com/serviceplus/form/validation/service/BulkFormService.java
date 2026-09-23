@@ -89,7 +89,7 @@ public class BulkFormService {
 
 			boolean bulkEnabled = service.getWorkflowElementData() != null
 					&& Boolean.TRUE.equals(service.getWorkflowElementData().getBulkEnabled());
-			bulkEnabled=true;
+			
 			if (!bulkEnabled) {
 				return Mono.error(new SPRuntimeError("Bulk processing is not enabled for this task",
 						HttpStatus.BAD_REQUEST, txnId));
