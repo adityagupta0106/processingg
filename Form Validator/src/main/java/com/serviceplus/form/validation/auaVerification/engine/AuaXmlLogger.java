@@ -104,8 +104,6 @@ public class AuaXmlLogger {
 
         String namespaceSafeXPath = convertToNamespaceIndependentXPath(xpathExpression);
 
-        log.info("Evaluating AUA logging XPath. original={}, converted={}", xpathExpression, namespaceSafeXPath);
-
         XPathExpression expression = xpath.compile(namespaceSafeXPath);
 
         return (NodeList) expression.evaluate(document, XPathConstants.NODESET);
