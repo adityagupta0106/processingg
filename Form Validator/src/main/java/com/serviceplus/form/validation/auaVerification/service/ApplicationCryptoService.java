@@ -24,10 +24,10 @@ public class ApplicationCryptoService {
 
     private static final Logger log = LoggerFactory.getLogger(ApplicationCryptoService.class);
 
-    @Value("classpath:keys/private_key.pem")
+    @Value("${application.crypto.private-key}")
     private Resource privateKeyResource;
 
-    @Value("classpath:keys/public_key.pem")
+    @Value("${application.crypto.public-key}")
     private Resource publicKeyResource;
 
     public String encryptForTest(String plaintext) {

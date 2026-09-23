@@ -66,7 +66,7 @@ public class AuaResponseParser {
 
                 case RESULT:
 
-                    boolean success = node.getDefaultValue() != null && node.getDefaultValue().equalsIgnoreCase(value);
+                    boolean success = node.getDesiredResponse() != null && node.getDesiredResponse().equalsIgnoreCase(value);
                     result.setSuccess(success);
                     log.info("AUA RESULT processed. nodeCode={}, success={}", node.getNodeCode(), success);
 
