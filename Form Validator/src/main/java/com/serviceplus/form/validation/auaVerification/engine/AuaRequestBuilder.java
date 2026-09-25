@@ -49,6 +49,8 @@ public class AuaRequestBuilder {
 
         XmlNode rootNode = buildUnsignedXml(requestPayload, api, context, logEntry);
 
+        System.out.println(rootNode.toXml());
+
         /*
          * Process plugin based crypto nodes.
          *
