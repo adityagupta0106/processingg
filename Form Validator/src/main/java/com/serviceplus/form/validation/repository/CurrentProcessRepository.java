@@ -43,6 +43,7 @@ public interface CurrentProcessRepository extends ReactiveCrudRepository<Current
 
     void findFirstByApplicationIdAndTenantId(String applicationId, String tenantId);
     //-------------------
+    
 	Flux<CurrentProcess> findByApplicationIdAndPreviousProcessIdAndTenantId(String applicationId,
 			String previousProcessId, String tenantId);
 
@@ -63,4 +64,27 @@ public interface CurrentProcessRepository extends ReactiveCrudRepository<Current
 	        @Param("tenantId") String tenantId,
 	        @Param("actionCode") Integer actionCode
 	);
+	
+	@Query("""
+			SELECT DISTINCT ON (cp.current_task) cp.*
+			FROM schm_sp.current_process cp
+			WHERE cp.service_id = :serviceId
+			  AND cp.application_id = :applicationId
+			  AND cp.previous_process_id = :gatewayExecutionId
+			  AND cp.current_task IN (:taskIds)
+			  AND cp.tenant_id = :tenantId
+			ORDER BY cp.current_task,
+			         cp.initiated_on DESC NULLS LAST,
+			         cp.action_on DESC NULLS LAST,
+			         cp.process_id DESC
+			""")
+		Flux<CurrentProcess> findLatestGatewayBranchProcesses(
+				@Param("serviceId") Integer serviceId,
+				@Param("applicationId") String applicationId,
+				@Param("gatewayExecutionId") String gatewayExecutionId,
+				@Param("taskIds") List<String> taskIds,
+				@Param("tenantId") String tenantId
+		);
+	
+	
 }

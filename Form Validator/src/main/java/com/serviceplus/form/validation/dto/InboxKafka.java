@@ -26,6 +26,9 @@ public class InboxKafka {
     private boolean completeClosure=false;
     
  
+    
+    private String callbackSourceProcessId;    
+    
 
     public String getLocationName() {
         return locationName;
@@ -113,6 +116,15 @@ public class InboxKafka {
 
     public void setLoggedInUserId(Long loggedInUserId) {
         this.loggedInUserId = loggedInUserId;
+    }
+    
+
+    public String getCallbackSourceProcessId() {
+        return callbackSourceProcessId;
+    }
+
+    public void setCallbackSourceProcessId(String callbackSourceProcessId) {
+        this.callbackSourceProcessId = callbackSourceProcessId;
     }
 
 	public boolean isCompleteClosure() {
