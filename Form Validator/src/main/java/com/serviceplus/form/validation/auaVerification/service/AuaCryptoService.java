@@ -37,12 +37,6 @@ public class AuaCryptoService {
         validateContext(context);
         validateApi(api);
 
-        if (context.getEncryptedSessionKey() != null && !context.getEncryptedSessionKey().isBlank()) {
-
-            log.info("CREATE_SKEY already executed. apiType={}", api.getApiType());
-            return context.getEncryptedSessionKey();
-        }
-
         CertificateFile certificate = null;
 
         try {
@@ -72,7 +66,7 @@ public class AuaCryptoService {
 
             context.setEncryptedSessionKey(encodedSessionKey);
 
-            log.info("CREATE_SKEY completed. apiType={}, certificateIdentifier={}", api.getApiType(), certificateIdentifier);
+            log.info("CREATE_SKEY completed. apiType={}, certificateIdentifier={}, sessionKeyPresent={}", api.getApiType(), certificateIdentifier, context.getSessionKey() != null);
 
             return encodedSessionKey;
 
@@ -100,12 +94,12 @@ public class AuaCryptoService {
         }
 
         if (context.getSessionKey() == null) {
-
-            createSkey(context, api);
+            throw new IllegalStateException("Session key is required before CREATE_DATA");
         }
 
         if (context.getEncryptedData() != null && !context.getEncryptedData().isBlank()) {
 
+            log.info("CREATE_DATA already executed. apiType={}", api.getApiType());
             return context.getEncryptedData();
         }
 
@@ -121,7 +115,9 @@ public class AuaCryptoService {
 
             byte[] pid = context.getPidXml().getBytes(StandardCharsets.UTF_8);
 
-            String timestamp = OffsetDateTime.now().format(TIMESTAMP_FORMATTER);
+            String timestamp = getOrCreateTimestamp(context);
+
+            log.info("CREATE_DATA encryption started. apiType={}, pidLength={}, timestamp={}", api.getApiType(), pid.length, timestamp);
 
             byte[] cipherTextWithTS = encrypter.encrypt(pid, context.getSessionKey(), timestamp);
 
@@ -154,10 +150,19 @@ public class AuaCryptoService {
         }
 
         if (context.getSessionKey() == null) {
-            createSkey(context, api);
+
+            throw new IllegalStateException("Session key is required before CREATE_HMAC");
+        }
+
+        if (context.getTimestamp() == null || context.getTimestamp().isBlank()) {
+
+            throw new IllegalStateException("Crypto timestamp is required before CREATE_HMAC");
         }
 
         if (context.getEncryptedHmac() != null && !context.getEncryptedHmac().isBlank()) {
+
+            log.info("CREATE_HMAC already executed. apiType={}", api.getApiType());
+
             return context.getEncryptedHmac();
         }
 
@@ -173,7 +178,9 @@ public class AuaCryptoService {
 
             byte[] pid = context.getPidXml().getBytes(StandardCharsets.UTF_8);
 
-            String timestamp = OffsetDateTime.now().format(TIMESTAMP_FORMATTER);
+            String timestamp = context.getTimestamp();
+
+            log.info("CREATE_HMAC encryption started. apiType={}, pidLength={}, timestamp={}", api.getApiType(), pid.length, timestamp);
 
             byte[] iv = encrypter.generateIv(timestamp);
 
@@ -197,6 +204,17 @@ public class AuaCryptoService {
         } finally {
             deleteTemporaryCertificate(certificate);
         }
+    }
+
+    private String getOrCreateTimestamp(AuaCryptoContext context) {
+
+        if (context.getTimestamp() == null || context.getTimestamp().isBlank()) {
+            String timestamp = OffsetDateTime.now().format(TIMESTAMP_FORMATTER);
+            context.setTimestamp(timestamp);
+            log.info("AUA crypto timestamp generated. timestamp={}", timestamp);
+        }
+
+        return context.getTimestamp();
     }
 
     private CertificateFile resolveCertificateFile() {
