@@ -1,18 +1,17 @@
 package com.serviceplus.form.validation.auaVerification.model;
 
+import com.serviceplus.form.validation.auaVerification.service.RDEncrypter;
+
 public class AuaCryptoContext {
 
     private String pidXml;
-
     private byte[] sessionKey;
-
     private String encryptedSessionKey;
-
     private String encryptedData;
-
     private String encryptedHmac;
-
     private String certificateIdentifier;
+    private String timestamp;
+    private RDEncrypter encrypter;
 
     public String getPidXml() {
         return pidXml;
@@ -60,5 +59,21 @@ public class AuaCryptoContext {
 
     public void setCertificateIdentifier(String certificateIdentifier) {
         this.certificateIdentifier = certificateIdentifier;
+    }
+
+    public String getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(String timestamp) {
+        this.timestamp = timestamp;
+    }
+
+    public RDEncrypter getEncrypter() {
+        return encrypter;
+    }
+
+    public void setEncrypter(RDEncrypter encrypter) {
+        this.encrypter = encrypter;
     }
 }
